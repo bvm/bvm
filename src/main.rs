@@ -2,7 +2,6 @@ use std::process::{Command, Stdio};
 
 #[macro_use]
 mod types;
-mod cache;
 mod arg_parser;
 mod configuration;
 mod plugins;
@@ -32,23 +31,30 @@ async fn run() -> Result<(), ErrBox> {
         SubCommand::Version => println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
         SubCommand::Run(run_command) => {
             let config_file_path = configuration::find_config_file()?;
+            let mut plugin_manifest = plugins::read_manifest()?;
             let executable_path = if let Some(config_file_path) = config_file_path {
                 let config_file_text = std::fs::read_to_string(&config_file_path)?;
                 let config_file = configuration::read_config_file(&config_file_text)?;
-                if let Some(config_file_binary) = config_file.dependencies.get(&run_command.binary_name) {
-                    let mut cache_manifest = cache::read_manifest()?;
-                    if let Some(cache_item) = cache_manifest.get_item(&config_file_binary.url) {
-                        cache_item.file_name.clone()
+                if let Some(config_file_binary) = config_file.binaries.get(&run_command.binary_name) {
+                    if let Some(cache_item) = plugin_manifest.get_binary(&config_file_binary.url) {
+                        Some(cache_item.file_name.clone())
                     } else {
-                        let result = setup_plugin(&mut cache_manifest, &config_file_binary.url).await?;
-                        cache::write_manifest(&cache_manifest)?;
-                        result
+                        let result = setup_plugin(&mut plugin_manifest, &config_file_binary.url).await?;
+                        plugins::write_manifest(&plugin_manifest)?;
+                        Some(result)
                     }
                 } else {
-                    run_command.binary_name
+                    None
                 }
             } else {
-                run_command.binary_name
+                None
+            };
+            let executable_path = match executable_path {
+                Some(path) => path,
+                None => match plugin_manifest.get_global_binary(&run_command.binary_name) {
+                    Some(manifest_item) => manifest_item.file_name.clone(),
+                    None => return err!("Could not find binary '{}'", run_command.binary_name),
+                }
             };
 
             let status = Command::new(executable_path)
@@ -71,16 +77,16 @@ async fn run() -> Result<(), ErrBox> {
             };
             let config_file_text = std::fs::read_to_string(&config_file_path)?;
             let config_file = configuration::read_config_file(&config_file_text)?;
-            let cache_dir = utils::get_cache_dir()?;
-            let binaries_cache_dir = cache_dir.join("binaries");
+            let cache_dir = utils::get_user_data_dir()?;
+            let binaries_cache_dir = cache_dir.join("bin");
             std::fs::create_dir_all(&binaries_cache_dir)?;
-            let mut cache_manifest = cache::read_manifest()?;
+            let mut plugin_manifest = plugins::read_manifest()?;
 
-            for (key, value) in config_file.dependencies.iter() {
-                if cache_manifest.get_item(&value.url).is_none() {
-                    setup_plugin(&mut cache_manifest, &value.url).await?;
+            for (key, value) in config_file.binaries.iter() {
+                if plugin_manifest.get_binary(&value.url).is_none() {
+                    setup_plugin(&mut plugin_manifest, &value.url).await?;
                     plugins::create_path_script(key, &binaries_cache_dir)?;
-                    cache::write_manifest(&cache_manifest)?; // write for every setup plugin in case a further one fails
+                    plugins::write_manifest(&plugin_manifest)?; // write for every setup plugin in case a further one fails
                 }
             }
         }
@@ -89,19 +95,22 @@ async fn run() -> Result<(), ErrBox> {
     Ok(())
 }
 
-async fn setup_plugin(cache_manifest: &mut cache::CacheManifest, url: &str) -> Result<String, ErrBox> {
+async fn setup_plugin(plugin_manifest: &mut plugins::PluginsManifest, url: &str) -> Result<String, ErrBox> {
     // download the url
     let plugin_file_bytes = utils::download_file(&url).await?;
     let plugin_file = plugins::read_plugin_file(&plugin_file_bytes)?;
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
     // create folder
-    let cache_dir = utils::get_cache_dir()?;
+    let cache_dir = utils::get_user_data_dir()?;
     let plugin_cache_dir_path = cache_dir.join("plugins").join(&plugin_file.name).join(&plugin_file.version);
+    std::fs::remove_dir_all(&plugin_cache_dir_path)?;
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
 
     let file_name = plugin_cache_dir_path.join(plugin_file.get_binary_path()?).to_string_lossy().to_string();
-    cache_manifest.add_item(url.to_string(), cache::CacheItem {
+    plugin_manifest.add_binary(url.to_string(), plugins::BinaryManifestItem {
+        binary_name: plugin_file.name,
+        version: plugin_file.version,
         created_time: utils::get_time_secs(),
         file_name: file_name.clone(),
     });

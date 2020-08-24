@@ -96,7 +96,7 @@ ARGS:
         )
         .subcommand(
             SubCommand::with_name("install")
-                .about("Installs the dependencies for the current configuration file.")
+                .about("Installs the binaries for the current configuration file.")
         )
         .arg(
             Arg::with_name("help")

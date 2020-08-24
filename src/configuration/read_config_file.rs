@@ -3,7 +3,7 @@ use jsonc_parser::{parse_to_value, JsonValue};
 use crate::types::ErrBox;
 
 pub struct ConfigFile {
-    pub dependencies: HashMap<String, ConfigFileBinary>,
+    pub binaries: HashMap<String, ConfigFileBinary>,
 }
 
 pub struct ConfigFileBinary {
@@ -22,24 +22,24 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
         _ => return err!("Expected a root object in the json"),
     };
 
-    let json_dependencies = match root_object_node.take_object("dependencies") {
-        Some(json_dependencies) => json_dependencies,
-        None => return err!("Expected to find a 'dependencies' array."),
+    let json_binaries = match root_object_node.take_object("binaries") {
+        Some(json_binaries) => json_binaries,
+        None => return err!("Expected to find a 'binaries' array."),
     };
 
-    let mut dependencies = HashMap::new();
-    for (key, value) in json_dependencies.into_iter() {
+    let mut binaries = HashMap::new();
+    for (key, value) in json_binaries.into_iter() {
         let url = match value {
             JsonValue::String(url) => url,
             _ => return err!("Expected a string for key '{}'.", key),
         };
-        dependencies.insert(key.clone(), ConfigFileBinary {
+        binaries.insert(key.clone(), ConfigFileBinary {
             name: key,
             url,
         });
     }
 
     Ok(ConfigFile {
-        dependencies
+        binaries
     })
 }
