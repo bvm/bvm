@@ -29,7 +29,7 @@ pub fn extract_zip(zip_bytes: &[u8], dir_path: &Path) -> Result<(), ErrBox> {
 
         // Get and Set permissions
         #[cfg(unix)]
-        if environment.is_real() {
+        {
             use std::os::unix::fs::PermissionsExt;
             use std::fs;
 

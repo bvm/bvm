@@ -89,7 +89,19 @@ async fn run() -> Result<(), ErrBox> {
                     plugins::write_manifest(&plugin_manifest)?; // write for every setup plugin in case a further one fails
                 }
             }
-        }
+        },
+        SubCommand::Use(use_command) => {
+            let mut plugin_manifest = plugins::read_manifest()?;
+            let binary = match plugin_manifest.get_binary_by_name_and_version(&use_command.binary_name, &use_command.version) {
+                Some(binary) => binary,
+                None => return err!("Could not find binary '{}' with version '{}'", use_command.binary_name, use_command.version),
+            };
+            let binary_name = binary.binary_name.clone(); // clone to prevent mutating while borrowing
+            let binary_url = binary.url.clone();
+            plugin_manifest.use_global_version(&binary_name, &binary_url);
+
+            plugins::write_manifest(&plugin_manifest)?;
+        },
     }
 
     Ok(())
@@ -103,12 +115,13 @@ async fn setup_plugin(plugin_manifest: &mut plugins::PluginsManifest, url: &str)
     // create folder
     let cache_dir = utils::get_user_data_dir()?;
     let plugin_cache_dir_path = cache_dir.join("plugins").join(&plugin_file.name).join(&plugin_file.version);
-    std::fs::remove_dir_all(&plugin_cache_dir_path)?;
+    let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
 
     let file_name = plugin_cache_dir_path.join(plugin_file.get_binary_path()?).to_string_lossy().to_string();
     plugin_manifest.add_binary(url.to_string(), plugins::BinaryManifestItem {
+        url: url.to_string(),
         binary_name: plugin_file.name,
         version: plugin_file.version,
         created_time: utils::get_time_secs(),

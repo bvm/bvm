@@ -7,6 +7,7 @@ pub struct CliArgs {
 #[derive(Debug, PartialEq)]
 pub enum SubCommand {
     Run(RunCommand),
+    Use(UseCommand),
     Install,
     Version,
     Help(String),
@@ -16,6 +17,12 @@ pub enum SubCommand {
 pub struct RunCommand {
     pub binary_name: String,
     pub args: Vec<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UseCommand {
+    pub binary_name: String,
+    pub version: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -38,6 +45,12 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         SubCommand::Version
     } else if matches.is_present("install") {
         SubCommand::Install
+    } else if matches.is_present("use") {
+        let use_matches = matches.subcommand_matches("use").unwrap();
+        SubCommand::Use(UseCommand {
+            binary_name: use_matches.value_of("binary_name").map(String::from).unwrap(),
+            version: use_matches.value_of("version").map(String::from).unwrap(),
+        })
     } else {
         SubCommand::Help({
             let mut text = Vec::new();
@@ -61,7 +74,7 @@ fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {
         .bin_name("gvm")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Copyright 2020 by David Sherret")
-        .about("Handles running versions of specific binaries based on the current working directory.")
+        .about("Runs versions of specific binaries based on the current working directory.")
         .usage("gvm <SUBCOMMAND> [OPTIONS]")
         .template(r#"{bin} {version}
 {author}
@@ -97,6 +110,20 @@ ARGS:
         .subcommand(
             SubCommand::with_name("install")
                 .about("Installs the binaries for the current configuration file.")
+        )
+        .subcommand(
+            SubCommand::with_name("use")
+                .about("Select a different version to use globally of a binary")
+                .arg(
+                    Arg::with_name("binary_name")
+                        .help("The binary name.")
+                        .takes_value(true)
+                )
+                .arg(
+                    Arg::with_name("version")
+                        .help("The version of the binary to use.")
+                        .takes_value(true)
+                )
         )
         .arg(
             Arg::with_name("help")

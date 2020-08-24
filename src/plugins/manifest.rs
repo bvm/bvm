@@ -15,6 +15,7 @@ pub struct PluginsManifest {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
+    pub url: String,
     pub binary_name: String,
     pub version: String,
     pub file_name: String,
@@ -38,8 +39,18 @@ impl PluginsManifest {
         self.binaries.insert(key, item);
     }
 
-    pub fn get_binary(&self, key: &str) -> Option<&BinaryManifestItem> {
-        self.binaries.get(key)
+    pub fn get_binary(&self, url: &str) -> Option<&BinaryManifestItem> {
+        self.binaries.get(url)
+    }
+
+    pub fn get_binary_by_name_and_version(&self, name: &str, version: &str) -> Option<&BinaryManifestItem> {
+        for binary in self.binaries() {
+            if binary.binary_name == name && binary.version == version {
+                return Some(binary)
+            }
+        }
+
+        None
     }
 
     pub fn binaries(&self) -> Values<'_, String, BinaryManifestItem> {
@@ -51,6 +62,10 @@ impl PluginsManifest {
             Some(key) => self.binaries.get(key),
             None => None,
         }
+    }
+
+    pub fn use_global_version(&mut self, binary_name: &str, url: &str) {
+        self.global_versions.insert(binary_name.to_string(), url.to_string());
     }
 }
 

@@ -412,7 +412,7 @@ checksum = "aaf91faf136cb47367fa430cd46e37a788775e7fa104f8b4bcb3861dc389b724"
 
 [[package]]
 name = "gvm"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "app_dirs2",
  "bytes",

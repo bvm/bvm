@@ -2,11 +2,15 @@
 
 A version manager for all binaries.
 
+![Demo using gvm command](demo.gif "Demo using gvm command")
+
 ## Install
 
 Distribution is only available via cargo at the moment, but this project will be released as a single binary in the future.
 
-- `cargo install gvm`
+```bash
+cargo install gvm
+```
 
 ## Why?
 
@@ -15,9 +19,9 @@ I couldn't find a solution like this that also worked on Windows.
 ## Setup
 
 1. For now, install `gvm` via cargo.
-2. Manually add the binary folder to the path (todo: this probably shouldn't be in the cache folder):
-   * Windows: `C:\Users\<user-name>\AppData\Local\gvm\gvm\cache\bin`
-   * Mac/Linux: `~/.cache/gvm/cache/bin`
+2. Manually add the binary folder to the path:
+   * Windows: `C:\Users\<user-name>\AppData\Local\gvm\gvm\bin`
+   * Mac/Linux: `~/.local/share/gvm/bin`
 3. Add a *.gvmrc.json* file to your project and specify the binary names and paths to the binary manifest files.
    ```jsonc
    {
@@ -35,6 +39,12 @@ I couldn't find a solution like this that also worked on Windows.
 ### `gvm install`
 
 Adds the binaries in the current configuration file to the path then downloads & installs them.
+
+### `gvm use <binary name> <version>`
+
+Uses the specified binary name and version globally.
+
+The binary and version must have been previously installed.
 
 ### `gvm run [binary-name] [...args]`
 
@@ -60,7 +70,7 @@ This is what `[binary-name] [...args]` internally uses to run the correct binary
    ```
 2. Support for file paths in addition to urls.
 3. `gvm install <url>` - To install a binary at the specified url.
-4. `gvm use <binary name> <version>` or `gvm use <url>` - To use a specific version of a binary globally.
+4. `gvm use <url>` - To use a specific version of a binary globally via a url.
 5. Ability to specify pre & post install commands in the configuration file.
 6. Something similar to `npm run <script-name>`.
 7. Ability to purge any binaries that haven't been run for X days.
