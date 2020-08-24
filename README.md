@@ -4,21 +4,15 @@ A version manager for all binaries.
 
 ![Demo using gvm command](demo.gif "Demo using gvm command")
 
-## Install
-
-Distribution is only available via cargo at the moment, but this project will be released as a single binary in the future.
-
-```bash
-cargo install gvm
-```
-
 ## Why?
 
 I couldn't find a solution like this that also worked on Windows.
 
 ## Setup
 
-1. For now, install `gvm` via cargo.
+It's not recommended to try this out yet, but if you want to:
+
+1. For now, install `gvm` via cargo—`cargo install gvm`.
 2. Manually add the binary folder to the path:
    * Windows: `C:\Users\<user-name>\AppData\Local\gvm\gvm\bin`
    * Mac/Linux: `~/.local/share/gvm/bin`
@@ -56,7 +50,7 @@ This is what `[binary-name] [...args]` internally uses to run the correct binary
 
 ## Future improvements
 
-1. Ability to specify a range of supported versions in *.gvmrc.json*:
+1. Ability to specify a range of supported versions in *.gvmrc.json* to reduce the number of downloaded binaries:
    ```jsonc
    {
      "binaries": {
@@ -68,13 +62,22 @@ This is what `[binary-name] [...args]` internally uses to run the correct binary
      }
    }
    ```
-2. Support for file paths in addition to urls.
+2. Support for file paths everywhere in addition to urls.
 3. `gvm install <url>` - To install a binary at the specified url.
 4. `gvm use <url>` - To use a specific version of a binary globally via a url.
 5. Ability to specify pre & post install commands in the configuration file.
 6. Something similar to `npm run <script-name>`.
 7. Ability to purge any binaries that haven't been run for X days.
-8. Some way for binaries to specify all their version numbers and the ability to get their latest.
+8. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each plugin manifest file may have a url to a global manifest file where all that data is stored.
 9. `gvm uninstall <binary name> <version>` or `gvm uninstall <url>`
-10. Ability for plugins to run some setup commands.
+10. Ability for plugins to run some setup commands after extracting the zip file.
 11. Checksums on paths to ensure downstream binaries stay constant.
+12. `gvm list` - Lists the installed plugins.
+13. `gvm upgrade <binary name>` - Upgrade to the latest version (requires plugins to specify a global manifest)
+
+## Goals
+
+1. No centralization—all urls and paths.
+   * Allows for easily distributing approved binaries within an organization.
+   * Easy for binary authors to distribute their applications.
+2. Support different binaries with the same name.
