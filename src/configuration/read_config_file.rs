@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use jsonc_parser::{parse_to_value, JsonValue};
 use crate::types::ErrBox;
+use jsonc_parser::{parse_to_value, JsonValue};
+use std::collections::HashMap;
 
 pub struct ConfigFile {
     pub binaries: HashMap<String, ConfigFileBinary>,
@@ -14,7 +14,12 @@ pub struct ConfigFileBinary {
 pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
     let value = match parse_to_value(file_text) {
         Ok(value) => value,
-        Err(err) => return err!("Error parsing configuration file. {}", err.get_message_with_range(file_text)),
+        Err(err) => {
+            return err!(
+                "Error parsing configuration file. {}",
+                err.get_message_with_range(file_text)
+            )
+        }
     };
 
     let mut root_object_node = match value {
@@ -33,13 +38,8 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
             JsonValue::String(url) => url,
             _ => return err!("Expected a string for key '{}'.", key),
         };
-        binaries.insert(key.clone(), ConfigFileBinary {
-            name: key,
-            url,
-        });
+        binaries.insert(key.clone(), ConfigFileBinary { name: key, url });
     }
 
-    Ok(ConfigFile {
-        binaries
-    })
+    Ok(ConfigFile { binaries })
 }

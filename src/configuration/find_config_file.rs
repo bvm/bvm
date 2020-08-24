@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::types::ErrBox;
+use std::path::{Path, PathBuf};
 
 pub fn find_config_file() -> Result<Option<PathBuf>, ErrBox> {
     let cwd = std::env::current_dir()?;

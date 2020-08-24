@@ -1,5 +1,5 @@
-use std::path::Path;
 use std::io::prelude::*;
+use std::path::Path;
 
 use crate::types::ErrBox;
 
@@ -30,8 +30,8 @@ pub fn extract_zip(zip_bytes: &[u8], dir_path: &Path) -> Result<(), ErrBox> {
         // Get and Set permissions
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             use std::fs;
+            use std::os::unix::fs::PermissionsExt;
 
             if let Some(mode) = file.unix_mode() {
                 fs::set_permissions(&file_path, fs::Permissions::from_mode(mode))?;

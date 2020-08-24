@@ -27,12 +27,15 @@ pub struct UseCommand {
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     if args.get(1).map(|a| a.as_str()) == Some("run") {
-        return Ok(CliArgs{
+        return Ok(CliArgs {
             sub_command: SubCommand::Run(RunCommand {
-                binary_name: args.get(2).expect("Expected run command to have binary name").clone(), // todo: error instead
+                binary_name: args
+                    .get(2)
+                    .expect("Expected run command to have binary name")
+                    .clone(), // todo: error instead
                 args: args[3..].to_vec(),
-            })
-        })
+            }),
+        });
     }
 
     let mut cli_parser = create_cli_parser();
@@ -48,7 +51,10 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
         SubCommand::Use(UseCommand {
-            binary_name: use_matches.value_of("binary_name").map(String::from).unwrap(),
+            binary_name: use_matches
+                .value_of("binary_name")
+                .map(String::from)
+                .unwrap(),
             version: use_matches.value_of("version").map(String::from).unwrap(),
         })
     } else {
@@ -59,13 +65,11 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         })
     };
 
-    Ok(CliArgs {
-        sub_command,
-    })
+    Ok(CliArgs { sub_command })
 }
 
 fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {
-    use clap::{App, Arg, SubCommand, AppSettings};
+    use clap::{App, AppSettings, Arg, SubCommand};
     App::new("gvm")
         .setting(AppSettings::UnifiedHelpMessage)
         .setting(AppSettings::DisableHelpFlags)
@@ -142,5 +146,7 @@ ARGS:
 }
 
 fn values_to_vec(values: Option<clap::Values>) -> Vec<String> {
-    values.map(|x| x.map(std::string::ToString::to_string).collect()).unwrap_or(Vec::new())
+    values
+        .map(|x| x.map(std::string::ToString::to_string).collect())
+        .unwrap_or(Vec::new())
 }

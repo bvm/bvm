@@ -1,8 +1,8 @@
+use crate::types::ErrBox;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
-use crate::types::ErrBox;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +34,8 @@ impl PluginsManifest {
     pub fn add_binary(&mut self, key: String, item: BinaryManifestItem) {
         // add to the global versions if nothing is in there
         if !self.global_versions.contains_key(&item.binary_name) {
-            self.global_versions.insert(item.binary_name.clone(), key.clone());
+            self.global_versions
+                .insert(item.binary_name.clone(), key.clone());
         }
         self.binaries.insert(key, item);
     }
@@ -43,10 +44,14 @@ impl PluginsManifest {
         self.binaries.get(url)
     }
 
-    pub fn get_binary_by_name_and_version(&self, name: &str, version: &str) -> Option<&BinaryManifestItem> {
+    pub fn get_binary_by_name_and_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Option<&BinaryManifestItem> {
         for binary in self.binaries() {
             if binary.binary_name == name && binary.version == version {
-                return Some(binary)
+                return Some(binary);
             }
         }
 
@@ -65,7 +70,8 @@ impl PluginsManifest {
     }
 
     pub fn use_global_version(&mut self, binary_name: &str, url: &str) {
-        self.global_versions.insert(binary_name.to_string(), url.to_string());
+        self.global_versions
+            .insert(binary_name.to_string(), url.to_string());
     }
 }
 

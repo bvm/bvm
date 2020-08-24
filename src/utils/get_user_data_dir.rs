@@ -1,7 +1,10 @@
-use std::path::PathBuf;
 use crate::types::ErrBox;
+use std::path::PathBuf;
 
-const APP_INFO: app_dirs::AppInfo = app_dirs::AppInfo { name: "gvm", author: "gvm" };
+const APP_INFO: app_dirs::AppInfo = app_dirs::AppInfo {
+    name: "gvm",
+    author: "gvm",
+};
 
 pub fn get_user_data_dir() -> Result<PathBuf, ErrBox> {
     match app_dirs::app_root(app_dirs::AppDataType::UserData, &APP_INFO) {
