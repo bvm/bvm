@@ -62,15 +62,18 @@ At the moment, it looks like this:
   "version": "1.3.1",
   "windows": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
-    "binaryPath": "deno.exe"
+    "binaryPath": "deno.exe",
+    "postExtract": "# run some commands here"
   },
   "linux": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
-    "binaryPath": "deno"
+    "binaryPath": "deno",
+    "postExtract": "# run some commands here"
   },
   "mac": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
-    "binaryPath": "deno"
+    "binaryPath": "deno",
+    "postExtract": "# run some commands here"
   }
 }
 ```

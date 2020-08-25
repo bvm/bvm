@@ -18,6 +18,7 @@ pub struct PluginFile {
 pub struct PlatformInfo {
     archive: String,
     binary_path: String,
+    post_extract: Option<String>,
 }
 
 impl PluginFile {
@@ -27,6 +28,10 @@ impl PluginFile {
 
     pub fn get_binary_path(&self) -> Result<&String, ErrBox> {
         Ok(&self.get_platform_info()?.binary_path)
+    }
+
+    pub fn get_post_extract_script(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.post_extract)
     }
 
     fn get_platform_info(&self) -> Result<&PlatformInfo, ErrBox> {
