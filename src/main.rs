@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 #[macro_use]
 mod types;
@@ -30,7 +29,7 @@ async fn run() -> Result<(), ErrBox> {
     match args.sub_command {
         SubCommand::Help(text) => print!("{}", text),
         SubCommand::Version => println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-        SubCommand::Run(run_command) => {
+        SubCommand::Resolve(resolve_command) => {
             let config_file_path = configuration::find_config_file()?;
             let plugin_manifest = plugins::read_manifest()?;
             let executable_path = if let Some(config_file_path) = config_file_path {
@@ -43,7 +42,7 @@ async fn run() -> Result<(), ErrBox> {
                 for url in config_file.binaries.iter() {
                     if let Some(identifier) = plugin_manifest.get_identifier_from_url(url) {
                         if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
-                            if cache_item.name == run_command.binary_name {
+                            if cache_item.name == resolve_command.binary_name {
                                 config_file_binary = Some(cache_item);
                                 break;
                             }
@@ -57,8 +56,8 @@ async fn run() -> Result<(), ErrBox> {
 
                 if config_file_binary.is_none() && had_uninstalled_binary {
                     eprintln!(
-                        "[gvm warning]: There were uninstalled binaries (run `gvm install`). Using global '{}'.",
-                        run_command.binary_name
+                        "[gvm warning]: There were uninstalled binaries (run `gvm install`). Resolving global '{}'.",
+                        resolve_command.binary_name
                     );
                 }
 
@@ -72,24 +71,13 @@ async fn run() -> Result<(), ErrBox> {
             };
             let executable_path = match executable_path {
                 Some(path) => path,
-                None => match plugin_manifest.get_global_binary(&run_command.binary_name) {
+                None => match plugin_manifest.get_global_binary(&resolve_command.binary_name) {
                     Some(manifest_item) => manifest_item.file_name.clone(),
-                    None => return err!("Could not find binary '{}'", run_command.binary_name),
+                    None => return err!("Could not find binary '{}'", resolve_command.binary_name),
                 },
             };
 
-            let status = Command::new(executable_path)
-                .args(&run_command.args)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .status()
-                .expect("failed to execute process");
-
-            match status.code() {
-                Some(code) => std::process::exit(code),
-                None => panic!("Process terminated by signal."), // todo: what to do here?
-            }
+            println!("{}", executable_path);
         }
         SubCommand::Install => {
             let config_file_path = match configuration::find_config_file()? {

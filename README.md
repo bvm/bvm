@@ -44,11 +44,11 @@ Uses the specified binary name and version globally.
 
 The binary and version must have been previously installed.
 
-### `gvm run [binary-name] [...args]`
+### `gvm resolve [binary-name]`
 
-Runs the specified binary using the provided arguments based on the current configuration file.
+Resolves the executable path of the specified binary using the provided arguments based on the current working directory.
 
-This is what `[binary-name] [...args]` internally uses to run the correct binary.
+This command is used by the created shell/batch files to tell how to resolve the file.
 
 ## Binary manifest file
 
@@ -104,6 +104,8 @@ Obviously this needs to be improved.
 12. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
 13. Support downstream binary dependencies.
 14. List installed versions when `gvm use` can't find the version.
+15. Ability to run a specific version of a binary when using `gvm resolve`
+16. Ability to create aliases (ex. `deno2`)
 
 ## Goals
 
@@ -113,3 +115,4 @@ Obviously this needs to be improved.
    - Allows for easily distributing approved binaries within an organization.
    - Easy for binary authors to distribute their applications.
 4. Support different binaries with the same name.
+5. Backwards compatibility (once hitting 1.0)

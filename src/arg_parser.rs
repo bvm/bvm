@@ -6,7 +6,7 @@ pub struct CliArgs {
 
 #[derive(Debug, PartialEq)]
 pub enum SubCommand {
-    Run(RunCommand),
+    Resolve(ResolveCommand),
     Use(UseCommand),
     Install,
     InstallUrl(String),
@@ -15,9 +15,8 @@ pub enum SubCommand {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct RunCommand {
+pub struct ResolveCommand {
     pub binary_name: String,
-    pub args: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -27,25 +26,21 @@ pub struct UseCommand {
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
-    if args.get(1).map(|a| a.as_str()) == Some("run") {
-        return Ok(CliArgs {
-            sub_command: SubCommand::Run(RunCommand {
-                binary_name: args
-                    .get(2)
-                    .expect("Expected run command to have binary name")
-                    .clone(), // todo: error instead
-                args: args[3..].to_vec(),
-            }),
-        });
-    }
-
     let mut cli_parser = create_cli_parser();
     let matches = match cli_parser.get_matches_from_safe_borrow(args) {
         Ok(result) => result,
         Err(err) => return err!("{}", err.to_string()),
     };
 
-    let sub_command = if matches.is_present("version") {
+    let sub_command = if matches.is_present("resolve") {
+        let resolve_matches = matches.subcommand_matches("resolve").unwrap();
+        SubCommand::Resolve(ResolveCommand {
+            binary_name: resolve_matches
+                .value_of("binary_name")
+                .map(String::from)
+                .unwrap(),
+        })
+    } else if matches.is_present("version") {
         SubCommand::Version
     } else if matches.is_present("install") {
         let install_matches = matches.subcommand_matches("install").unwrap();
@@ -86,7 +81,8 @@ fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {
         .author("Copyright 2020 by David Sherret")
         .about("Runs versions of specific binaries based on the current working directory.")
         .usage("gvm <SUBCOMMAND> [OPTIONS]")
-        .template(r#"{bin} {version}
+        .template(
+            r#"{bin} {version}
 {author}
 
 {about}
@@ -103,19 +99,18 @@ OPTIONS:
 ARGS:
 {positionals}
 
-{after-help}"#)
-        .after_help(
-            r#"TODO: Will fill in this info later..."#,
+{after-help}"#,
         )
+        .after_help(r#"TODO: Will fill in this info later..."#)
         .subcommand(
-            SubCommand::with_name("run")
-                .about("Runs the command using the version according to the current working directory.")
+            SubCommand::with_name("resolve")
+                .about("Outputs the binary path according to the current working directory.")
                 .arg(
-                    Arg::with_name("command")
-                        .help("The command to execute where the first argument is the binary name.")
+                    Arg::with_name("binary_name")
+                        .help("The binary name to resolve.")
                         .takes_value(true)
-                        .min_values(1)
-                )
+                        .required(true),
+                ),
         )
         .subcommand(
             SubCommand::with_name("install")
@@ -123,8 +118,8 @@ ARGS:
                 .arg(
                     Arg::with_name("url")
                         .help("The url of the binary manifest to install.")
-                        .takes_value(true)
-                )
+                        .takes_value(true),
+                ),
         )
         .subcommand(
             SubCommand::with_name("use")
@@ -133,14 +128,14 @@ ARGS:
                     Arg::with_name("binary_name")
                         .help("The binary name.")
                         .takes_value(true)
-                        .required(true)
+                        .required(true),
                 )
                 .arg(
                     Arg::with_name("version")
                         .help("The version of the binary to use.")
                         .takes_value(true)
-                        .required(true)
-                )
+                        .required(true),
+                ),
         )
         .arg(
             Arg::with_name("help")
