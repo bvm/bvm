@@ -1,9 +1,9 @@
 use crate::types::ErrBox;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
-pub fn create_path_script(binary_name: &str, binaries_cache_dir: &Path) -> Result<(), ErrBox> {
-    let file_path = binaries_cache_dir.join(format!("{}", binary_name));
+pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Result<(), ErrBox> {
+    let file_path = get_path_script_path(binaries_cache_dir, binary_name);
     std::fs::write(
         &file_path,
         format!(
@@ -20,9 +20,10 @@ $exe_path "$@""#,
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_path_script(binary_name: &str, binaries_cache_dir: &Path) -> Result<(), ErrBox> {
+pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Result<(), ErrBox> {
     // https://stackoverflow.com/a/6362922/188246
-    let file_path = binaries_cache_dir.join(format!("{}.bat", binary_name));
+    // todo: needs to handle when this fails to find the binary or something
+    let file_path = get_path_script_path(binaries_cache_dir, binary_name);
     std::fs::write(
         &file_path,
         format!(
@@ -35,4 +36,11 @@ FOR /F "tokens=* USEBACKQ" %%F IN (`gvm resolve {}`) DO (
         ),
     )?;
     Ok(())
+}
+
+pub fn get_path_script_path(binaries_cache_dir: &Path, binary_name: &str) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    return binaries_cache_dir.join(format!("{}.bat", binary_name));
+    #[cfg(unix)]
+    return binaries_cache_dir.join(format!("{}", binary_name));
 }

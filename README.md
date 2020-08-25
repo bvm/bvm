@@ -38,17 +38,21 @@ Adds the binaries in the current configuration file to the path then downloads &
 
 Installs a binary at the specified manifest file.
 
-### `gvm use <binary name> <version>`
+### `gvm use [binary name] [version]`
 
 Uses the specified binary name and version globally.
 
 The binary and version must have been previously installed.
 
-### `gvm resolve [binary-name]`
+### `gvm resolve [binary name]`
 
 Resolves the executable path of the specified binary using the provided arguments based on the current working directory.
 
 This command is used by the created shell/batch files to tell how to resolve the file.
+
+### `gvm uninstall [binary name] [version]`
+
+Uninstalls the specified binary name and version.
 
 ## Binary manifest file
 
@@ -95,14 +99,15 @@ At the moment, it looks like this:
 4. Something similar to `npm run <script-name>`? Or is that out of scope?
 5. Ability to specify pre & post install commands in the configuration file (ties into #4 maybe... might be better to make it separate though)
 6. Ability to purge any binaries that haven't been run for X days.
-7. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global manifest file where all that data is stored.
-8. `gvm uninstall <binary name> <version>` or `gvm uninstall <url>`
-9. Checksums on paths to ensure downstream binaries stay constant.
-10. `gvm list` - Lists the installed binaries.
-11. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
-12. Support downstream binary dependencies.
-13. Ability to run a specific version of a binary when using `gvm resolve`
-14. Ability to create aliases (ex. `deno2`)
+7. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.
+8. Checksums on paths to ensure downstream binaries stay constant.
+9. `gvm list` - Lists the installed binaries.
+10. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
+11. Support downstream binary dependencies.
+12. Ability to run a specific version of a binary when using `gvm resolve`
+13. Ability to easily create aliases (ex. `deno2`)
+14. Require `--force` on `gvm install` if already installed.
+15. `gvm clear-url-cache` - Clear the url caches, but not the binary caches.
 
 ## Goals
 

@@ -1,8 +1,17 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::types::ErrBox;
 use crate::utils;
+
+pub fn get_plugin_dir(group: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
+    let data_dir = utils::get_user_data_dir()?;
+    Ok(data_dir
+        .join("plugins")
+        .join(group)
+        .join(name)
+        .join(version))
+}
 
 pub async fn setup_plugin(
     plugin_manifest: &mut PluginsManifest,
@@ -14,7 +23,15 @@ pub async fn setup_plugin(
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
     let identifier = plugin_file.get_identifier();
 
-    println!("Installing {}", plugin_file.name);
+    println!("Installing {}...", plugin_file.name);
+
+    // ensure the version can parse to a semver
+    if let Err(err) = semver::Version::parse(&plugin_file.version) {
+        return err!(
+            "The version found in the binary manifest file was invalid. {}",
+            err.to_string()
+        );
+    }
 
     // associate the url to the identifier
     plugin_manifest.set_identifier_for_url(url.to_string(), identifier.clone());
@@ -27,12 +44,8 @@ pub async fn setup_plugin(
     // download the zip bytes
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
     // create folder
-    let cache_dir = utils::get_user_data_dir()?;
-    let plugin_cache_dir_path = cache_dir
-        .join("plugins")
-        .join(&plugin_file.group)
-        .join(&plugin_file.name)
-        .join(&plugin_file.version);
+    let plugin_cache_dir_path =
+        get_plugin_dir(&plugin_file.group, &plugin_file.name, &plugin_file.version)?;
     let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
@@ -42,7 +55,7 @@ pub async fn setup_plugin(
         utils::run_shell_command(&plugin_cache_dir_path, post_extract_script)?;
     }
 
-    // add the plugin information to the script
+    // add the plugin information to the manifestscript
     let file_name = plugin_cache_dir_path
         .join(plugin_file.get_binary_path()?)
         .to_string_lossy()
@@ -54,7 +67,9 @@ pub async fn setup_plugin(
         created_time: utils::get_time_secs(),
         file_name: file_name.clone(),
     });
-    create_path_script(&plugin_file.name, &bin_dir)?;
+
+    // create the script that runs on the path
+    create_path_script(&bin_dir, &plugin_file.name)?;
 
     Ok(file_name)
 }

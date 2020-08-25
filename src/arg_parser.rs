@@ -10,6 +10,7 @@ pub enum SubCommand {
     Use(UseCommand),
     Install,
     InstallUrl(String),
+    Uninstall(UninstallCommand),
     Version,
     Help(String),
 }
@@ -21,6 +22,12 @@ pub struct ResolveCommand {
 
 #[derive(Debug, PartialEq)]
 pub struct UseCommand {
+    pub binary_name: String,
+    pub version: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UninstallCommand {
     pub binary_name: String,
     pub version: String,
 }
@@ -57,6 +64,18 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
                 .map(String::from)
                 .unwrap(),
             version: use_matches.value_of("version").map(String::from).unwrap(),
+        })
+    } else if matches.is_present("uninstall") {
+        let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
+        SubCommand::Uninstall(UninstallCommand {
+            binary_name: uninstall_matches
+                .value_of("binary_name")
+                .map(String::from)
+                .unwrap(),
+            version: uninstall_matches
+                .value_of("version")
+                .map(String::from)
+                .unwrap(),
         })
     } else {
         SubCommand::Help({
@@ -120,6 +139,22 @@ ARGS:
                     Arg::with_name("url")
                         .help("The url of the binary manifest to install.")
                         .takes_value(true),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("uninstall")
+                .about("Uninstalls the specified binary version.")
+                .arg(
+                    Arg::with_name("binary_name")
+                        .help("The binary name.")
+                        .takes_value(true)
+                        .required(true),
+                )
+                .arg(
+                    Arg::with_name("version")
+                        .help("The version of the binary to uninstall.")
+                        .takes_value(true)
+                        .required(true),
                 ),
         )
         .subcommand(
