@@ -9,6 +9,7 @@ pub enum SubCommand {
     Run(RunCommand),
     Use(UseCommand),
     Install,
+    InstallUrl(String),
     Version,
     Help(String),
 }
@@ -47,7 +48,12 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     let sub_command = if matches.is_present("version") {
         SubCommand::Version
     } else if matches.is_present("install") {
-        SubCommand::Install
+        let install_matches = matches.subcommand_matches("install").unwrap();
+        if let Some(url) = install_matches.value_of("url").map(String::from) {
+            SubCommand::InstallUrl(url)
+        } else {
+            SubCommand::Install
+        }
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
         SubCommand::Use(UseCommand {
@@ -114,6 +120,11 @@ ARGS:
         .subcommand(
             SubCommand::with_name("install")
                 .about("Installs the binaries for the current configuration file.")
+                .arg(
+                    Arg::with_name("url")
+                        .help("The url of the binary manifest to install.")
+                        .takes_value(true)
+                )
         )
         .subcommand(
             SubCommand::with_name("use")
@@ -122,11 +133,13 @@ ARGS:
                     Arg::with_name("binary_name")
                         .help("The binary name.")
                         .takes_value(true)
+                        .required(true)
                 )
                 .arg(
                     Arg::with_name("version")
                         .help("The version of the binary to use.")
                         .takes_value(true)
+                        .required(true)
                 )
         )
         .arg(
@@ -143,10 +156,4 @@ ARGS:
                 .help("Prints the version.")
                 .takes_value(false),
         )
-}
-
-fn values_to_vec(values: Option<clap::Values>) -> Vec<String> {
-    values
-        .map(|x| x.map(std::string::ToString::to_string).collect())
-        .unwrap_or(Vec::new())
 }

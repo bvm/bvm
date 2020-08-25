@@ -1,14 +1,8 @@
 use crate::types::ErrBox;
 use jsonc_parser::{parse_to_value, JsonValue};
-use std::collections::HashMap;
 
 pub struct ConfigFile {
-    pub binaries: HashMap<String, ConfigFileBinary>,
-}
-
-pub struct ConfigFileBinary {
-    pub name: String,
-    pub url: String,
+    pub binaries: Vec<String>,
 }
 
 pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
@@ -27,18 +21,18 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
         _ => return err!("Expected a root object in the json"),
     };
 
-    let json_binaries = match root_object_node.take_object("binaries") {
+    let json_binaries = match root_object_node.take_array("binaries") {
         Some(json_binaries) => json_binaries,
         None => return err!("Expected to find a 'binaries' array."),
     };
 
-    let mut binaries = HashMap::new();
-    for (key, value) in json_binaries.into_iter() {
+    let mut binaries = Vec::new();
+    for value in json_binaries.into_iter() {
         let url = match value {
             JsonValue::String(url) => url,
-            _ => return err!("Expected a string for key '{}'.", key),
+            _ => return err!("Expected a string for all items in 'binaries' array."),
         };
-        binaries.insert(key.clone(), ConfigFileBinary { name: key, url });
+        binaries.push(url);
     }
 
     Ok(ConfigFile { binaries })

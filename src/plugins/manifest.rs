@@ -44,6 +44,10 @@ impl PluginsManifest {
         self.binaries.get(url)
     }
 
+    pub fn remove_binary(&mut self, url: &str) {
+        self.binaries.remove(url);
+    }
+
     pub fn get_binary_by_name_and_version(
         &self,
         name: &str,

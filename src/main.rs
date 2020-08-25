@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 #[macro_use]
@@ -31,20 +32,34 @@ async fn run() -> Result<(), ErrBox> {
         SubCommand::Version => println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
         SubCommand::Run(run_command) => {
             let config_file_path = configuration::find_config_file()?;
-            let mut plugin_manifest = plugins::read_manifest()?;
+            let plugin_manifest = plugins::read_manifest()?;
             let executable_path = if let Some(config_file_path) = config_file_path {
+                // todo: cleanup :)
                 let config_file_text = std::fs::read_to_string(&config_file_path)?;
                 let config_file = configuration::read_config_file(&config_file_text)?;
-                if let Some(config_file_binary) = config_file.binaries.get(&run_command.binary_name)
-                {
-                    if let Some(cache_item) = plugin_manifest.get_binary(&config_file_binary.url) {
-                        Some(cache_item.file_name.clone())
+                let mut had_uninstalled_binary = false;
+                let mut config_file_binary = None;
+
+                for url in config_file.binaries.iter() {
+                    if let Some(cache_item) = plugin_manifest.get_binary(url) {
+                        if cache_item.binary_name == run_command.binary_name {
+                            config_file_binary = Some(cache_item);
+                            break;
+                        }
                     } else {
-                        let result =
-                            setup_plugin(&mut plugin_manifest, &config_file_binary.url).await?;
-                        plugins::write_manifest(&plugin_manifest)?;
-                        Some(result)
+                        had_uninstalled_binary = true;
                     }
+                }
+
+                if config_file_binary.is_none() && had_uninstalled_binary {
+                    eprintln!(
+                        "[gvm warning]: There were uninstalled binaries (run `gvm install`). Using global '{}'.",
+                        run_command.binary_name
+                    );
+                }
+
+                if let Some(config_file_binary) = config_file_binary {
+                    Some(config_file_binary.file_name.clone())
                 } else {
                     None
                 }
@@ -83,18 +98,26 @@ async fn run() -> Result<(), ErrBox> {
             };
             let config_file_text = std::fs::read_to_string(&config_file_path)?;
             let config_file = configuration::read_config_file(&config_file_text)?;
-            let cache_dir = utils::get_user_data_dir()?;
-            let binaries_cache_dir = cache_dir.join("bin");
-            std::fs::create_dir_all(&binaries_cache_dir)?;
+            let bin_dir = utils::get_bin_dir()?;
             let mut plugin_manifest = plugins::read_manifest()?;
 
-            for (key, value) in config_file.binaries.iter() {
-                if plugin_manifest.get_binary(&value.url).is_none() {
-                    setup_plugin(&mut plugin_manifest, &value.url).await?;
-                    plugins::create_path_script(key, &binaries_cache_dir)?;
+            for url in config_file.binaries.iter() {
+                if plugin_manifest.get_binary(&url).is_none() {
+                    setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
                     plugins::write_manifest(&plugin_manifest)?; // write for every setup plugin in case a further one fails
                 }
             }
+        }
+        SubCommand::InstallUrl(url) => {
+            let bin_dir = utils::get_bin_dir()?;
+            let mut plugin_manifest = plugins::read_manifest()?;
+
+            // remove the existing binary from the cache (the setup_plugin function will delete it from the disk)
+            plugin_manifest.remove_binary(&url);
+            plugins::write_manifest(&plugin_manifest)?;
+
+            setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+            plugins::write_manifest(&plugin_manifest)?;
         }
         SubCommand::Use(use_command) => {
             let mut plugin_manifest = plugins::read_manifest()?;
@@ -124,6 +147,7 @@ async fn run() -> Result<(), ErrBox> {
 async fn setup_plugin(
     plugin_manifest: &mut plugins::PluginsManifest,
     url: &str,
+    bin_dir: &Path,
 ) -> Result<String, ErrBox> {
     // download the url
     let plugin_file_bytes = utils::download_file(&url).await?;
@@ -147,12 +171,13 @@ async fn setup_plugin(
         url.to_string(),
         plugins::BinaryManifestItem {
             url: url.to_string(),
-            binary_name: plugin_file.name,
+            binary_name: plugin_file.name.clone(),
             version: plugin_file.version,
             created_time: utils::get_time_secs(),
             file_name: file_name.clone(),
         },
     );
+    plugins::create_path_script(&plugin_file.name, &bin_dir)?;
 
     Ok(file_name)
 }
