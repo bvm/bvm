@@ -41,10 +41,14 @@ async fn run() -> Result<(), ErrBox> {
                 let mut config_file_binary = None;
 
                 for url in config_file.binaries.iter() {
-                    if let Some(cache_item) = plugin_manifest.get_binary(url) {
-                        if cache_item.binary_name == run_command.binary_name {
-                            config_file_binary = Some(cache_item);
-                            break;
+                    if let Some(identifier) = plugin_manifest.get_identifier_from_url(url) {
+                        if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
+                            if cache_item.name == run_command.binary_name {
+                                config_file_binary = Some(cache_item);
+                                break;
+                            }
+                        } else {
+                            had_uninstalled_binary = true;
                         }
                     } else {
                         had_uninstalled_binary = true;
@@ -102,7 +106,12 @@ async fn run() -> Result<(), ErrBox> {
             let mut plugin_manifest = plugins::read_manifest()?;
 
             for url in config_file.binaries.iter() {
-                if plugin_manifest.get_binary(&url).is_none() {
+                let is_installed = plugin_manifest
+                    .get_identifier_from_url(&url)
+                    .map(|identifier| plugin_manifest.get_binary(&identifier).is_some())
+                    .unwrap_or(false);
+
+                if !is_installed {
                     setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
                     plugins::write_manifest(&plugin_manifest)?; // write for every setup plugin in case a further one fails
                 }
@@ -112,15 +121,24 @@ async fn run() -> Result<(), ErrBox> {
             let bin_dir = utils::get_bin_dir()?;
             let mut plugin_manifest = plugins::read_manifest()?;
 
+            // todo: require `--force` if already installed
+
             // remove the existing binary from the cache (the setup_plugin function will delete it from the disk)
-            plugin_manifest.remove_binary(&url);
-            plugins::write_manifest(&plugin_manifest)?;
+            if let Some(identifier) = plugin_manifest
+                .get_identifier_from_url(&url)
+                .map(|identifier| identifier.clone())
+            {
+                plugin_manifest.remove_binary(&identifier);
+                plugin_manifest.remove_url(&url);
+                plugins::write_manifest(&plugin_manifest)?;
+            }
 
             setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
             plugins::write_manifest(&plugin_manifest)?;
         }
         SubCommand::Use(use_command) => {
             let mut plugin_manifest = plugins::read_manifest()?;
+            // todo: handle multiple binaries with the same name and version
             let binary = match plugin_manifest
                 .get_binary_by_name_and_version(&use_command.binary_name, &use_command.version)
             {
@@ -133,9 +151,9 @@ async fn run() -> Result<(), ErrBox> {
                     )
                 }
             };
-            let binary_name = binary.binary_name.clone(); // clone to prevent mutating while borrowing
-            let binary_url = binary.url.clone();
-            plugin_manifest.use_global_version(&binary_name, &binary_url);
+            let binary_name = binary.name.clone(); // clone to prevent mutating while borrowing
+            let identifier = binary.get_identifier();
+            plugin_manifest.use_global_version(binary_name, identifier);
 
             plugins::write_manifest(&plugin_manifest)?;
         }
@@ -149,34 +167,44 @@ async fn setup_plugin(
     url: &str,
     bin_dir: &Path,
 ) -> Result<String, ErrBox> {
-    // download the url
+    // download the plugin file
     let plugin_file_bytes = utils::download_file(&url).await?;
     let plugin_file = plugins::read_plugin_file(&plugin_file_bytes)?;
+    let identifier = plugin_file.get_identifier();
+
+    // associate the url to the identifier
+    plugin_manifest.set_identifier_for_url(url.to_string(), identifier.clone());
+
+    // if the identifier is already in the manifest, then return that
+    if let Some(binary) = plugin_manifest.get_binary(&identifier) {
+        return Ok(binary.file_name.clone());
+    }
+
+    // download the zip bytes
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
     // create folder
     let cache_dir = utils::get_user_data_dir()?;
     let plugin_cache_dir_path = cache_dir
         .join("plugins")
+        .join(&plugin_file.group)
         .join(&plugin_file.name)
         .join(&plugin_file.version);
     let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
 
+    // add the plugin information to the script
     let file_name = plugin_cache_dir_path
         .join(plugin_file.get_binary_path()?)
         .to_string_lossy()
         .to_string();
-    plugin_manifest.add_binary(
-        url.to_string(),
-        plugins::BinaryManifestItem {
-            url: url.to_string(),
-            binary_name: plugin_file.name.clone(),
-            version: plugin_file.version,
-            created_time: utils::get_time_secs(),
-            file_name: file_name.clone(),
-        },
-    );
+    plugin_manifest.add_binary(plugins::BinaryManifestItem {
+        group: plugin_file.group.clone(),
+        name: plugin_file.name.clone(),
+        version: plugin_file.version,
+        created_time: utils::get_time_secs(),
+        file_name: file_name.clone(),
+    });
     plugins::create_path_script(&plugin_file.name, &bin_dir)?;
 
     Ok(file_name)

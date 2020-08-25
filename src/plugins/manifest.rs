@@ -7,20 +7,38 @@ use std::path::PathBuf;
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginsManifest {
-    /// Key is binary name. Value is key in the `binaries` map.
-    global_versions: HashMap<String, String>,
-    binaries: HashMap<String, BinaryManifestItem>,
+    // Key is url.
+    urls_to_identifier: HashMap<String, BinaryIdentifier>,
+    /// Key is binary name.
+    global_versions: HashMap<String, BinaryIdentifier>,
+    binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
-    pub url: String,
-    pub binary_name: String,
+    pub group: String,
+    pub name: String,
     pub version: String,
     pub file_name: String,
     /// Created time in *seconds* since epoch.
     pub created_time: u64,
+}
+
+impl BinaryManifestItem {
+    pub fn get_identifier(&self) -> BinaryIdentifier {
+        BinaryIdentifier::new(&self.group, &self.name, &self.version)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryIdentifier(String);
+
+impl BinaryIdentifier {
+    pub fn new(group: &str, name: &str, version: &str) -> Self {
+        BinaryIdentifier(format!("{}||{}||{}", group, name, version))
+    }
 }
 
 impl PluginsManifest {
@@ -28,24 +46,42 @@ impl PluginsManifest {
         PluginsManifest {
             global_versions: HashMap::new(),
             binaries: HashMap::new(),
+            urls_to_identifier: HashMap::new(),
         }
     }
 
-    pub fn add_binary(&mut self, key: String, item: BinaryManifestItem) {
+    // url to identifier
+
+    pub fn get_identifier_from_url(&self, url: &str) -> Option<&BinaryIdentifier> {
+        self.urls_to_identifier.get(url)
+    }
+
+    pub fn set_identifier_for_url(&mut self, url: String, identifier: BinaryIdentifier) {
+        self.urls_to_identifier.insert(url, identifier);
+    }
+
+    pub fn remove_url(&mut self, url: &str) {
+        self.urls_to_identifier.remove(url);
+    }
+
+    // binary
+
+    pub fn add_binary(&mut self, item: BinaryManifestItem) {
+        let identifier = item.get_identifier();
         // add to the global versions if nothing is in there
-        if !self.global_versions.contains_key(&item.binary_name) {
+        if !self.global_versions.contains_key(&item.name) {
             self.global_versions
-                .insert(item.binary_name.clone(), key.clone());
+                .insert(item.name.clone(), identifier.clone());
         }
-        self.binaries.insert(key, item);
+        self.binaries.insert(identifier, item);
     }
 
-    pub fn get_binary(&self, url: &str) -> Option<&BinaryManifestItem> {
-        self.binaries.get(url)
+    pub fn get_binary(&self, identifier: &BinaryIdentifier) -> Option<&BinaryManifestItem> {
+        self.binaries.get(identifier)
     }
 
-    pub fn remove_binary(&mut self, url: &str) {
-        self.binaries.remove(url);
+    pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) {
+        self.binaries.remove(identifier);
     }
 
     pub fn get_binary_by_name_and_version(
@@ -54,7 +90,7 @@ impl PluginsManifest {
         version: &str,
     ) -> Option<&BinaryManifestItem> {
         for binary in self.binaries() {
-            if binary.binary_name == name && binary.version == version {
+            if binary.name == name && binary.version == version {
                 return Some(binary);
             }
         }
@@ -62,7 +98,7 @@ impl PluginsManifest {
         None
     }
 
-    pub fn binaries(&self) -> Values<'_, String, BinaryManifestItem> {
+    pub fn binaries(&self) -> Values<'_, BinaryIdentifier, BinaryManifestItem> {
         self.binaries.values()
     }
 
@@ -73,9 +109,8 @@ impl PluginsManifest {
         }
     }
 
-    pub fn use_global_version(&mut self, binary_name: &str, url: &str) {
-        self.global_versions
-            .insert(binary_name.to_string(), url.to_string());
+    pub fn use_global_version(&mut self, binary_name: String, identifier: BinaryIdentifier) {
+        self.global_versions.insert(binary_name, identifier);
     }
 }
 

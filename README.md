@@ -58,6 +58,7 @@ At the moment, it looks like this:
 {
   "schemaVersion": 1,
   "name": "deno",
+  "group": "denoland",
   "version": "1.3.1",
   "windows": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
@@ -102,6 +103,7 @@ Obviously this needs to be improved.
 11. `gvm list` - Lists the installed binaries.
 12. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
 13. Support downstream binary dependencies.
+14. List installed versions when `gvm use` can't find the version.
 
 ## Goals
 
