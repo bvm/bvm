@@ -16,11 +16,11 @@ It's not recommended to try this out yet as there are no public binary manifest 
 2. Manually add the binary folder to the path:
    - Windows: `C:\Users\<user-name>\AppData\Local\gvm\gvm\bin`
    - Mac/Linux: `~/.local/share/gvm/bin`
-3. Add a _.gvmrc.json_ file to your project and specify the binary names and paths to the binary manifest files.
+3. Add a _.gvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {
      "binaries": [
-       // these don't exist anywhere at the moment (again, proof of concept)
+       // these don't exist anywhere at the moment except on my machine (again, proof of concept)
        "http://localhost:8000/deno-1.3.1.json",
        "http://localhost:8000/dprint-0.9.0.json"
      ]
@@ -63,22 +63,18 @@ At the moment, it looks like this:
   "windows": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "binaryPath": "deno.exe",
-    "postExtract": "# run some commands here"
+    "postExtract": "# this is the post extract script where you can run some commands if necessary to cause additional setup"
   },
   "linux": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
-    "binaryPath": "deno",
-    "postExtract": "# run some commands here"
+    "binaryPath": "deno"
   },
   "mac": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
-    "binaryPath": "deno",
-    "postExtract": "# run some commands here"
+    "binaryPath": "deno"
   }
 }
 ```
-
-Obviously this needs to be improved.
 
 ## Future improvements
 
@@ -96,19 +92,17 @@ Obviously this needs to be improved.
    ```
 2. Support for file paths everywhere in addition to urls.
 3. `gvm use <url>` - To use a specific version of a binary globally via a url.
-4. Ability to specify pre & post install commands in the configuration file.
-5. Something similar to `npm run <script-name>`.
+4. Something similar to `npm run <script-name>`? Or is that out of scope?
+5. Ability to specify pre & post install commands in the configuration file (ties into #4 maybe... might be better to make it separate though)
 6. Ability to purge any binaries that haven't been run for X days.
 7. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global manifest file where all that data is stored.
 8. `gvm uninstall <binary name> <version>` or `gvm uninstall <url>`
-9. Ability to run some setup commands after extracting binary zip file.
-10. Checksums on paths to ensure downstream binaries stay constant.
-11. `gvm list` - Lists the installed binaries.
-12. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
-13. Support downstream binary dependencies.
-14. List installed versions when `gvm use` can't find the version.
-15. Ability to run a specific version of a binary when using `gvm resolve`
-16. Ability to create aliases (ex. `deno2`)
+9. Checksums on paths to ensure downstream binaries stay constant.
+10. `gvm list` - Lists the installed binaries.
+11. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
+12. Support downstream binary dependencies.
+13. Ability to run a specific version of a binary when using `gvm resolve`
+14. Ability to create aliases (ex. `deno2`)
 
 ## Goals
 

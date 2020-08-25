@@ -99,7 +99,8 @@ OPTIONS:
 ARGS:
 {positionals}
 
-{after-help}"#,
+{after-help}
+"#,
         )
         .after_help(r#"TODO: Will fill in this info later..."#)
         .subcommand(
@@ -123,7 +124,7 @@ ARGS:
         )
         .subcommand(
             SubCommand::with_name("use")
-                .about("Select a different version to use globally of a binary")
+                .about("Select a different version to use globally of a binary.")
                 .arg(
                     Arg::with_name("binary_name")
                         .help("The binary name.")

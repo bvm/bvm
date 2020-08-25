@@ -14,6 +14,8 @@ pub async fn setup_plugin(
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
     let identifier = plugin_file.get_identifier();
 
+    println!("Installing {}", plugin_file.name);
+
     // associate the url to the identifier
     plugin_manifest.set_identifier_for_url(url.to_string(), identifier.clone());
 

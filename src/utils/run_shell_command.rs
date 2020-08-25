@@ -12,13 +12,13 @@ pub fn run_shell_command(cwd: &Path, command: &str) -> Result<(), ErrBox> {
 }
 
 fn finalize_and_run_command(cwd: &Path, command: &mut Command) -> Result<(), ErrBox> {
-    command
+    let status = command
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .current_dir(cwd)
         .status()?;
-    Ok(())
+    handle_exit_status(status)
 }
 
 fn handle_exit_status(exit_status: ExitStatus) -> Result<(), ErrBox> {
