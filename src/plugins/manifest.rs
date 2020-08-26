@@ -1,10 +1,11 @@
+use core::cmp::Ordering;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::types::ErrBox;
+use crate::types::{BinaryName, CommandName, ErrBox};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -14,7 +15,6 @@ const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
 pub struct PluginsManifest {
     // Key is url.
     urls_to_identifier: HashMap<String, BinaryIdentifier>,
-    /// Key is binary name.
     global_versions: GlobalVersionsMap,
     binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
 }
@@ -38,6 +38,22 @@ impl BinaryManifestItem {
     pub fn get_sem_ver(&self) -> Version {
         // at this point, expect this to be ok since we validated it on setup
         Version::parse(&self.version).unwrap()
+    }
+
+    pub fn has_name(&self, name: &BinaryName) -> bool {
+        name.is_match(&self.group, &self.name)
+    }
+
+    pub fn get_command_name(&self) -> CommandName {
+        CommandName::from_string(self.name.clone())
+    }
+
+    pub fn get_binary_name(&self) -> BinaryName {
+        BinaryName::new(Some(self.group.clone()), self.name.clone())
+    }
+
+    pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
+        self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap()
     }
 }
 
@@ -68,9 +84,9 @@ impl From<BinaryIdentifier> for GlobalBinaryLocation {
 struct GlobalVersionsMap(HashMap<String, String>);
 
 impl GlobalVersionsMap {
-    fn replace(&mut self, binary_name: String, location: GlobalBinaryLocation) {
+    fn replace(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
         self.0.insert(
-            binary_name,
+            command_name.into_string(),
             match location {
                 GlobalBinaryLocation::Path => PATH_GLOBAL_VERSION_VALUE.to_string(),
                 GlobalBinaryLocation::Bvm(identifier) => format!("{}{}", IDENTIFIER_GLOBAL_PREFIX, identifier.0),
@@ -78,8 +94,8 @@ impl GlobalVersionsMap {
         );
     }
 
-    fn get(&self, binary_name: &str) -> Option<GlobalBinaryLocation> {
-        self.0.get(binary_name).map(|key| {
+    fn get(&self, command_name: &CommandName) -> Option<GlobalBinaryLocation> {
+        self.0.get(command_name.as_str()).map(|key| {
             if key == PATH_GLOBAL_VERSION_VALUE {
                 GlobalBinaryLocation::Path
             } else if key.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
@@ -91,8 +107,8 @@ impl GlobalVersionsMap {
         })
     }
 
-    fn remove(&mut self, binary_name: &str) {
-        self.0.remove(binary_name);
+    fn remove(&mut self, command_name: &CommandName) {
+        self.0.remove(command_name.as_str());
     }
 }
 
@@ -131,7 +147,7 @@ impl PluginsManifest {
 
     pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) {
         let binary_name = if let Some(item) = self.binaries.get(identifier) {
-            Some(item.name.clone())
+            Some(item.get_binary_name())
         } else {
             None
         };
@@ -140,71 +156,92 @@ impl PluginsManifest {
 
         if let Some(binary_name) = binary_name {
             // update the selected global binary
-            if !self.has_binary_with_name(&binary_name) {
-                self.remove_global_binary(&binary_name); // could be removing the path entry
+            let command_name = binary_name.get_command_name();
+            if !self.has_binary_with_command(&command_name) {
+                self.remove_global_binary(&command_name); // could be removing the path entry
             } else {
                 self.remove_if_global_binary(&binary_name, identifier);
             }
         }
     }
 
-    pub fn get_binary_by_name_and_version(&self, name: &str, version: &str) -> Option<&BinaryManifestItem> {
-        for binary in self.binaries() {
-            if binary.name == name && binary.version == version {
-                return Some(binary);
-            }
-        }
-
-        None
+    pub fn get_binaries_by_name_and_version(&self, name: &BinaryName, version: &str) -> Vec<&BinaryManifestItem> {
+        self.binaries()
+            .filter(|b| b.has_name(name) && b.version == version)
+            .collect()
     }
 
     pub fn binaries(&self) -> Values<'_, BinaryIdentifier, BinaryManifestItem> {
         self.binaries.values()
     }
 
-    pub fn has_binary_with_name(&self, name: &str) -> bool {
-        self.binaries().any(|b| b.name == name)
+    pub fn has_binary_with_name(&self, name: &BinaryName) -> bool {
+        self.binaries().any(|b| b.has_name(name))
     }
 
-    pub fn get_binaries_with_name(&self, name: &str) -> Vec<&BinaryManifestItem> {
-        self.binaries().filter(|b| b.name == name).collect()
+    pub fn has_binary_with_command(&self, name: &CommandName) -> bool {
+        self.binaries().any(|b| b.name == name.as_str())
     }
 
-    pub fn get_latest_binary_with_name(&self, name: &str) -> Option<&BinaryManifestItem> {
+    pub fn get_binaries_with_name(&self, name: &BinaryName) -> Vec<&BinaryManifestItem> {
+        self.binaries().filter(|b| b.has_name(name)).collect()
+    }
+
+    pub fn get_binaries_with_command(&self, name: &CommandName) -> Vec<&BinaryManifestItem> {
+        self.binaries().filter(|b| b.name == name.as_str()).collect()
+    }
+
+    pub fn get_latest_binary_with_name(&self, name: &BinaryName) -> Option<&BinaryManifestItem> {
         let mut binaries = self.get_binaries_with_name(name);
-        binaries.sort_by(|a, b| a.get_sem_ver().partial_cmp(&b.get_sem_ver()).unwrap());
+        binaries.sort_by(|a, b| a.compare(b));
         binaries.pop()
     }
 
-    pub fn get_global_binary_location(&self, binary_name: &str) -> Option<GlobalBinaryLocation> {
-        self.global_versions.get(binary_name)
+    pub fn get_latest_binary_with_command(&self, name: &CommandName) -> Option<&BinaryManifestItem> {
+        let mut binaries = self.get_binaries_with_command(name);
+        binaries.sort_by(|a, b| a.compare(b));
+        binaries.pop()
     }
 
-    pub fn use_global_version(&mut self, binary_name: String, location: GlobalBinaryLocation) {
-        self.global_versions.replace(binary_name, location)
+    pub fn get_global_binary_location(&self, command_name: &CommandName) -> Option<GlobalBinaryLocation> {
+        self.global_versions.get(command_name)
     }
 
-    fn remove_if_global_binary(&mut self, removed_binary_name: &str, removed_binary_identifier: &BinaryIdentifier) {
-        if let Some(GlobalBinaryLocation::Bvm(current_identifier)) = self.global_versions.get(removed_binary_name) {
+    pub fn use_global_version(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
+        self.global_versions.replace(command_name, location)
+    }
+
+    fn remove_if_global_binary(
+        &mut self,
+        removed_binary_name: &BinaryName,
+        removed_binary_identifier: &BinaryIdentifier,
+    ) {
+        let command_name = removed_binary_name.get_command_name();
+        if let Some(GlobalBinaryLocation::Bvm(current_identifier)) = self.global_versions.get(&command_name) {
             if &current_identifier == removed_binary_identifier {
                 // set the latest binary as the global binary
-                if let Some(latest_binary) = self.get_latest_binary_with_name(&removed_binary_name) {
+                let latest_binary = self
+                    .get_latest_binary_with_name(&removed_binary_name)
+                    .or_else(|| self.get_latest_binary_with_command(&removed_binary_name.get_command_name()));
+                if let Some(latest_binary) = latest_binary {
                     let latest_identifier = latest_binary.get_identifier();
-                    self.use_global_version(removed_binary_name.to_string(), latest_identifier.into());
+                    self.use_global_version(command_name, latest_identifier.into());
                 } else {
-                    self.remove_global_binary(&removed_binary_name);
+                    self.remove_global_binary(&command_name);
                 }
             }
         }
     }
 
-    fn remove_global_binary(&mut self, binary_name: &str) {
-        self.global_versions.remove(binary_name);
+    fn remove_global_binary(&mut self, command_name: &CommandName) {
+        self.global_versions.remove(command_name);
     }
 
     pub fn is_global_version(&mut self, identifier: &BinaryIdentifier) -> bool {
         if let Some(item) = self.binaries.get(identifier) {
-            if let Some(GlobalBinaryLocation::Bvm(global_version_identifier)) = self.global_versions.get(&item.name) {
+            if let Some(GlobalBinaryLocation::Bvm(global_version_identifier)) =
+                self.global_versions.get(&item.get_command_name())
+            {
                 &global_version_identifier == identifier
             } else {
                 false

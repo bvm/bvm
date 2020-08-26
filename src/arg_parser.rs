@@ -1,4 +1,4 @@
-use super::types::ErrBox;
+use super::types::{BinaryName, ErrBox};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -22,13 +22,13 @@ pub struct ResolveCommand {
 
 #[derive(Debug, PartialEq)]
 pub struct UseCommand {
-    pub binary_name: String,
+    pub binary_name: BinaryName,
     pub version: String,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct UninstallCommand {
-    pub binary_name: String,
+    pub binary_name: BinaryName,
     pub version: String,
 }
 
@@ -55,14 +55,16 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         }
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
+        let binary_name = parse_binary_name(use_matches.value_of("binary_name").map(String::from).unwrap());
         SubCommand::Use(UseCommand {
-            binary_name: use_matches.value_of("binary_name").map(String::from).unwrap(),
+            binary_name,
             version: use_matches.value_of("version").map(String::from).unwrap(),
         })
     } else if matches.is_present("uninstall") {
         let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
+        let binary_name = parse_binary_name(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
         SubCommand::Uninstall(UninstallCommand {
-            binary_name: uninstall_matches.value_of("binary_name").map(String::from).unwrap(),
+            binary_name,
             version: uninstall_matches.value_of("version").map(String::from).unwrap(),
         })
     } else {
@@ -74,6 +76,23 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     };
 
     Ok(CliArgs { sub_command })
+}
+
+fn parse_binary_name(text: String) -> BinaryName {
+    let index = text.find('/');
+    if let Some(index) = index {
+        let group_name = text[0..index].to_string();
+        let name = text[index + 1..].to_string();
+        BinaryName {
+            group: Some(group_name),
+            name,
+        }
+    } else {
+        BinaryName {
+            group: None,
+            name: text,
+        }
+    }
 }
 
 fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {

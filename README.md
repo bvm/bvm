@@ -45,7 +45,7 @@ Adds the binaries in the current configuration file to the path then downloads &
 
 Installs a binary at the specified manifest file.
 
-### `bvm use [binary name] [version]`
+### `bvm use [binary-name or group-name/binary-name] [version]`
 
 Uses the specified binary name and version globally.
 
@@ -57,7 +57,7 @@ Resolves the executable path of the specified binary based on the current workin
 
 This command is used by the created shell/batch files (shims) to tell how to resolve the file.
 
-### `bvm uninstall [binary name] [version]`
+### `bvm uninstall [binary-name or group-name/binary-name] [version]`
 
 Uninstalls the specified binary name and version.
 
@@ -89,12 +89,6 @@ At the moment, it looks like this:
 
 ## Future improvements
 
-High priority:
-
-1. Improve user story for different binaries with the same name (`bvm use denoland/deno 1.3.1` or `bvm use name-stealer/deno 1.2.0`)
-
-Others:
-
 1. Ability to specify a range of supported versions in _.bvmrc.json_ to reduce the number of downloaded binaries:
    ```jsonc
    {
@@ -121,9 +115,9 @@ Others:
 12. Require `--force` on `bvm install <url>` if already installed.
 13. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
 14. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
-15. `bvm use <binary name> <executable file path>` for using the executable at the specified file path.
 
 Probably unnecessary complexity:
 
 1. `bvm use <url>` - To use a specific version of a binary globally via a url.
 2. ~~Something similar to `npm run <script-name>`? Or is that out of scope?~~ Yes. I think there should be another tool people can install with bvm that does this. This tool should be very simple. There should definitely be pre and post install scripts though.
+3. `bvm use <binary name> <executable file path>` for using the executable at the specified file path.

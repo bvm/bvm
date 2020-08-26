@@ -1,16 +1,17 @@
-use crate::types::ErrBox;
 use std::path::{Path, PathBuf};
 
+use crate::types::{CommandName, ErrBox};
+
 #[cfg(unix)]
-pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Result<(), ErrBox> {
-    let file_path = get_path_script_path(binaries_cache_dir, binary_name);
+pub fn create_path_script(binaries_cache_dir: &Path, command_name: &CommandName) -> Result<(), ErrBox> {
+    let file_path = get_path_script_path(binaries_cache_dir, command_name);
     std::fs::write(
         &file_path,
         format!(
             r#"#!/bin/sh
 exe_path=$(bvm resolve {})
 $exe_path "$@""#,
-            binary_name
+            command_name.as_str()
         ),
     )?;
     std::process::Command::new("chmod")
@@ -20,10 +21,10 @@ $exe_path "$@""#,
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Result<(), ErrBox> {
+pub fn create_path_script(binaries_cache_dir: &Path, command_name: &CommandName) -> Result<(), ErrBox> {
     // https://stackoverflow.com/a/6362922/188246
     // todo: needs to handle when this fails to find the binary or something
-    let file_path = get_path_script_path(binaries_cache_dir, binary_name);
+    let file_path = get_path_script_path(binaries_cache_dir, command_name);
     std::fs::write(
         &file_path,
         format!(
@@ -32,15 +33,15 @@ FOR /F "tokens=* USEBACKQ" %%F IN (`bvm resolve {}`) DO (
   SET exe_path=%%F
 )
 %exe_path% %*"#,
-            binary_name
+            command_name.as_str()
         ),
     )?;
     Ok(())
 }
 
-pub fn get_path_script_path(binaries_cache_dir: &Path, binary_name: &str) -> PathBuf {
+pub fn get_path_script_path(binaries_cache_dir: &Path, command_name: &CommandName) -> PathBuf {
     #[cfg(target_os = "windows")]
-    return binaries_cache_dir.join(format!("{}.bat", binary_name));
+    return binaries_cache_dir.join(format!("{}.bat", command_name.as_str()));
     #[cfg(unix)]
-    return binaries_cache_dir.join(format!("{}", binary_name));
+    return binaries_cache_dir.join(format!("{}", command_name.as_str()));
 }

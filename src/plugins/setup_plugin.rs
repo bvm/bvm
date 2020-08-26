@@ -6,11 +6,7 @@ use crate::utils;
 
 pub fn get_plugin_dir(group: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
     let data_dir = utils::get_user_data_dir()?;
-    Ok(data_dir
-        .join("plugins")
-        .join(group)
-        .join(name)
-        .join(version))
+    Ok(data_dir.join("plugins").join(group).join(name).join(version))
 }
 
 pub async fn setup_plugin<'a>(
@@ -23,7 +19,7 @@ pub async fn setup_plugin<'a>(
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
     let identifier = plugin_file.get_identifier();
 
-    println!("Installing {}...", plugin_file.name);
+    println!("Installing {}/{}...", plugin_file.group, plugin_file.name);
 
     // ensure the version can parse to a semver
     if let Err(err) = semver::Version::parse(&plugin_file.version) {
@@ -45,8 +41,7 @@ pub async fn setup_plugin<'a>(
     // download the zip bytes
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
     // create folder
-    let plugin_cache_dir_path =
-        get_plugin_dir(&plugin_file.group, &plugin_file.name, &plugin_file.version)?;
+    let plugin_cache_dir_path = get_plugin_dir(&plugin_file.group, &plugin_file.name, &plugin_file.version)?;
     let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
@@ -69,10 +64,11 @@ pub async fn setup_plugin<'a>(
         file_name: file_name.clone(),
     };
     let identifier = item.get_identifier();
+    let command_name = item.get_command_name();
     plugin_manifest.add_binary(item);
 
     // create the script that runs on the path
-    create_path_script(&bin_dir, &plugin_file.name)?;
+    create_path_script(&bin_dir, &command_name)?;
 
     Ok(plugin_manifest.get_binary(&identifier).unwrap())
 }
