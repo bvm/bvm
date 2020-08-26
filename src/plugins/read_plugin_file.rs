@@ -51,9 +51,7 @@ impl PluginFile {
     }
 }
 
-fn get_plugin_platform_info<'a>(
-    platform_info: &'a Option<PlatformInfo>,
-) -> Result<&'a PlatformInfo, ErrBox> {
+fn get_plugin_platform_info<'a>(platform_info: &'a Option<PlatformInfo>) -> Result<&'a PlatformInfo, ErrBox> {
     if let Some(platform_info) = &platform_info {
         Ok(platform_info)
     } else {
