@@ -13,7 +13,7 @@ I couldn't find a solution like this that also worked on Windows. Do you know so
 It's not recommended to try this out yet as there are no public binary manifest files, but if you want to:
 
 1. For now, install `gvm` via cargo—`cargo install gvm`.
-2. Manually add the binary folder to the path:
+2. Manually add the binary folder as the first item on the path:
    - Windows: `C:\Users\<user-name>\AppData\Local\gvm\gvm\bin`
    - Mac/Linux: `~/.local/share/gvm/bin`
 3. Add a _.gvmrc.json_ file to your project and specify the paths to the binary manifest files.
@@ -82,6 +82,14 @@ At the moment, it looks like this:
 
 ## Future improvements
 
+High priority:
+
+1. Improve user story for different binaries with the same name (`gvm use denoland/deno 1.3.1` or `gvm use name-stealer/deno 1.2.0`)
+2. Ability to easily switch back to using a binary on the path without gvm (`gvm use deno path`?).
+   - Do this without removing the shim (so use the second result of `whereis -b deno`/`where deno`)
+
+Others:
+
 1. Ability to specify a range of supported versions in _.gvmrc.json_ to reduce the number of downloaded binaries:
    ```jsonc
    {
@@ -95,19 +103,24 @@ At the moment, it looks like this:
    }
    ```
 2. Support for file paths everywhere in addition to urls.
-3. `gvm use <url>` - To use a specific version of a binary globally via a url.
-4. Something similar to `npm run <script-name>`? Or is that out of scope?
-5. Ability to specify pre & post install commands in the configuration file (ties into #4 maybe... might be better to make it separate though)
-6. Ability to purge any binaries that haven't been run for X days.
-7. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.
-8. Checksums on paths to ensure downstream binaries stay constant.
-9. `gvm list` - Lists the installed binaries.
-10. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
-11. Support downstream binary dependencies.
-12. Ability to run a specific version of a binary when using `gvm resolve`
-13. Ability to easily create aliases (ex. `deno2`)
-14. Require `--force` on `gvm install` if already installed.
-15. `gvm clear-url-cache` - Clear the url caches, but not the binary caches.
+3. Something similar to `npm run <script-name>`? Or is that out of scope?
+4. Ability to specify pre & post install commands in the configuration file (ties into #4 maybe... might be better to make it separate though)
+5. Ability to purge any binaries that haven't been run for X days.
+6. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.
+7. Checksums on paths to ensure downstream binaries stay constant.
+8. `gvm list` - Lists the installed binaries.
+9. `gvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
+10. Support downstream binary dependencies.
+11. Ability to get a specific version of a binary when using `gvm resolve` (ex. `gvm resolve deno 1.3.1`)
+12. Ability to easily create and remove aliases (ex. `deno2`)
+    - These should be associated with the binary they alias so when you uninstall the binary it deletes the alias.
+13. Require `--force` on `gvm install <url>` if already installed.
+14. `gvm clear-url-cache` - Clear the url caches, but not the binary caches.
+15. Ability to execute a specific version of an executable one time. `gvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --gvm-use-version 1.2.0`... or maybe this should use `gvm resolve` somehow.
+
+Probably unnecessary complexity:
+
+1. `gvm use <url>` - To use a specific version of a binary globally via a url.
 
 ## Goals
 
