@@ -38,45 +38,23 @@ async fn run() -> Result<(), ErrBox> {
 }
 
 fn handle_resolve_command(resolve_command: ResolveCommand) -> Result<(), ErrBox> {
-    let config_file_path = configuration::find_config_file()?;
     let plugin_manifest = plugins::read_manifest()?;
-    let executable_path = if let Some(config_file_path) = config_file_path {
-        // todo: cleanup :)
-        let config_file_text = std::fs::read_to_string(&config_file_path)?;
-        let config_file = configuration::read_config_file(&config_file_text)?;
-        let mut had_uninstalled_binary = false;
-        let mut config_file_binary = None;
-
-        for url in config_file.binaries.iter() {
-            if let Some(identifier) = plugin_manifest.get_identifier_from_url(url) {
-                if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
-                    if cache_item.name == resolve_command.binary_name {
-                        config_file_binary = Some(cache_item);
-                        break;
-                    }
-                } else {
-                    had_uninstalled_binary = true;
-                }
+    let executable_path =
+        if let Some(info) = get_executable_path_from_config_file(&plugin_manifest, &resolve_command.binary_name)? {
+            if let Some(executable_path) = info.executable_path {
+                Some(executable_path.clone())
             } else {
-                had_uninstalled_binary = true;
+                if info.had_uninstalled_binary {
+                    eprintln!(
+                        "[bvm warning]: There were uninstalled binaries (run `bvm install`). Resolving global '{}'.",
+                        resolve_command.binary_name
+                    );
+                }
+                None
             }
-        }
-
-        if config_file_binary.is_none() && had_uninstalled_binary {
-            eprintln!(
-                "[bvm warning]: There were uninstalled binaries (run `bvm install`). Resolving global '{}'.",
-                resolve_command.binary_name
-            );
-        }
-
-        if let Some(config_file_binary) = config_file_binary {
-            Some(config_file_binary.file_name.clone())
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
     let executable_path = match executable_path {
         Some(path) => path,
         None => get_global_binary_file_name(&plugin_manifest, &resolve_command.binary_name)?,
@@ -193,12 +171,15 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
 }
 
 fn handle_use_command(use_command: UseCommand) -> Result<(), ErrBox> {
-    // todo: say the use command has no effect in here if there is a config binary in this directory
     let mut plugin_manifest = plugins::read_manifest()?;
+    let is_binary_in_config_file = get_executable_path_from_config_file(&plugin_manifest, &use_command.binary_name)?
+        .map(|info| info.executable_path)
+        .flatten()
+        .is_some();
     if use_command.version.to_lowercase() == "path" {
         if !plugin_manifest.has_binary_with_name(&use_command.binary_name) {
             return err!(
-                "Could not find any installed binaries named '{}'",
+                "Could not find any installed binaries on the path named '{}'",
                 use_command.binary_name
             );
         }
@@ -213,7 +194,52 @@ fn handle_use_command(use_command: UseCommand) -> Result<(), ErrBox> {
     }
     plugins::write_manifest(&plugin_manifest)?;
 
+    if is_binary_in_config_file {
+        eprintln!("Updated globally used version, but local version remains using version specified in the current working directory's config file. If you wish to change the local version, then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file).");
+    }
+
     return Ok(());
+}
+
+struct ConfigFileExecutableInfo {
+    executable_path: Option<String>,
+    had_uninstalled_binary: bool,
+}
+
+fn get_executable_path_from_config_file(
+    plugin_manifest: &plugins::PluginsManifest,
+    binary_name: &str,
+) -> Result<Option<ConfigFileExecutableInfo>, ErrBox> {
+    let config_file_path = configuration::find_config_file()?;
+    Ok(if let Some(config_file_path) = config_file_path {
+        // todo: cleanup :)
+        let config_file_text = std::fs::read_to_string(&config_file_path)?;
+        let config_file = configuration::read_config_file(&config_file_text)?;
+        let mut had_uninstalled_binary = false;
+        let mut config_file_binary = None;
+
+        for url in config_file.binaries.iter() {
+            if let Some(identifier) = plugin_manifest.get_identifier_from_url(url) {
+                if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
+                    if cache_item.name == binary_name {
+                        config_file_binary = Some(cache_item);
+                        break;
+                    }
+                } else {
+                    had_uninstalled_binary = true;
+                }
+            } else {
+                had_uninstalled_binary = true;
+            }
+        }
+
+        Some(ConfigFileExecutableInfo {
+            executable_path: config_file_binary.map(|b| b.file_name.clone()),
+            had_uninstalled_binary,
+        })
+    } else {
+        None
+    })
 }
 
 fn get_binary_with_name_and_version<'a>(
