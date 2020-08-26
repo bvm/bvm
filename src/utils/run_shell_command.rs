@@ -5,7 +5,7 @@ use crate::types::ErrBox;
 
 pub fn run_shell_command(cwd: &Path, command: &str) -> Result<(), ErrBox> {
     #[cfg(unix)]
-    return finalize_and_run_command(Command::new("/bin/sh").arg("-c").arg(command));
+    return finalize_and_run_command(cwd, Command::new("/bin/sh").arg("-c").arg(command));
 
     #[cfg(target_os = "windows")]
     return finalize_and_run_command(cwd, Command::new("cmd").arg("/k").arg(command));
