@@ -64,7 +64,7 @@ fn handle_resolve_command(resolve_command: ResolveCommand) -> Result<(), ErrBox>
 
         if config_file_binary.is_none() && had_uninstalled_binary {
             eprintln!(
-                "[gvm warning]: There were uninstalled binaries (run `gvm install`). Resolving global '{}'.",
+                "[bvm warning]: There were uninstalled binaries (run `bvm install`). Resolving global '{}'.",
                 resolve_command.binary_name
             );
         }
@@ -94,7 +94,7 @@ async fn handle_install_command() -> Result<(), ErrBox> {
     let config_file_path = match configuration::find_config_file()? {
         Some(file_path) => file_path,
         None => {
-            return err!("Could not find .gvmrc.json in the current directory or its ancestors.")
+            return err!("Could not find .bvmrc.json in the current directory or its ancestors.")
         }
     };
     let config_file_text = std::fs::read_to_string(&config_file_path)?;

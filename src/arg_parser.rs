@@ -90,16 +90,16 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
 
 fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {
     use clap::{App, AppSettings, Arg, SubCommand};
-    App::new("gvm")
+    App::new("bvm")
         .setting(AppSettings::UnifiedHelpMessage)
         .setting(AppSettings::DisableHelpFlags)
         .setting(AppSettings::DisableHelpSubcommand)
         .setting(AppSettings::DeriveDisplayOrder)
-        .bin_name("gvm")
+        .bin_name("bvm")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Copyright 2020 by David Sherret")
         .about("Runs versions of specific binaries based on the current working directory.")
-        .usage("gvm <SUBCOMMAND> [OPTIONS]")
+        .usage("bvm <SUBCOMMAND> [OPTIONS]")
         .template(
             r#"{bin} {version}
 {author}

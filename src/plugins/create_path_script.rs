@@ -8,7 +8,7 @@ pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Resul
         &file_path,
         format!(
             r#"#!/bin/sh
-exe_path=$(gvm resolve {})
+exe_path=$(bvm resolve {})
 $exe_path "$@""#,
             binary_name
         ),
@@ -28,7 +28,7 @@ pub fn create_path_script(binaries_cache_dir: &Path, binary_name: &str) -> Resul
         &file_path,
         format!(
             r#"@ECHO OFF
-FOR /F "tokens=* USEBACKQ" %%F IN (`gvm resolve {}`) DO (
+FOR /F "tokens=* USEBACKQ" %%F IN (`bvm resolve {}`) DO (
   SET exe_path=%%F
 )
 %exe_path% %*"#,

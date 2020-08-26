@@ -18,7 +18,7 @@ pub fn find_config_file() -> Result<Option<PathBuf>, ErrBox> {
 }
 
 fn get_config_file_in_dir(dir: &Path) -> Option<PathBuf> {
-    let file_name = ".gvmrc.json";
+    let file_name = ".bvmrc.json";
     let config_path = dir.join(file_name);
     if config_path.exists() {
         return Some(config_path);
