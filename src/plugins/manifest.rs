@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::types::ErrBox;
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
+const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -14,7 +15,7 @@ pub struct PluginsManifest {
     // Key is url.
     urls_to_identifier: HashMap<String, BinaryIdentifier>,
     /// Key is binary name.
-    global_versions: HashMap<String, String>,
+    global_versions: GlobalVersionsMap,
     binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
 }
 
@@ -63,10 +64,42 @@ impl From<BinaryIdentifier> for GlobalBinaryLocation {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+struct GlobalVersionsMap(HashMap<String, String>);
+
+impl GlobalVersionsMap {
+    fn replace(&mut self, binary_name: String, location: GlobalBinaryLocation) {
+        self.0.insert(
+            binary_name,
+            match location {
+                GlobalBinaryLocation::Path => PATH_GLOBAL_VERSION_VALUE.to_string(),
+                GlobalBinaryLocation::Bvm(identifier) => format!("{}{}", IDENTIFIER_GLOBAL_PREFIX, identifier.0),
+            },
+        );
+    }
+
+    fn get(&self, binary_name: &str) -> Option<GlobalBinaryLocation> {
+        self.0.get(binary_name).map(|key| {
+            if key == PATH_GLOBAL_VERSION_VALUE {
+                GlobalBinaryLocation::Path
+            } else if key.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
+                GlobalBinaryLocation::Bvm(BinaryIdentifier(key[IDENTIFIER_GLOBAL_PREFIX.len()..].to_string()))
+            } else {
+                // todo: don't panic and improve this
+                panic!("Unknown key: {}", key);
+            }
+        })
+    }
+
+    fn remove(&mut self, binary_name: &str) {
+        self.0.remove(binary_name);
+    }
+}
+
 impl PluginsManifest {
     pub(super) fn new() -> PluginsManifest {
         PluginsManifest {
-            global_versions: HashMap::new(),
+            global_versions: GlobalVersionsMap(HashMap::new()),
             binaries: HashMap::new(),
             urls_to_identifier: HashMap::new(),
         }
@@ -144,28 +177,16 @@ impl PluginsManifest {
     }
 
     pub fn get_global_binary_location(&self, binary_name: &str) -> Option<GlobalBinaryLocation> {
-        self.global_versions.get(binary_name).map(|key| {
-            if key == PATH_GLOBAL_VERSION_VALUE {
-                GlobalBinaryLocation::Path
-            } else {
-                GlobalBinaryLocation::Bvm(BinaryIdentifier(key.clone()))
-            }
-        })
+        self.global_versions.get(binary_name)
     }
 
     pub fn use_global_version(&mut self, binary_name: String, location: GlobalBinaryLocation) {
-        self.global_versions.insert(
-            binary_name,
-            match location {
-                GlobalBinaryLocation::Path => PATH_GLOBAL_VERSION_VALUE.to_string(),
-                GlobalBinaryLocation::Bvm(identifier) => identifier.0,
-            },
-        );
+        self.global_versions.replace(binary_name, location)
     }
 
     fn remove_if_global_binary(&mut self, removed_binary_name: &str, removed_binary_identifier: &BinaryIdentifier) {
-        if let Some(global_binary_identifier) = self.global_versions.get(removed_binary_name) {
-            if global_binary_identifier == &removed_binary_identifier.0 {
+        if let Some(GlobalBinaryLocation::Bvm(current_identifier)) = self.global_versions.get(removed_binary_name) {
+            if &current_identifier == removed_binary_identifier {
                 // set the latest binary as the global binary
                 if let Some(latest_binary) = self.get_latest_binary_with_name(&removed_binary_name) {
                     let latest_identifier = latest_binary.get_identifier();
@@ -183,8 +204,8 @@ impl PluginsManifest {
 
     pub fn is_global_version(&mut self, identifier: &BinaryIdentifier) -> bool {
         if let Some(item) = self.binaries.get(identifier) {
-            if let Some(global_version_identifier) = self.global_versions.get(&item.name) {
-                global_version_identifier == &identifier.0
+            if let Some(GlobalBinaryLocation::Bvm(global_version_identifier)) = self.global_versions.get(&item.name) {
+                &global_version_identifier == identifier
             } else {
                 false
             }

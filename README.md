@@ -121,6 +121,7 @@ Others:
 12. Require `--force` on `bvm install <url>` if already installed.
 13. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
 14. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
+15. `bvm use <binary name> <executable file path>` for using the executable at the specified file path.
 
 Probably unnecessary complexity:
 
