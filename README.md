@@ -21,9 +21,9 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
 ## Setup
 
 1. For now, install `bvm` via cargo—`cargo install bvm`.
-2. Manually add the binary folder as the first item on the path:
-   - Windows: `C:\Users\<user-name>\AppData\Local\bvm\bvm\bin`
-   - Mac/Linux: `~/.local/share/bvm/bin`
+2. Manually add the shims folder as the first item on the path:
+   - Windows: `C:\Users\<user-name>\AppData\Local\bvm\bvm\shims`
+   - Mac/Linux: `~/.local/share/bvm/shims`
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {

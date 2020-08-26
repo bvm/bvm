@@ -19,7 +19,10 @@ pub async fn setup_plugin<'a>(
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
     let identifier = plugin_file.get_identifier();
 
-    println!("Installing {}/{}...", plugin_file.group, plugin_file.name);
+    println!(
+        "Installing {}/{} {}...",
+        plugin_file.group, plugin_file.name, plugin_file.version
+    );
 
     // ensure the version can parse to a semver
     if let Err(err) = semver::Version::parse(&plugin_file.version) {
