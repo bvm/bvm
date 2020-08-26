@@ -4,9 +4,16 @@ A version manager for all binaries.
 
 ![Demo using bvm command](demo.gif "Demo using bvm command")
 
-## Why?
+## Goals
 
-I couldn't find a solution like this that also worked on Windows. Do you know something? If so, please stop me so I don't waste my time.
+1. Seamless version selection.
+2. Replace binary specific version manager tools.
+3. No centralization—all urls and paths.
+   - Allows for easily distributing approved binaries within an organization.
+   - Easy for binary authors to distribute their applications.
+4. Support different binaries with the same name.
+5. Backwards compatibility loading project configuration files (once hitting 1.0)
+6. Works on Windows without needing WSL.
 
 ## Setup
 
@@ -21,8 +28,8 @@ It's not recommended to try this out yet as there are no public binary manifest 
    {
      "binaries": [
        // these don't exist anywhere at the moment except on my machine (again, proof of concept)
-       "http://localhost:8000/deno-1.3.1.json",
-       "http://localhost:8000/dprint-0.9.0.json"
+       "https://bvm.land/deno/1.3.1.json",
+       "https://bvm.land/dprint/0.9.0.json"
      ]
    }
    ```
@@ -46,9 +53,9 @@ The binary and version must have been previously installed.
 
 ### `bvm resolve [binary name]`
 
-Resolves the executable path of the specified binary using the provided arguments based on the current working directory.
+Resolves the executable path of the specified binary based on the current working directory.
 
-This command is used by the created shell/batch files to tell how to resolve the file.
+This command is used by the created shell/batch files (shims) to tell how to resolve the file.
 
 ### `bvm uninstall [binary name] [version]`
 
@@ -103,31 +110,21 @@ Others:
    }
    ```
 2. Support for file paths everywhere in addition to urls.
-3. Something similar to `npm run <script-name>`? Or is that out of scope?
-4. Ability to specify pre & post install commands in the configuration file (ties into #4 maybe... might be better to make it separate though)
-5. Ability to purge any binaries that haven't been run for X days.
-6. Some way for binaries to specify all their version numbers and the ability to get their latest. I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.
-7. Checksums on paths to ensure downstream binaries stay constant.
-8. `bvm list` - Lists the installed binaries.
-9. `bvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
-10. Support downstream binary dependencies.
-11. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
-12. Ability to easily create and remove aliases (ex. `deno2`)
+3. Ability to specify pre & post install commands in the configuration file.
+4. Ability to purge any binaries that haven't been run for X days.
+5. Some way for binaries to specify all their version numbers and the ability to get their latest. ~~I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.~~ I think this should be explicit as people will have to trust the source. They could add "binary list" files to their individual CLI tools then install via `bvm install [binary name] [version]` or just `bvm install [binary name]`.
+6. Checksums on paths to ensure downstream binaries stay constant.
+7. `bvm list` - Lists the installed binaries.
+8. `bvm upgrade <binary name>` - Upgrade to the latest version (requires binary manifest file to specify a global manifest file)
+9. Support downstream binary dependencies.
+10. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
+11. Ability to easily create and remove aliases (ex. `deno2`)
     - These should be associated with the binary they alias so when you uninstall the binary it deletes the alias.
-13. Require `--force` on `bvm install <url>` if already installed.
-14. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
-15. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
+12. Require `--force` on `bvm install <url>` if already installed.
+13. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
+14. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
 
 Probably unnecessary complexity:
 
 1. `bvm use <url>` - To use a specific version of a binary globally via a url.
-
-## Goals
-
-1. Seamless version selection.
-2. Replace binary specific version manager tools.
-3. No centralization—all urls and paths.
-   - Allows for easily distributing approved binaries within an organization.
-   - Easy for binary authors to distribute their applications.
-4. Support different binaries with the same name.
-5. Backwards compatibility (once hitting 1.0)
+2. ~~Something similar to `npm run <script-name>`? Or is that out of scope?~~ Yes. I think there should be another tool people can install with bvm that does this. This tool should be very simple. There should definitely be pre and post install scripts though.
