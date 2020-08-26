@@ -22,7 +22,7 @@ pub struct PluginsManifest {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
-    pub group: String,
+    pub owner: String,
     pub name: String,
     pub version: String,
     pub file_name: String,
@@ -32,7 +32,7 @@ pub struct BinaryManifestItem {
 
 impl BinaryManifestItem {
     pub fn get_identifier(&self) -> BinaryIdentifier {
-        BinaryIdentifier::new(&self.group, &self.name, &self.version)
+        BinaryIdentifier::new(&self.owner, &self.name, &self.version)
     }
 
     pub fn get_sem_ver(&self) -> Version {
@@ -41,7 +41,7 @@ impl BinaryManifestItem {
     }
 
     pub fn has_name(&self, name: &BinaryName) -> bool {
-        name.is_match(&self.group, &self.name)
+        name.is_match(&self.owner, &self.name)
     }
 
     pub fn get_command_name(&self) -> CommandName {
@@ -49,7 +49,7 @@ impl BinaryManifestItem {
     }
 
     pub fn get_binary_name(&self) -> BinaryName {
-        BinaryName::new(Some(self.group.clone()), self.name.clone())
+        BinaryName::new(Some(self.owner.clone()), self.name.clone())
     }
 
     pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
@@ -62,8 +62,8 @@ impl BinaryManifestItem {
 pub struct BinaryIdentifier(String);
 
 impl BinaryIdentifier {
-    pub fn new(group: &str, name: &str, version: &str) -> Self {
-        BinaryIdentifier(format!("{}||{}||{}", group, name, version))
+    pub fn new(owner: &str, name: &str, version: &str) -> Self {
+        BinaryIdentifier(format!("{}||{}||{}", owner, name, version))
     }
 }
 
@@ -183,12 +183,12 @@ impl PluginsManifest {
         self.binaries().any(|b| b.name == name.as_str())
     }
 
-    /// Gets if this command has all the same group.
-    pub fn command_has_same_group(&self, name: &CommandName) -> bool {
+    /// Gets if this command has all the same owner.
+    pub fn command_has_same_owner(&self, name: &CommandName) -> bool {
         let binaries = self.get_binaries_with_command(name);
         if let Some(first_binary) = binaries.get(0) {
-            let first_group = &first_binary.group;
-            binaries.iter().all(|b| &b.group == first_group)
+            let first_owner = &first_binary.owner;
+            binaries.iter().all(|b| &b.owner == first_owner)
         } else {
             true
         }

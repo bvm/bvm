@@ -81,15 +81,15 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
 fn parse_binary_name(text: String) -> BinaryName {
     let index = text.find('/');
     if let Some(index) = index {
-        let group_name = text[0..index].to_string();
+        let owner_name = text[0..index].to_string();
         let name = text[index + 1..].to_string();
         BinaryName {
-            group: Some(group_name),
+            owner: Some(owner_name),
             name,
         }
     } else {
         BinaryName {
-            group: None,
+            owner: None,
             name: text,
         }
     }

@@ -6,7 +6,7 @@ use serde::{self, Deserialize, Serialize};
 pub struct PluginFile {
     pub schema_version: u32,
     pub name: String,
-    pub group: String,
+    pub owner: String,
     pub version: String,
     linux: Option<PlatformInfo>,
     mac: Option<PlatformInfo>,
@@ -47,7 +47,7 @@ impl PluginFile {
     }
 
     pub fn get_identifier(&self) -> super::BinaryIdentifier {
-        super::BinaryIdentifier::new(&self.group, &self.name, &self.version)
+        super::BinaryIdentifier::new(&self.owner, &self.name, &self.version)
     }
 }
 

@@ -4,9 +4,9 @@ use super::*;
 use crate::types::ErrBox;
 use crate::utils;
 
-pub fn get_plugin_dir(group: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
+pub fn get_plugin_dir(owner: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
     let data_dir = utils::get_user_data_dir()?;
-    Ok(data_dir.join("binaries").join(group).join(name).join(version))
+    Ok(data_dir.join("binaries").join(owner).join(name).join(version))
 }
 
 pub async fn setup_plugin<'a>(
@@ -21,7 +21,7 @@ pub async fn setup_plugin<'a>(
 
     println!(
         "Installing {}/{} {}...",
-        plugin_file.group, plugin_file.name, plugin_file.version
+        plugin_file.owner, plugin_file.name, plugin_file.version
     );
 
     // ensure the version can parse to a semver
@@ -44,7 +44,7 @@ pub async fn setup_plugin<'a>(
     // download the zip bytes
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
     // create folder
-    let plugin_cache_dir_path = get_plugin_dir(&plugin_file.group, &plugin_file.name, &plugin_file.version)?;
+    let plugin_cache_dir_path = get_plugin_dir(&plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
     let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
     std::fs::create_dir_all(&plugin_cache_dir_path)?;
     utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
@@ -60,7 +60,7 @@ pub async fn setup_plugin<'a>(
         .to_string_lossy()
         .to_string();
     let item = BinaryManifestItem {
-        group: plugin_file.group.clone(),
+        owner: plugin_file.owner.clone(),
         name: plugin_file.name.clone(),
         version: plugin_file.version,
         created_time: utils::get_time_secs(),

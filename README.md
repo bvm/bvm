@@ -51,7 +51,7 @@ Installs a binary at the specified manifest file.
 bvm install https://bvm.land/deno/1.3.1.json
 ```
 
-### `bvm use [binary-name or group-name/binary-name] [version]`
+### `bvm use [binary-name or owner-name/binary-name] [version]`
 
 Uses the specified binary name and version globally.
 
@@ -76,7 +76,7 @@ bvm resolve deno
 # on windows, outputs: C:\Users\<user>\AppData\Local\bvm\bvm\plugins\denoland\deno\1.3.1\deno.exe
 ```
 
-### `bvm uninstall [binary-name or group-name/binary-name] [version]`
+### `bvm uninstall [binary-name or owner-name/binary-name] [version]`
 
 Uninstalls the specified binary name and version.
 
@@ -95,7 +95,7 @@ At the moment, it looks like this:
 {
   "schemaVersion": 1,
   "name": "deno",
-  "group": "denoland",
+  "owner": "denoland",
   "version": "1.3.1",
   "windows": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",

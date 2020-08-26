@@ -2,19 +2,19 @@ use std::error::Error as StdError;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BinaryName {
-    pub group: Option<String>,
+    pub owner: Option<String>,
     pub name: String,
 }
 
 impl BinaryName {
-    pub fn new(group: Option<String>, name: String) -> BinaryName {
-        BinaryName { group, name }
+    pub fn new(owner: Option<String>, name: String) -> BinaryName {
+        BinaryName { owner, name }
     }
 
-    pub fn is_match(&self, group: &str, name: &str) -> bool {
+    pub fn is_match(&self, owner: &str, name: &str) -> bool {
         if name == self.name {
-            if let Some(group_name) = &self.group {
-                group_name == group
+            if let Some(owner_name) = &self.owner {
+                owner_name == owner
             } else {
                 true
             }
@@ -28,15 +28,15 @@ impl BinaryName {
     }
 
     pub fn display(&self) -> String {
-        if let Some(group) = &self.group {
-            format!("{}/{}", group, self.name)
+        if let Some(owner) = &self.owner {
+            format!("{}/{}", owner, self.name)
         } else {
             self.name.clone()
         }
     }
 
-    pub fn display_toggled_group(&self, display_group: bool) -> String {
-        if display_group {
+    pub fn display_toggled_owner(&self, display_owner: bool) -> String {
+        if display_owner {
             self.display()
         } else {
             self.name.clone()

@@ -137,7 +137,7 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
         let command_name = binary_name.get_command_name();
         eprintln!(
             "Installed. Run `bvm use {} {}` to set it as the global '{}' binary.",
-            binary_name.display_toggled_group(!plugin_manifest.command_has_same_group(&command_name)),
+            binary_name.display_toggled_owner(!plugin_manifest.command_has_same_owner(&command_name)),
             version,
             command_name.display(),
         );
@@ -156,7 +156,7 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
     )?;
     let binary_name = binary.get_binary_name();
     let command_name = binary_name.get_command_name();
-    let plugin_dir = plugins::get_plugin_dir(&binary.group, &binary.name, &binary.version)?;
+    let plugin_dir = plugins::get_plugin_dir(&binary.owner, &binary.name, &binary.version)?;
     let binary_identifier = binary.get_identifier();
 
     // remove the plugin from the manifest first
@@ -175,10 +175,10 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
     let binary_name_dir = plugin_dir.parent().unwrap();
     if utils::is_dir_empty(&binary_name_dir)? {
         std::fs::remove_dir_all(&binary_name_dir)?;
-        // now delete the group name if empty
-        let group_name_dir = binary_name_dir.parent().unwrap();
-        if utils::is_dir_empty(&group_name_dir)? {
-            std::fs::remove_dir_all(&group_name_dir)?;
+        // now delete the owner name if empty
+        let owner_name_dir = binary_name_dir.parent().unwrap();
+        if utils::is_dir_empty(&owner_name_dir)? {
+            std::fs::remove_dir_all(&owner_name_dir)?;
         }
     }
 
@@ -285,7 +285,7 @@ fn get_binary_with_name_and_version<'a>(
         }
     } else if binaries.len() > 1 {
         return err!(
-            "There were multiple binaries with the specified name '{}' with version '{}'. Please include the group to uninstall.\n\nInstalled versions:\n  {}",
+            "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
             binary_name.display(),
             version,
             display_binaries_versions(binaries),
@@ -302,23 +302,23 @@ fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> Str
 
     let mut binaries = binaries;
     binaries.sort_by(|a, b| a.compare(b));
-    let have_same_group = get_have_same_group(&binaries);
+    let have_same_owner = get_have_same_owner(&binaries);
     let lines = binaries
         .into_iter()
         .map(|b| {
-            if have_same_group {
+            if have_same_owner {
                 b.version.clone()
             } else {
-                format!("{}/{} {}", b.group, b.name, b.version)
+                format!("{}/{} {}", b.owner, b.name, b.version)
             }
         })
         .collect::<Vec<_>>();
 
     return lines.join("\n  ");
 
-    fn get_have_same_group(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
-        let first_group = &binaries[0].group;
-        binaries.iter().all(|b| &b.group == first_group)
+    fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
+        let first_owner = &binaries[0].owner;
+        binaries.iter().all(|b| &b.owner == first_owner)
     }
 }
 
