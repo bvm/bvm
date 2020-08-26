@@ -275,5 +275,5 @@ pub fn write_manifest(manifest: &PluginsManifest) -> Result<(), ErrBox> {
 
 fn get_manifest_file_path() -> Result<PathBuf, ErrBox> {
     let user_data_dir = crate::utils::get_user_data_dir()?;
-    Ok(user_data_dir.join("plugins-manifest.json"))
+    Ok(user_data_dir.join("binaries-manifest.json"))
 }

@@ -6,7 +6,7 @@ use crate::utils;
 
 pub fn get_plugin_dir(group: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
     let data_dir = utils::get_user_data_dir()?;
-    Ok(data_dir.join("plugins").join(group).join(name).join(version))
+    Ok(data_dir.join("binaries").join(group).join(name).join(version))
 }
 
 pub async fn setup_plugin<'a>(

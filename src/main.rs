@@ -72,7 +72,7 @@ async fn handle_install_command() -> Result<(), ErrBox> {
     };
     let config_file_text = std::fs::read_to_string(&config_file_path)?;
     let config_file = configuration::read_config_file(&config_file_text)?;
-    let bin_dir = utils::get_bin_dir()?;
+    let shim_dir = utils::get_shim_dir()?;
     let mut plugin_manifest = plugins::read_manifest()?;
 
     for url in config_file.binaries.iter() {
@@ -83,7 +83,7 @@ async fn handle_install_command() -> Result<(), ErrBox> {
 
         if !is_installed {
             // setup the plugin
-            let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+            let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &shim_dir).await?;
             let command_name = binary_item.get_command_name();
             let identifier = binary_item.get_identifier();
             // check if there is a global binary location set and if not, set it
@@ -103,7 +103,7 @@ async fn handle_install_command() -> Result<(), ErrBox> {
 }
 
 async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
-    let bin_dir = utils::get_bin_dir()?;
+    let shim_dir = utils::get_shim_dir()?;
     let mut plugin_manifest = plugins::read_manifest()?;
 
     // todo: require `--force` if already installed
@@ -122,7 +122,7 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
         false
     };
 
-    let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+    let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &shim_dir).await?;
     let identifier = binary_item.get_identifier();
     let binary_name = binary_item.get_binary_name();
     let version = binary_item.version.clone();
@@ -146,7 +146,7 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
 }
 
 fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), ErrBox> {
-    let bin_dir = utils::get_bin_dir()?;
+    let shim_dir = utils::get_shim_dir()?;
     let mut plugin_manifest = plugins::read_manifest()?;
     let binary = get_binary_with_name_and_version(
         &plugin_manifest,
@@ -164,7 +164,7 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
 
     // check if this is the last binary with this name. If so, delete the shim
     if !plugin_manifest.has_binary_with_command(&command_name) {
-        std::fs::remove_file(plugins::get_path_script_path(&bin_dir, &command_name))?;
+        std::fs::remove_file(plugins::get_path_script_path(&shim_dir, &command_name))?;
     }
 
     // now attempt to delete the directory

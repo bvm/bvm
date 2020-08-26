@@ -40,11 +40,16 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
 
 ### `bvm install`
 
-Adds the binaries in the current configuration file to the path then downloads & installs them.
+Downloads & installs the binaries in the current configuration file and associates them on the path with bvm.
 
 ### `bvm install <url>`
 
 Installs a binary at the specified manifest file.
+
+```
+# Example (this url currently doesn't exist)
+bvm install https://bvm.land/deno/1.3.1.json
+```
 
 ### `bvm use [binary-name or group-name/binary-name] [version]`
 
@@ -65,9 +70,22 @@ Resolves the executable path of the specified binary based on the current workin
 
 This command is used by the created shell/batch files (shims) to tell how to resolve the file.
 
+```
+# Example
+bvm resolve deno
+# on windows, outputs: C:\Users\<user>\AppData\Local\bvm\bvm\plugins\denoland\deno\1.3.1\deno.exe
+```
+
 ### `bvm uninstall [binary-name or group-name/binary-name] [version]`
 
 Uninstalls the specified binary name and version.
+
+```
+# Examples
+bvm uninstall deno 1.2.0
+bvm uninstall denoland/deno 1.3.1
+bvm uninstall name-stealer/deno 2.0.0
+```
 
 ## Binary manifest file
 

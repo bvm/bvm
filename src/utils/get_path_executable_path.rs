@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use crate::types::{CommandName, ErrBox};
 
 pub fn get_path_executable_path(command_name: &CommandName) -> Result<Option<PathBuf>, ErrBox> {
-    let bin_dir = super::get_bin_dir()?;
+    let shim_dir = super::get_shim_dir()?;
     let command_name = command_name.as_str().to_lowercase();
     let executable_file_names = get_executable_file_names(&command_name);
 
     if let Some(path) = env::var_os("PATH") {
         for path_dir in env::split_paths(&path) {
-            if path_dir == bin_dir {
+            if path_dir == shim_dir {
                 continue;
             }
             for executable_file_name in executable_file_names.iter() {
