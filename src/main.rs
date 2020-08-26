@@ -342,6 +342,13 @@ fn get_global_binary_file_name(
                 }
             }
         },
-        None => err!("Could not find binary '{}'", command_name.display()),
+        None => {
+            // use the executable on the path
+            if let Some(path_executable_path) = utils::get_path_executable_path(command_name)? {
+                Ok(path_executable_path.to_string_lossy().to_string())
+            } else {
+                err!("Could not find binary '{}'", command_name.display())
+            }
+        }
     }
 }
