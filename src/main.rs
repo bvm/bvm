@@ -134,11 +134,12 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
 
     let is_global_version = plugin_manifest.is_global_version(&identifier);
     if !is_global_version {
+        let command_name = binary_name.get_command_name();
         eprintln!(
             "Installed. Run `bvm use {} {}` to set it as the global '{}' binary.",
-            binary_name.display(),
+            binary_name.display_toggled_group(!plugin_manifest.command_has_same_group(&command_name)),
             version,
-            binary_name.get_command_name().display(),
+            command_name.display(),
         );
     }
 

@@ -42,7 +42,7 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
 
 Downloads & installs the binaries in the current configuration file and associates them on the path with bvm.
 
-### `bvm install <url>`
+### `bvm install [url]`
 
 Installs a binary at the specified manifest file.
 

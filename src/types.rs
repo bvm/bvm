@@ -34,6 +34,14 @@ impl BinaryName {
             self.name.clone()
         }
     }
+
+    pub fn display_toggled_group(&self, display_group: bool) -> String {
+        if display_group {
+            self.display()
+        } else {
+            self.name.clone()
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

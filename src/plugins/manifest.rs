@@ -183,6 +183,17 @@ impl PluginsManifest {
         self.binaries().any(|b| b.name == name.as_str())
     }
 
+    /// Gets if this command has all the same group.
+    pub fn command_has_same_group(&self, name: &CommandName) -> bool {
+        let binaries = self.get_binaries_with_command(name);
+        if let Some(first_binary) = binaries.get(0) {
+            let first_group = &first_binary.group;
+            binaries.iter().all(|b| &b.group == first_group)
+        } else {
+            true
+        }
+    }
+
     pub fn get_binaries_with_name(&self, name: &BinaryName) -> Vec<&BinaryManifestItem> {
         self.binaries().filter(|b| b.has_name(name)).collect()
     }
