@@ -123,12 +123,25 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
     };
 
     let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+    let identifier = binary_item.get_identifier();
+    let binary_name = binary_item.get_binary_name();
+    let version = binary_item.version.clone();
     // set this back as being the global version if setup is successful
     if was_global_version {
-        let identifier = binary_item.get_identifier();
         let command_name = binary_item.get_command_name();
-        plugin_manifest.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier));
+        plugin_manifest.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
     }
+
+    let is_global_version = plugin_manifest.is_global_version(&identifier);
+    if !is_global_version {
+        eprintln!(
+            "Installed. Run `bvm use {} {}` to set it as the global '{}' binary.",
+            binary_name.display(),
+            version,
+            binary_name.get_command_name().display(),
+        );
+    }
+
     plugins::write_manifest(&plugin_manifest)
 }
 

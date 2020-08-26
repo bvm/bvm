@@ -65,13 +65,13 @@ pub fn read_plugin_file(file_bytes: &[u8]) -> Result<PluginFile, ErrBox> {
         Ok(plugin_file) => {
             if plugin_file.schema_version != 1 {
                 return err!(
-                    "Expected schema version 1, but found {}. This may indicate you need to upgrade your CLI version to use this plugin.",
+                    "Expected schema version 1, but found {}. This may indicate you need to upgrade your CLI version to use this binary.",
                     plugin_file.schema_version
                 );
             }
 
             Ok(plugin_file)
         }
-        Err(err) => err!("Error deserializing plugin file. {}", err.to_string()),
+        Err(err) => err!("Error deserializing binary manifest file. {}", err.to_string()),
     }
 }

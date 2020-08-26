@@ -29,7 +29,7 @@ impl BinaryName {
 
     pub fn display(&self) -> String {
         if let Some(group) = &self.group {
-            format!("{}/{}", self.name, group)
+            format!("{}/{}", group, self.name)
         } else {
             self.name.clone()
         }

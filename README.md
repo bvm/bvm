@@ -11,7 +11,7 @@ A version manager for all binaries.
 3. No centralization—all urls and paths.
    - Allows for easily distributing approved binaries within an organization.
    - Easy for binary authors to distribute their applications.
-4. Support different binaries with the same name.
+4. Support completely different application binaries with the same command name.
 5. Backwards compatibility loading project configuration files (once hitting 1.0)
 6. Works on Windows without needing WSL.
 
@@ -50,6 +50,13 @@ Installs a binary at the specified manifest file.
 Uses the specified binary name and version globally.
 
 The binary and version must have been previously installed.
+
+```
+# Examples
+bvm use deno 1.3.1
+bvm use denoland/deno 1.3.1
+bvm use name-stealer/deno 2.0.0
+```
 
 ### `bvm resolve [binary name]`
 
