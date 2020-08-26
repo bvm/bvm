@@ -42,10 +42,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     let sub_command = if matches.is_present("resolve") {
         let resolve_matches = matches.subcommand_matches("resolve").unwrap();
         SubCommand::Resolve(ResolveCommand {
-            binary_name: resolve_matches
-                .value_of("binary_name")
-                .map(String::from)
-                .unwrap(),
+            binary_name: resolve_matches.value_of("binary_name").map(String::from).unwrap(),
         })
     } else if matches.is_present("version") {
         SubCommand::Version
@@ -59,23 +56,14 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
         SubCommand::Use(UseCommand {
-            binary_name: use_matches
-                .value_of("binary_name")
-                .map(String::from)
-                .unwrap(),
+            binary_name: use_matches.value_of("binary_name").map(String::from).unwrap(),
             version: use_matches.value_of("version").map(String::from).unwrap(),
         })
     } else if matches.is_present("uninstall") {
         let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
         SubCommand::Uninstall(UninstallCommand {
-            binary_name: uninstall_matches
-                .value_of("binary_name")
-                .map(String::from)
-                .unwrap(),
-            version: uninstall_matches
-                .value_of("version")
-                .map(String::from)
-                .unwrap(),
+            binary_name: uninstall_matches.value_of("binary_name").map(String::from).unwrap(),
+            version: uninstall_matches.value_of("version").map(String::from).unwrap(),
         })
     } else {
         SubCommand::Help({
@@ -168,7 +156,7 @@ ARGS:
                 )
                 .arg(
                     Arg::with_name("version")
-                        .help("The version of the binary to use.")
+                        .help("The version of the binary to use or 'path' to use the binary on the path.")
                         .takes_value(true)
                         .required(true),
                 ),

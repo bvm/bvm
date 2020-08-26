@@ -13,11 +13,11 @@ pub fn get_plugin_dir(group: &str, name: &str, version: &str) -> Result<PathBuf,
         .join(version))
 }
 
-pub async fn setup_plugin(
-    plugin_manifest: &mut PluginsManifest,
+pub async fn setup_plugin<'a>(
+    plugin_manifest: &'a mut PluginsManifest,
     url: &str,
     bin_dir: &Path,
-) -> Result<String, ErrBox> {
+) -> Result<&'a BinaryManifestItem, ErrBox> {
     // download the plugin file
     let plugin_file_bytes = utils::download_file(&url).await?;
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
@@ -37,8 +37,9 @@ pub async fn setup_plugin(
     plugin_manifest.set_identifier_for_url(url.to_string(), identifier.clone());
 
     // if the identifier is already in the manifest, then return that
-    if let Some(binary) = plugin_manifest.get_binary(&identifier) {
-        return Ok(binary.file_name.clone());
+    if plugin_manifest.get_binary(&identifier).is_some() {
+        // the is_some() and unwrap() is done because the borrow checker couldn't figure out doing if let Some(item)...
+        return Ok(plugin_manifest.get_binary(&identifier).unwrap());
     }
 
     // download the zip bytes
@@ -60,16 +61,18 @@ pub async fn setup_plugin(
         .join(plugin_file.get_binary_path()?)
         .to_string_lossy()
         .to_string();
-    plugin_manifest.add_binary(BinaryManifestItem {
+    let item = BinaryManifestItem {
         group: plugin_file.group.clone(),
         name: plugin_file.name.clone(),
         version: plugin_file.version,
         created_time: utils::get_time_secs(),
         file_name: file_name.clone(),
-    });
+    };
+    let identifier = item.get_identifier();
+    plugin_manifest.add_binary(item);
 
     // create the script that runs on the path
     create_path_script(&bin_dir, &plugin_file.name)?;
 
-    Ok(file_name)
+    Ok(plugin_manifest.get_binary(&identifier).unwrap())
 }

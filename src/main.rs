@@ -79,10 +79,7 @@ fn handle_resolve_command(resolve_command: ResolveCommand) -> Result<(), ErrBox>
     };
     let executable_path = match executable_path {
         Some(path) => path,
-        None => match plugin_manifest.get_global_binary(&resolve_command.binary_name) {
-            Some(manifest_item) => manifest_item.file_name.clone(),
-            None => return err!("Could not find binary '{}'", resolve_command.binary_name),
-        },
+        None => get_global_binary_file_name(&plugin_manifest, &resolve_command.binary_name)?,
     };
 
     println!("{}", executable_path);
@@ -93,9 +90,7 @@ fn handle_resolve_command(resolve_command: ResolveCommand) -> Result<(), ErrBox>
 async fn handle_install_command() -> Result<(), ErrBox> {
     let config_file_path = match configuration::find_config_file()? {
         Some(file_path) => file_path,
-        None => {
-            return err!("Could not find .bvmrc.json in the current directory or its ancestors.")
-        }
+        None => return err!("Could not find .bvmrc.json in the current directory or its ancestors."),
     };
     let config_file_text = std::fs::read_to_string(&config_file_path)?;
     let config_file = configuration::read_config_file(&config_file_text)?;
@@ -109,7 +104,19 @@ async fn handle_install_command() -> Result<(), ErrBox> {
             .unwrap_or(false);
 
         if !is_installed {
-            plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+            // setup the plugin
+            let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+            let binary_name = binary_item.name.clone();
+            let identifier = binary_item.get_identifier();
+            // check if there is a global binary location set
+            if plugin_manifest.get_global_binary_location(&binary_name).is_none() {
+                if utils::get_path_executable_path(&binary_name)?.is_some() {
+                    plugin_manifest.use_global_version(binary_name.clone(), plugins::GlobalBinaryLocation::Path);
+                } else {
+                    plugin_manifest
+                        .use_global_version(binary_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
+                }
+            }
             plugins::write_manifest(&plugin_manifest)?; // write for every setup plugin in case a further one fails
         }
     }
@@ -137,19 +144,12 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
         false
     };
 
-    plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
+    let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &bin_dir).await?;
     // set this back as being the global version if setup is successful
     if was_global_version {
-        let identifier = plugin_manifest
-            .get_identifier_from_url(&url)
-            .unwrap()
-            .clone();
-        let binary_name = plugin_manifest
-            .get_binary(&identifier)
-            .unwrap()
-            .name
-            .clone();
-        plugin_manifest.use_global_version(binary_name, identifier);
+        let identifier = binary_item.get_identifier();
+        let binary_name = binary_item.name.clone();
+        plugin_manifest.use_global_version(binary_name, plugins::GlobalBinaryLocation::Bvm(identifier));
     }
     plugins::write_manifest(&plugin_manifest)
 }
@@ -171,10 +171,7 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
     plugins::write_manifest(&plugin_manifest)?;
 
     // check if this is the last binary with this name. If so, delete the shim
-    if plugin_manifest
-        .get_binaries_with_name(&binary_name)
-        .is_empty()
-    {
+    if !plugin_manifest.has_binary_with_name(&binary_name) {
         std::fs::remove_file(plugins::get_path_script_path(&bin_dir, &binary_name))?;
     }
 
@@ -196,17 +193,24 @@ fn handle_uninstall_command(uninstall_command: UninstallCommand) -> Result<(), E
 }
 
 fn handle_use_command(use_command: UseCommand) -> Result<(), ErrBox> {
+    // todo: say the use command has no effect in here if there is a config binary in this directory
     let mut plugin_manifest = plugins::read_manifest()?;
-    // todo: handle multiple binaries with the same name and version
-    let binary = get_binary_with_name_and_version(
-        &plugin_manifest,
-        &use_command.binary_name,
-        &use_command.version,
-    )?;
-    let binary_name = binary.name.clone(); // clone to prevent mutating while borrowing
-    let identifier = binary.get_identifier();
-    plugin_manifest.use_global_version(binary_name, identifier);
-
+    if use_command.version.to_lowercase() == "path" {
+        if !plugin_manifest.has_binary_with_name(&use_command.binary_name) {
+            return err!(
+                "Could not find any installed binaries named '{}'",
+                use_command.binary_name
+            );
+        }
+        plugin_manifest.use_global_version(use_command.binary_name, plugins::GlobalBinaryLocation::Path);
+    } else {
+        // todo: handle multiple binaries with the same name and version
+        let binary =
+            get_binary_with_name_and_version(&plugin_manifest, &use_command.binary_name, &use_command.version)?;
+        let binary_name = binary.name.clone(); // clone to prevent mutating while borrowing
+        let identifier = binary.get_identifier();
+        plugin_manifest.use_global_version(binary_name, plugins::GlobalBinaryLocation::Bvm(identifier));
+    }
     plugins::write_manifest(&plugin_manifest)?;
 
     return Ok(());
@@ -227,10 +231,7 @@ fn get_binary_with_name_and_version<'a>(
                 .collect::<Vec<_>>();
             versions.sort();
             if versions.is_empty() {
-                err!(
-                    "Could not find any installed binaries named '{}'",
-                    binary_name
-                )
+                err!("Could not find any installed binaries named '{}'", binary_name)
             } else {
                 err!(
                     "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
@@ -240,5 +241,30 @@ fn get_binary_with_name_and_version<'a>(
                 )
             }
         }
+    }
+}
+
+fn get_global_binary_file_name(
+    plugin_manifest: &plugins::PluginsManifest,
+    binary_name: &str,
+) -> Result<String, ErrBox> {
+    match plugin_manifest.get_global_binary_location(binary_name) {
+        Some(location) => match location {
+            plugins::GlobalBinaryLocation::Path => {
+                if let Some(path_executable_path) = utils::get_path_executable_path(binary_name)? {
+                    Ok(path_executable_path.to_string_lossy().to_string())
+                } else {
+                    err!("Binary '{}' is configured to use the executable on the path, but only the bvm version exists on the path. Run `bvm use {0} <some other version>` to select a version to run.", binary_name)
+                }
+            }
+            plugins::GlobalBinaryLocation::Bvm(identifier) => {
+                if let Some(item) = plugin_manifest.get_binary(&identifier) {
+                    Ok(item.file_name.clone())
+                } else {
+                    err!("Should have found executable path for global binary. Report this as a bug and update the version used by running `bvm use {} <some other version>`", binary_name)
+                }
+            }
+        },
+        None => err!("Could not find binary '{}'", binary_name),
     }
 }

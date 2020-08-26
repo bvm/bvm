@@ -2,6 +2,9 @@
   "$schema": "https://dprint.dev/schemas/v0.json",
   "projectType": "openSource",
   "incremental": true,
+  "rustfmt": {
+    "max_width": 120
+  },
   "includes": ["**/*.{json,md,rs}"],
   "excludes": [
     "**/target"

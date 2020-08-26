@@ -92,8 +92,6 @@ At the moment, it looks like this:
 High priority:
 
 1. Improve user story for different binaries with the same name (`bvm use denoland/deno 1.3.1` or `bvm use name-stealer/deno 1.2.0`)
-2. Ability to easily switch back to using a binary on the path without bvm (`bvm use deno path`?).
-   - Do this without removing the shim (so use the second result of `whereis -b deno`/`where deno`)
 
 Others:
 
