@@ -11,11 +11,16 @@ pub fn get_plugin_dir(owner: &str, name: &str, version: &str) -> Result<PathBuf,
 
 pub async fn setup_plugin<'a>(
     plugin_manifest: &'a mut PluginsManifest,
-    url: &str,
+    checksum_url: &utils::ChecksumUrl,
     bin_dir: &Path,
 ) -> Result<&'a BinaryManifestItem, ErrBox> {
     // download the plugin file
-    let plugin_file_bytes = utils::download_file(&url).await?;
+    let plugin_file_bytes = utils::download_file(&checksum_url.url).await?;
+
+    if let Some(checksum) = &checksum_url.checksum {
+        utils::verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
+    }
+
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
     let identifier = plugin_file.get_identifier();
 
@@ -33,7 +38,7 @@ pub async fn setup_plugin<'a>(
     }
 
     // associate the url to the identifier
-    plugin_manifest.set_identifier_for_url(url.to_string(), identifier.clone());
+    plugin_manifest.set_identifier_for_url(checksum_url.url.clone(), identifier.clone());
 
     // if the identifier is already in the manifest, then return that
     if plugin_manifest.get_binary(&identifier).is_some() {

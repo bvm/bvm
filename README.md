@@ -33,6 +33,15 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
      ]
    }
    ```
+   Or specify with checksums to ensure the remote files don't change:
+   ```jsonc
+   {
+     "binaries": [
+       "https://bvm.land/deno/1.3.1.json@8880bc307aba44b724b7d3ed56fa89165006bf1e5c85229441e3c209880b9534",
+       "https://bvm.land/dprint/0.9.1.json@7fba741001eee1f02ec85faf7b0fed0244f9f1e57502f9e421220c3e4f98f98b"
+     ]
+   }
+   ```
 4. Run `bvm install`
 
 ## Commands
@@ -46,8 +55,10 @@ Downloads & installs the binaries in the current configuration file and associat
 Installs a binary at the specified manifest file.
 
 ```
-# Example
+# Examples
 bvm install https://bvm.land/deno/1.3.1.json
+# optionally specify a checksum
+bvm install https://bvm.land/deno/1.3.1.json@8880bc307aba44b724b7d3ed56fa89165006bf1e5c85229441e3c209880b9534
 ```
 
 ### `bvm use [binary-name or owner-name/binary-name] [version]`
@@ -126,10 +137,6 @@ At the moment, it looks like this (will add architecture specific stuff later):
 
 ## Future improvements
 
-High priority:
-
-1. Checksums on paths to ensure downstream binaries stay constant.
-
 Low effort:
 
 1. `bvm list` - Lists the installed binaries.
@@ -146,7 +153,8 @@ Low effort:
      }]
    }
    ```
-7. Add `bvm init`
+7. Add `bvm init` to create a bare configuration file in the current directory.
+8. Add `bvm lock` to update the configuration file urls with checksums.
 
 Medium effort:
 

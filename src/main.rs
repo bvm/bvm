@@ -75,15 +75,15 @@ async fn handle_install_command() -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir()?;
     let mut plugin_manifest = plugins::read_manifest()?;
 
-    for url in config_file.binaries.iter() {
+    for entry in config_file.binaries.iter() {
         let is_installed = plugin_manifest
-            .get_identifier_from_url(&url)
+            .get_identifier_from_url(&entry.url)
             .map(|identifier| plugin_manifest.get_binary(&identifier).is_some())
             .unwrap_or(false);
 
         if !is_installed {
             // setup the plugin
-            let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &shim_dir).await?;
+            let binary_item = plugins::setup_plugin(&mut plugin_manifest, &entry, &shim_dir).await?;
             let command_name = binary_item.get_command_name();
             let identifier = binary_item.get_identifier();
             // check if there is a global binary location set and if not, set it
@@ -103,6 +103,7 @@ async fn handle_install_command() -> Result<(), ErrBox> {
 }
 
 async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
+    let checksum_url = utils::parse_checksum_url(&url);
     let shim_dir = utils::get_shim_dir()?;
     let mut plugin_manifest = plugins::read_manifest()?;
 
@@ -122,7 +123,7 @@ async fn handle_install_url_command(url: String) -> Result<(), ErrBox> {
         false
     };
 
-    let binary_item = plugins::setup_plugin(&mut plugin_manifest, &url, &shim_dir).await?;
+    let binary_item = plugins::setup_plugin(&mut plugin_manifest, &checksum_url, &shim_dir).await?;
     let identifier = binary_item.get_identifier();
     let binary_name = binary_item.get_binary_name();
     let version = binary_item.version.clone();
@@ -239,7 +240,7 @@ fn get_executable_path_from_config_file(
         let mut config_file_binary = None;
 
         for url in config_file.binaries.iter() {
-            if let Some(identifier) = plugin_manifest.get_identifier_from_url(url) {
+            if let Some(identifier) = plugin_manifest.get_identifier_from_url(&url.url) {
                 if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
                     if cache_item.name == command_name.as_str() {
                         config_file_binary = Some(cache_item);
