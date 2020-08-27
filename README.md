@@ -28,9 +28,8 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
    ```jsonc
    {
      "binaries": [
-       // these don't exist at the moment...
        "https://bvm.land/deno/1.3.1.json",
-       "https://bvm.land/dprint/0.9.0.json"
+       "https://bvm.land/dprint/0.9.1.json"
      ]
    }
    ```
@@ -47,7 +46,7 @@ Downloads & installs the binaries in the current configuration file and associat
 Installs a binary at the specified manifest file.
 
 ```
-# Example (this url currently doesn't exist)
+# Example
 bvm install https://bvm.land/deno/1.3.1.json
 ```
 
@@ -64,6 +63,15 @@ bvm use denoland/deno 1.3.1
 bvm use name-stealer/deno 2.0.0
 ```
 
+### `bvm use [binary-name or owner-name/binary-name] path`
+
+Use the version of the binary that's installed on the path if it exists.
+
+```
+# Example
+bvm use deno path
+```
+
 ### `bvm resolve [binary name]`
 
 Resolves the executable path of the specified binary based on the current working directory.
@@ -73,12 +81,12 @@ This command is used by the created shell/batch files (shims) to tell how to res
 ```
 # Example
 bvm resolve deno
-# on windows, outputs: C:\Users\<user>\AppData\Local\bvm\bvm\plugins\denoland\deno\1.3.1\deno.exe
+# on windows, outputs: C:\Users\<user>\AppData\Local\bvm\bvm\binaries\denoland\deno\1.3.1\deno.exe
 ```
 
 ### `bvm uninstall [binary-name or owner-name/binary-name] [version]`
 
-Uninstalls the specified binary name and version.
+Uninstalls the specified binary version.
 
 ```
 # Examples
@@ -89,7 +97,7 @@ bvm uninstall name-stealer/deno 2.0.0
 
 ## Binary manifest file
 
-At the moment, it looks like this:
+At the moment, it looks like this (will add architecture specific stuff later):
 
 ```json
 {
@@ -99,15 +107,18 @@ At the moment, it looks like this:
   "version": "1.3.1",
   "windows": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
+    "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",
     "binaryPath": "deno.exe",
     "postExtract": "# this is the post extract script where you can run some commands if necessary to cause additional setup"
   },
   "linux": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
+    "checksum": "ef3a8740bdceab105808c91cfb918c883a23defb6719b9c511e2be30d5bfdc01",
     "binaryPath": "deno"
   },
   "mac": {
     "archive": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
+    "checksum": "b1bc5de79b71c3f33d0151486249d088f5f5604126812dc55b1dd21b28704d8a",
     "binaryPath": "deno"
   }
 }
@@ -130,11 +141,12 @@ Low effort:
    ```jsonc
    {
      "binaries": [{
-       "manifest": "http://localhost:8000/deno-1.3.1.json",
+       "manifest": "https://bvm.land/deno/1.3.1.json",
        "alias": "deno-1.3.1"
      }]
    }
    ```
+7. Add `bvm init`
 
 Medium effort:
 
@@ -142,7 +154,7 @@ Medium effort:
    ```jsonc
    {
      "binaries": [{
-       "manifest": "http://localhost:8000/deno-1.3.1.json",
+       "manifest": "https://bvm.land/deno/1.3.1.json",
        "version": "^1.3.0"
      }]
    }
