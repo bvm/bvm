@@ -43,6 +43,7 @@ pub async fn setup_plugin<'a>(
 
     // download the zip bytes
     let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
+    utils::verify_sha256_checksum(&zip_file_bytes, plugin_file.get_zip_checksum()?)?;
     // create folder
     let plugin_cache_dir_path = get_plugin_dir(&plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
     let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);

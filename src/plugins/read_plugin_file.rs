@@ -17,6 +17,7 @@ pub struct PluginFile {
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInfo {
     archive: String,
+    checksum: String,
     binary_path: String,
     post_extract: Option<String>,
 }
@@ -24,6 +25,10 @@ pub struct PlatformInfo {
 impl PluginFile {
     pub fn get_zip_file(&self) -> Result<&String, ErrBox> {
         Ok(&self.get_platform_info()?.archive)
+    }
+
+    pub fn get_zip_checksum(&self) -> Result<&String, ErrBox> {
+        Ok(&self.get_platform_info()?.checksum)
     }
 
     pub fn get_binary_path(&self) -> Result<&String, ErrBox> {
