@@ -16,18 +16,25 @@ pub struct PluginFile {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInfo {
-    archive: String,
+    url: String,
     checksum: String,
+    #[serde(rename = "type")]
+    download_type: String,
     binary_path: String,
-    post_extract: Option<String>,
+    post_install: Option<String>,
+}
+
+pub enum DownloadType {
+    Zip,
+    Binary,
 }
 
 impl PluginFile {
-    pub fn get_zip_file(&self) -> Result<&String, ErrBox> {
-        Ok(&self.get_platform_info()?.archive)
+    pub fn get_url(&self) -> Result<&String, ErrBox> {
+        Ok(&self.get_platform_info()?.url)
     }
 
-    pub fn get_zip_checksum(&self) -> Result<&String, ErrBox> {
+    pub fn get_url_checksum(&self) -> Result<&String, ErrBox> {
         Ok(&self.get_platform_info()?.checksum)
     }
 
@@ -35,8 +42,17 @@ impl PluginFile {
         Ok(&self.get_platform_info()?.binary_path)
     }
 
-    pub fn get_post_extract_script(&self) -> Result<&Option<String>, ErrBox> {
-        Ok(&self.get_platform_info()?.post_extract)
+    pub fn get_download_type(&self) -> Result<DownloadType, ErrBox> {
+        let download_type = self.get_platform_info()?.download_type.to_lowercase();
+        Ok(match download_type.as_str() {
+            "zip" => DownloadType::Zip,
+            "binary" => DownloadType::Binary,
+            _ => return err!("Unknown download type: {}", download_type),
+        })
+    }
+
+    pub fn get_post_install_script(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.post_install)
     }
 
     fn get_platform_info(&self) -> Result<&PlatformInfo, ErrBox> {

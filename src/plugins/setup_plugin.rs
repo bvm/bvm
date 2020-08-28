@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::*;
@@ -46,25 +47,31 @@ pub async fn setup_plugin<'a>(
         return Ok(plugin_manifest.get_binary(&identifier).unwrap());
     }
 
-    // download the zip bytes
-    let zip_file_bytes = utils::download_file(plugin_file.get_zip_file()?).await?;
-    utils::verify_sha256_checksum(&zip_file_bytes, plugin_file.get_zip_checksum()?)?;
+    // download the url's bytes
+    let url = plugin_file.get_url()?;
+    let download_type = plugin_file.get_download_type()?;
+    let url_file_bytes = utils::download_file(url).await?;
+    utils::verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
+
     // create folder
     let plugin_cache_dir_path = get_plugin_dir(&plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
-    let _ignore = std::fs::remove_dir_all(&plugin_cache_dir_path);
-    std::fs::create_dir_all(&plugin_cache_dir_path)?;
-    utils::extract_zip(&zip_file_bytes, &plugin_cache_dir_path)?;
+    let _ignore = fs::remove_dir_all(&plugin_cache_dir_path);
+    fs::create_dir_all(&plugin_cache_dir_path)?;
 
-    // run the post extract script
-    if let Some(post_extract_script) = plugin_file.get_post_extract_script()? {
-        utils::run_shell_command(&plugin_cache_dir_path, post_extract_script)?;
+    // handle the setup based on the download type
+    let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
+    match download_type {
+        DownloadType::Zip => utils::extract_zip(&url_file_bytes, &plugin_cache_dir_path)?,
+        DownloadType::Binary => fs::write(&binary_path, &url_file_bytes)?,
+    }
+
+    // run the post install script
+    if let Some(post_install_script) = plugin_file.get_post_install_script()? {
+        utils::run_shell_command(&plugin_cache_dir_path, post_install_script)?;
     }
 
     // add the plugin information to the manifestscript
-    let file_name = plugin_cache_dir_path
-        .join(plugin_file.get_binary_path()?)
-        .to_string_lossy()
-        .to_string();
+    let file_name = binary_path.to_string_lossy().to_string();
     let item = BinaryManifestItem {
         owner: plugin_file.owner.clone(),
         name: plugin_file.name.clone(),
