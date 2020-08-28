@@ -32,6 +32,7 @@ async fn run() -> Result<(), ErrBox> {
         SubCommand::InstallUrl(url) => handle_install_url_command(url).await?,
         SubCommand::Uninstall(uninstall_command) => handle_uninstall_command(uninstall_command)?,
         SubCommand::Use(use_command) => handle_use_command(use_command)?,
+        SubCommand::List => handle_list_command()?,
     }
 
     Ok(())
@@ -222,6 +223,13 @@ fn handle_use_command(use_command: UseCommand) -> Result<(), ErrBox> {
     return Ok(());
 }
 
+fn handle_list_command() -> Result<(), ErrBox> {
+    let plugin_manifest = plugins::read_manifest()?;
+    let binaries = plugin_manifest.binaries().collect();
+    println!("{}", display_binaries_versions(binaries).join("\n"));
+    Ok(())
+}
+
 struct ConfigFileExecutableInfo {
     executable_path: Option<String>,
     had_uninstalled_binary: bool,
@@ -281,7 +289,7 @@ fn get_binary_with_name_and_version<'a>(
                 "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
                 binary_name.display(),
                 version,
-                display_binaries_versions(binaries),
+                display_binaries_versions(binaries).join("\n "),
             )
         }
     } else if binaries.len() > 1 {
@@ -289,16 +297,16 @@ fn get_binary_with_name_and_version<'a>(
             "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
             binary_name.display(),
             version,
-            display_binaries_versions(binaries),
+            display_binaries_versions(binaries).join("\n  "),
         );
     } else {
         Ok(binaries[0])
     }
 }
 
-fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> String {
+fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> Vec<String> {
     if binaries.is_empty() {
-        return String::new();
+        return Vec::new();
     }
 
     let mut binaries = binaries;
@@ -315,7 +323,7 @@ fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> Str
         })
         .collect::<Vec<_>>();
 
-    return lines.join("\n  ");
+    return lines;
 
     fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
         let first_owner = &binaries[0].owner;

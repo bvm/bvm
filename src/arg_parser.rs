@@ -8,6 +8,7 @@ pub struct CliArgs {
 pub enum SubCommand {
     Resolve(ResolveCommand),
     Use(UseCommand),
+    List,
     Install,
     InstallUrl(String),
     Uninstall(UninstallCommand),
@@ -67,6 +68,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             binary_name,
             version: uninstall_matches.value_of("version").map(String::from).unwrap(),
         })
+    } else if matches.is_present("list") {
+        SubCommand::List
     } else {
         SubCommand::Help({
             let mut text = Vec::new();
@@ -180,6 +183,7 @@ ARGS:
                         .required(true),
                 ),
         )
+        .subcommand(SubCommand::with_name("list").about("Output a list of installed binary versions."))
         .arg(
             Arg::with_name("help")
                 .long("help")

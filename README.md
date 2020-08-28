@@ -106,6 +106,27 @@ bvm uninstall denoland/deno 1.3.1
 bvm uninstall name-stealer/deno 2.0.0
 ```
 
+### `bvm list`
+
+Displays the installed binaries.
+
+Example output:
+
+```
+denoland/deno 1.2.0
+denoland/deno 1.3.1
+dprint/dprint 9.0.1
+```
+
+## Redirect Service
+
+The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
+
+1. `https://bvm.land/<owner>/<name>/<release-tag>.json` -> `https://github.com/<owner>/<name>/releases/download/<release-tag>/bvm.json`
+2. `https://bvm.land/<name>/<release-tag>.json` -> `https://github.com/<name>/<name>/releases/download/<release-tag>/bvm.json`
+
+Example: `https://bvm.land/dprint/0.9.1.json`
+
 ## Binary manifest file
 
 At the moment, it looks like this (will add architecture specific stuff later):
@@ -139,12 +160,11 @@ At the moment, it looks like this (will add architecture specific stuff later):
 
 Low effort:
 
-1. `bvm list` - Lists the installed binaries.
-2. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
-3. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
-4. Ability to specify pre & post install commands in the configuration file.
-5. Require `--force` on `bvm install <url>` if already installed.
-6. Command aliases in the configuration file.
+1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
+2. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
+3. Ability to specify pre & post install commands in the configuration file.
+4. Require `--force` on `bvm install <url>` if already installed.
+5. Command aliases in the configuration file.
    ```jsonc
    {
      "binaries": [{
@@ -153,8 +173,8 @@ Low effort:
      }]
    }
    ```
-7. Add `bvm init` to create a bare configuration file in the current directory.
-8. Add `bvm lock` to update the configuration file urls with checksums.
+6. Add `bvm init` to create a bare configuration file in the current directory.
+7. Add `bvm lock` to update the configuration file urls with checksums.
 
 Medium effort:
 

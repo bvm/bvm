@@ -53,7 +53,13 @@ impl BinaryManifestItem {
     }
 
     pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
-        self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap()
+        let self_full_name = format!("{}/{}", self.owner, self.name);
+        let other_full_name = format!("{}/{}", other.owner, other.name);
+        let name_ordering = self_full_name.partial_cmp(&other_full_name).unwrap();
+        match name_ordering {
+            Ordering::Equal => self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap(),
+            _ => name_ordering,
+        }
     }
 }
 
