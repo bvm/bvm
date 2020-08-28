@@ -37,8 +37,8 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
    ```jsonc
    {
      "binaries": [
-       "https://bvm.land/deno/1.3.1.json@8880bc307aba44b724b7d3ed56fa89165006bf1e5c85229441e3c209880b9534",
-       "https://bvm.land/dprint/0.9.1.json@7fba741001eee1f02ec85faf7b0fed0244f9f1e57502f9e421220c3e4f98f98b"
+       "https://bvm.land/deno/1.3.1.json@c6fc34cc8a48a6b7c0b9bf12af51f07edb3f33cd295582a6b52632abf5e5c09e",
+       "https://bvm.land/dprint/0.9.1.json@d667c18b9c78d18a991602bdb180b8fbc4e17e68c12e3a49bebdd0a17c2f4ad2"
      ]
    }
    ```
@@ -46,9 +46,13 @@ NOTICE: This is a proof of concept and currently has no automated tests—extrem
 
 ## Commands
 
+### `bvm init`
+
+Creates an empty `.bvmrc.json` file in the current directory.
+
 ### `bvm install`
 
-Downloads & installs the binaries in the current configuration file and associates them on the path with bvm.
+Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm.
 
 ### `bvm install [url]`
 
@@ -58,7 +62,7 @@ Installs a binary at the specified manifest file.
 # Examples
 bvm install https://bvm.land/deno/1.3.1.json
 # optionally specify a checksum
-bvm install https://bvm.land/deno/1.3.1.json@8880bc307aba44b724b7d3ed56fa89165006bf1e5c85229441e3c209880b9534
+bvm install https://bvm.land/deno/1.3.1.json@c6fc34cc8a48a6b7c0b9bf12af51f07edb3f33cd295582a6b52632abf5e5c09e
 ```
 
 ### `bvm use [binary-name or owner-name/binary-name] [version]`
@@ -178,8 +182,7 @@ Low effort:
      }]
    }
    ```
-6. Add `bvm init` to create a bare configuration file in the current directory.
-7. Add `bvm lock` to update the configuration file urls with checksums.
+6. Add `bvm lock` to update the configuration file urls with checksums.
 
 Medium effort:
 

@@ -5,6 +5,8 @@ mod configuration;
 mod plugins;
 mod utils;
 
+use std::path::PathBuf;
+
 use arg_parser::*;
 use types::{BinaryName, CommandName, ErrBox};
 
@@ -33,6 +35,7 @@ async fn run() -> Result<(), ErrBox> {
         SubCommand::Uninstall(uninstall_command) => handle_uninstall_command(uninstall_command)?,
         SubCommand::Use(use_command) => handle_use_command(use_command)?,
         SubCommand::List => handle_list_command()?,
+        SubCommand::Init => handle_init_command()?,
     }
 
     Ok(())
@@ -228,6 +231,20 @@ fn handle_list_command() -> Result<(), ErrBox> {
     let binaries = plugin_manifest.binaries().collect();
     println!("{}", display_binaries_versions(binaries).join("\n"));
     Ok(())
+}
+
+fn handle_init_command() -> Result<(), ErrBox> {
+    let config_path = PathBuf::from(configuration::CONFIG_FILE_NAME);
+    if config_path.exists() {
+        err!(
+            "A {} file already exists in the current directory.",
+            configuration::CONFIG_FILE_NAME
+        )
+    } else {
+        std::fs::write(config_path, "{\n  \"binaries\": [\n  ]\n}\n")?;
+        println!("Created {}", configuration::CONFIG_FILE_NAME);
+        Ok(())
+    }
 }
 
 struct ConfigFileExecutableInfo {

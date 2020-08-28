@@ -17,13 +17,14 @@ pub fn find_config_file() -> Result<Option<PathBuf>, ErrBox> {
     Ok(None)
 }
 
+pub const CONFIG_FILE_NAME: &'static str = ".bvmrc.json";
+
 fn get_config_file_in_dir(dir: &Path) -> Option<PathBuf> {
-    let file_name = ".bvmrc.json";
-    let config_path = dir.join(file_name);
+    let config_path = dir.join(CONFIG_FILE_NAME);
     if config_path.exists() {
         return Some(config_path);
     }
-    let config_path = dir.join(format!("config/{}", file_name));
+    let config_path = dir.join(format!("config/{}", CONFIG_FILE_NAME));
     if config_path.exists() {
         return Some(config_path);
     }

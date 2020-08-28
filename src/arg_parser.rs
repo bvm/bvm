@@ -13,6 +13,7 @@ pub enum SubCommand {
     InstallUrl(String),
     Uninstall(UninstallCommand),
     Version,
+    Init,
     Help(String),
 }
 
@@ -70,6 +71,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         })
     } else if matches.is_present("list") {
         SubCommand::List
+    } else if matches.is_present("init") {
+        SubCommand::Init
     } else {
         SubCommand::Help({
             let mut text = Vec::new();
@@ -133,16 +136,6 @@ ARGS:
         )
         .after_help(r#"TODO: Will fill in this info later..."#)
         .subcommand(
-            SubCommand::with_name("resolve")
-                .about("Outputs the binary path according to the current working directory.")
-                .arg(
-                    Arg::with_name("binary_name")
-                        .help("The binary name to resolve.")
-                        .takes_value(true)
-                        .required(true),
-                ),
-        )
-        .subcommand(
             SubCommand::with_name("install")
                 .about("Installs the binaries for the current configuration file.")
                 .arg(
@@ -190,6 +183,17 @@ ARGS:
                 .short("h")
                 .hidden(true)
                 .takes_value(false),
+        )
+        .subcommand(SubCommand::with_name("init").about("Creates an empty .bvmrc.json file in the current directory."))
+        .subcommand(
+            SubCommand::with_name("resolve")
+                .about("Outputs the binary path according to the current working directory.")
+                .arg(
+                    Arg::with_name("binary_name")
+                        .help("The binary name to resolve.")
+                        .takes_value(true)
+                        .required(true),
+                ),
         )
         .arg(
             Arg::with_name("version")
