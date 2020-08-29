@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::*;
@@ -22,37 +21,12 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     checksum_url: &utils::ChecksumUrl,
     bin_dir: &Path,
 ) -> Result<&'a BinaryManifestItem, ErrBox> {
-    // download the plugin file
-    let plugin_file_bytes = environment.download_file(&checksum_url.url).await?;
+    let plugin_file = get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?;
 
-    if let Some(checksum) = &checksum_url.checksum {
-        utils::verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
-    }
-
-    let plugin_file = read_plugin_file(&plugin_file_bytes)?;
-    let identifier = plugin_file.get_identifier();
-
-    println!(
+    environment.log_error(&format!(
         "Installing {}/{} {}...",
         plugin_file.owner, plugin_file.name, plugin_file.version
-    );
-
-    // ensure the version can parse to a semver
-    if let Err(err) = semver::Version::parse(&plugin_file.version) {
-        return err!(
-            "The version found in the binary manifest file was invalid. {}",
-            err.to_string()
-        );
-    }
-
-    // associate the url to the identifier
-    plugin_manifest.set_identifier_for_url(checksum_url.url.clone(), identifier.clone());
-
-    // if the identifier is already in the manifest, then return that
-    if plugin_manifest.get_binary(&identifier).is_some() {
-        // the is_some() and unwrap() is done because the borrow checker couldn't figure out doing if let Some(item)...
-        return Ok(plugin_manifest.get_binary(&identifier).unwrap());
-    }
+    ));
 
     // download the url's bytes
     let url = plugin_file.get_url()?;
@@ -83,7 +57,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     let item = BinaryManifestItem {
         owner: plugin_file.owner.clone(),
         name: plugin_file.name.clone(),
-        version: plugin_file.version,
+        version: plugin_file.version.clone(),
         created_time: environment.get_time_secs(),
         file_name: file_name.clone(),
     };
@@ -95,4 +69,32 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     create_path_script(environment, &bin_dir, &command_name)?;
 
     Ok(plugin_manifest.get_binary(&identifier).unwrap())
+}
+
+async fn get_and_associate_plugin_file(
+    environment: &impl Environment,
+    plugin_manifest: &mut PluginsManifest,
+    checksum_url: &utils::ChecksumUrl,
+) -> Result<PluginFile, ErrBox> {
+    let plugin_file_bytes = environment.download_file(&checksum_url.url).await?;
+
+    if let Some(checksum) = &checksum_url.checksum {
+        utils::verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
+    }
+
+    let plugin_file = read_plugin_file(&plugin_file_bytes)?;
+
+    // ensure the plugin version can parse to a semver
+    if let Err(err) = semver::Version::parse(&plugin_file.version) {
+        return err!(
+            "The version found in the binary manifest file was invalid. {}",
+            err.to_string()
+        );
+    }
+
+    // associate the url to the binary identifier
+    let identifier = plugin_file.get_identifier();
+    plugin_manifest.set_identifier_for_url(checksum_url.url.clone(), identifier);
+
+    Ok(plugin_file)
 }

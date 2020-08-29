@@ -4,7 +4,7 @@ use crate::environment::Environment;
 use crate::types::ErrBox;
 
 pub fn find_config_file(environment: &impl Environment) -> Result<Option<PathBuf>, ErrBox> {
-    let cwd = std::env::current_dir()?;
+    let cwd = environment.cwd()?;
 
     if let Some(config_file_path) = get_config_file_in_dir(environment, &cwd) {
         return Ok(Some(config_file_path));
@@ -26,9 +26,12 @@ fn get_config_file_in_dir(environment: &impl Environment, dir: &Path) -> Option<
     if environment.path_exists(&config_path) {
         return Some(config_path);
     }
+    // I'm not sure if this complexity should exist. It also slows down file resolution.
+    /*
     let config_path = dir.join(format!("config/{}", CONFIG_FILE_NAME));
     if environment.path_exists(&config_path) {
         return Some(config_path);
     }
+    */
     None
 }

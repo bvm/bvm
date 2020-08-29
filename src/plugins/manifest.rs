@@ -276,7 +276,7 @@ pub fn read_manifest(environment: &impl Environment) -> Result<PluginsManifest, 
         Ok(text) => match serde_json::from_str(&text) {
             Ok(manifest) => Ok(manifest),
             Err(err) => {
-                eprintln!("Error deserializing cache manifest, but ignoring: {}", err);
+                environment.log_error(&format!("Error deserializing cache manifest, but ignoring: {}", err));
                 Ok(PluginsManifest::new())
             }
         },

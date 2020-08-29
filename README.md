@@ -4,7 +4,7 @@ A version manager for all binaries.
 
 ![Demo using bvm command](demo.gif "Demo using bvm command")
 
-NOTICE: This is a proof of concept and currently has no automated tests—extremely unstable. It is not recommended to use it yet as there will likely be many breaking changes.
+NOTICE: This is a proof of concept. It is not recommended to use it yet as there will likely be many breaking changes.
 
 ## Goals
 
@@ -52,7 +52,10 @@ Creates an empty `.bvmrc.json` file in the current directory.
 
 ### `bvm install`
 
-Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm.
+Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm if not previously done.
+
+- Provide the `--use` flag to also use all the binaries in the configuration file on the path when outside this directory.
+- Provide the `--force` flag to force an install of everything even if already installed.
 
 ### `bvm install [url]`
 
@@ -63,7 +66,12 @@ Installs a binary at the specified manifest file.
 bvm install https://bvm.land/deno/1.3.1.json
 # optionally specify a checksum
 bvm install https://bvm.land/deno/1.3.1.json@c6fc34cc8a48a6b7c0b9bf12af51f07edb3f33cd295582a6b52632abf5e5c09e
+# if a previous installation is on the path, use this one instead
+bvm install --use https://bvm.land/deno/1.3.1.json
 ```
+
+- Provide the `--use` flag to force using this binary on the path (happens automatically if nothing is on the path).
+- Provide the `--force` flag to force an install even if already installed.
 
 ### `bvm use [binary-name or owner-name/binary-name] [version]`
 
@@ -86,6 +94,12 @@ Use the version of the binary that's installed on the path if it exists.
 # Example
 bvm use deno path
 ```
+
+### `bvm use`
+
+Use all the binaries in the current configuration files globally on the path.
+
+Generally it's not necessary to ever use this command as this happens automatically being in the current directory.
 
 ### `bvm resolve [binary name]`
 
@@ -172,8 +186,7 @@ Low effort:
 1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
 2. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
 3. Ability to specify pre & post install commands in the configuration file.
-4. Require `--force` on `bvm install <url>` if already installed.
-5. Command aliases in the configuration file.
+4. Command aliases in the configuration file.
    ```jsonc
    {
      "binaries": [{
@@ -182,7 +195,6 @@ Low effort:
      }]
    }
    ```
-6. Add `bvm lock` to update the configuration file urls with checksums.
 
 Medium effort:
 
@@ -199,6 +211,7 @@ Medium effort:
 3. Ability to easily create and remove aliases (ex. `deno2`)
    - These should be associated with the binary they alias so when you uninstall the binary it deletes the alias.
 4. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
+5. Add `bvm lock` to update the configuration file urls with checksums.
 
 Large effort:
 

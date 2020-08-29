@@ -7,10 +7,11 @@ pub struct CliArgs {
 #[derive(Debug, PartialEq)]
 pub enum SubCommand {
     Resolve(ResolveCommand),
-    Use(UseCommand),
+    Use,
+    UseBinary(UseBinaryCommand),
     List,
-    Install,
-    InstallUrl(String),
+    Install(InstallCommand),
+    InstallUrl(InstallUrlCommand),
     Uninstall(UninstallCommand),
     Version,
     Init,
@@ -23,9 +24,22 @@ pub struct ResolveCommand {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct UseCommand {
+pub struct UseBinaryCommand {
     pub binary_name: BinaryName,
     pub version: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InstallCommand {
+    pub use_command: bool,
+    pub force: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InstallUrlCommand {
+    pub url: String,
+    pub use_command: bool,
+    pub force: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -50,18 +64,28 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         SubCommand::Version
     } else if matches.is_present("install") {
         let install_matches = matches.subcommand_matches("install").unwrap();
+        let use_command = install_matches.is_present("use");
+        let force = install_matches.is_present("force");
         if let Some(url) = install_matches.value_of("url").map(String::from) {
-            SubCommand::InstallUrl(url)
+            SubCommand::InstallUrl(InstallUrlCommand {
+                url,
+                use_command,
+                force,
+            })
         } else {
-            SubCommand::Install
+            SubCommand::Install(InstallCommand { use_command, force })
         }
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
-        let binary_name = parse_binary_name(use_matches.value_of("binary_name").map(String::from).unwrap());
-        SubCommand::Use(UseCommand {
-            binary_name,
-            version: use_matches.value_of("version").map(String::from).unwrap(),
-        })
+        if let Some(binary_name) = use_matches.value_of("binary_name").map(String::from) {
+            let binary_name = parse_binary_name(binary_name);
+            SubCommand::UseBinary(UseBinaryCommand {
+                binary_name,
+                version: use_matches.value_of("version").map(String::from).unwrap(),
+            })
+        } else {
+            SubCommand::Use
+        }
     } else if matches.is_present("uninstall") {
         let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
         let binary_name = parse_binary_name(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
@@ -105,8 +129,6 @@ fn create_cli_parser<'a, 'b>() -> clap::App<'a, 'b> {
     use clap::{App, AppSettings, Arg, SubCommand};
     App::new("bvm")
         .setting(AppSettings::UnifiedHelpMessage)
-        .setting(AppSettings::DisableHelpFlags)
-        .setting(AppSettings::DisableHelpSubcommand)
         .setting(AppSettings::DeriveDisplayOrder)
         .bin_name("bvm")
         .version(env!("CARGO_PKG_VERSION"))
@@ -131,8 +153,7 @@ OPTIONS:
 ARGS:
 {positionals}
 
-{after-help}
-"#,
+{after-help}"#,
         )
         .after_help(r#"TODO: Will fill in this info later..."#)
         .subcommand(
@@ -142,6 +163,18 @@ ARGS:
                     Arg::with_name("url")
                         .help("The url of the binary manifest to install.")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("use")
+                        .help("Use the installed binary or binaries on the path.")
+                        .long("use")
+                        .takes_value(false),
+                )
+                .arg(
+                    Arg::with_name("force")
+                        .help("Reinstall the binary if it is already installed.")
+                        .long("force")
+                        .takes_value(false),
                 ),
         )
         .subcommand(
@@ -162,28 +195,20 @@ ARGS:
         )
         .subcommand(
             SubCommand::with_name("use")
-                .about("Select a different version to use globally of a binary.")
+                .about("Select a different version to use globally of a binary. Specify no arguments to use the binaries in the current configuration file.")
                 .arg(
                     Arg::with_name("binary_name")
                         .help("The binary name.")
                         .takes_value(true)
-                        .required(true),
+                        .requires("version"),
                 )
                 .arg(
                     Arg::with_name("version")
                         .help("The version of the binary to use or 'path' to use the binary on the path.")
-                        .takes_value(true)
-                        .required(true),
+                        .takes_value(true),
                 ),
         )
         .subcommand(SubCommand::with_name("list").about("Output a list of installed binary versions."))
-        .arg(
-            Arg::with_name("help")
-                .long("help")
-                .short("h")
-                .hidden(true)
-                .takes_value(false),
-        )
         .subcommand(SubCommand::with_name("init").about("Creates an empty .bvmrc.json file in the current directory."))
         .subcommand(
             SubCommand::with_name("resolve")
