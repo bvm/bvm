@@ -30,7 +30,7 @@ pub fn extract_zip(environment: &impl Environment, zip_bytes: &[u8], dir_path: &
 
         // Get and Set permissions
         #[cfg(unix)]
-        if environment.is_real {
+        if environment.is_real() {
             use std::fs;
             use std::os::unix::fs::PermissionsExt;
 

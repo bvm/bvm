@@ -178,7 +178,7 @@ At the moment, it looks like this (will add architecture specific stuff later):
 }
 ```
 
-Supported types: `zip`, `exe` (will add more later)
+Supported types: `zip`, `exe`, `tar.gz` (will add more later)
 
 ## Future improvements
 

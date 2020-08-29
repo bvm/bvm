@@ -44,6 +44,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
     match download_type {
         DownloadType::Zip => utils::extract_zip(environment, &url_file_bytes, &plugin_cache_dir_path)?,
+        DownloadType::TarGz => utils::extract_tar_gz(environment, &url_file_bytes, &plugin_cache_dir_path)?,
         DownloadType::Binary => environment.write_file(&binary_path, &url_file_bytes)?,
     }
 

@@ -27,6 +27,7 @@ pub struct PlatformInfo {
 pub enum DownloadType {
     Zip,
     Binary,
+    TarGz,
 }
 
 impl PluginFile {
@@ -47,6 +48,7 @@ impl PluginFile {
         Ok(match download_type.as_str() {
             "zip" => DownloadType::Zip,
             "binary" => DownloadType::Binary,
+            "tar.gz" => DownloadType::TarGz,
             _ => return err!("Unknown download type: {}", download_type),
         })
     }

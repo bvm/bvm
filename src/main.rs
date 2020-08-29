@@ -713,6 +713,27 @@ mod test {
     }
 
     #[tokio::test]
+    async fn install_url_command_tar_gz() {
+        let environment = TestEnvironment::new();
+        let binary_path = get_binary_path("owner", "name", "1.0.0");
+
+        create_remote_tar_gz_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+
+        // install and check setup
+        install_url!(environment, "http://localhost/package.json");
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0...",]);
+        assert_has_path!(environment, &binary_path);
+        assert_has_path!(environment, &get_shim_path("name"));
+
+        // yeah, this isn't realistic, but it's just some dummy data to ensure the file was extracted correctly
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from(binary_path)).unwrap(),
+            "test-https://github.com/dsherret/bvm/releases/download/1.0.0/name-windows.tar.gz"
+        );
+    }
+
+    #[tokio::test]
     async fn install_command_no_existing_binary() {
         let environment = TestEnvironment::new();
         create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
@@ -1053,6 +1074,86 @@ mod test {
         zip.start_file(file_name, options).unwrap();
         zip.write(format!("test-{}", url).as_bytes()).unwrap();
         let result = zip.finish().unwrap().into_inner();
+        let zip_file_checksum = crate::utils::get_sha256_checksum(&result);
+        environment.add_remote_file_bytes(url, Bytes::from(result));
+        zip_file_checksum
+    }
+
+    fn create_remote_tar_gz_package(environment: &TestEnvironment, url: &str, owner: &str, name: &str, version: &str) {
+        let windows_tar_gz_url = format!(
+            "https://github.com/dsherret/bvm/releases/download/{}/{}-windows.tar.gz",
+            version, name
+        );
+        let windows_checksum = create_remote_tar_gz(environment, &windows_tar_gz_url, true);
+        let mac_tar_gz_url = format!(
+            "https://github.com/dsherret/bvm/releases/download/{}/{}-mac.tar.gz",
+            version, name
+        );
+        let mac_checksum = create_remote_tar_gz(environment, &mac_tar_gz_url, false);
+        let linux_tar_gz_url = format!(
+            "https://github.com/dsherret/bvm/releases/download/{}/{}-linux.tar.gz",
+            version, name
+        );
+        let linux_checksum = create_remote_tar_gz(environment, &linux_tar_gz_url, false);
+
+        let file_text = format!(
+            r#"{{
+    "schemaVersion": 1,
+    "owner": "{}",
+    "name": "{}",
+    "version": "{}",
+    "windows": {{
+        "url": "{}",
+        "type": "tar.gz",
+        "checksum": "{}",
+        "binaryPath": "binary.exe"
+    }},
+    "linux": {{
+        "url": "{}",
+        "type": "tar.gz",
+        "checksum": "{}",
+        "binaryPath": "binary"
+    }},
+    "mac": {{
+        "url": "{}",
+        "type": "tar.gz",
+        "checksum": "{}",
+        "binaryPath": "binary"
+    }}
+}}"#,
+            owner,
+            name,
+            version,
+            windows_tar_gz_url,
+            windows_checksum,
+            linux_tar_gz_url,
+            linux_checksum,
+            mac_tar_gz_url,
+            mac_checksum
+        );
+        environment.add_remote_file_bytes(url, Bytes::from(file_text));
+    }
+
+    fn create_remote_tar_gz(environment: &TestEnvironment, url: &str, is_windows: bool) -> String {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        let buf: Vec<u8> = Vec::new();
+        let w = std::io::Cursor::new(buf);
+        let mut archive = tar::Builder::new(w);
+        let file_name = if is_windows { "binary.exe" } else { "binary" };
+        let data = format!("test-{}", url);
+        let mut header = tar::Header::new_gnu();
+        header.set_path(file_name).unwrap();
+        header.set_size(data.len() as u64);
+        header.set_cksum();
+        archive.append(&header, data.as_bytes()).unwrap();
+        archive.finish().unwrap();
+
+        let mut e = GzEncoder::new(Vec::new(), Compression::default());
+        e.write_all(&archive.into_inner().unwrap().into_inner()).unwrap();
+        let result = e.finish().unwrap();
+
         let zip_file_checksum = crate::utils::get_sha256_checksum(&result);
         environment.add_remote_file_bytes(url, Bytes::from(result));
         zip_file_checksum
