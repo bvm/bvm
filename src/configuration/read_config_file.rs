@@ -4,6 +4,7 @@ use crate::types::ErrBox;
 use crate::utils;
 
 pub struct ConfigFile {
+    pub post_install: Option<String>,
     pub binaries: Vec<utils::ChecksumUrl>,
 }
 
@@ -37,5 +38,11 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
         binaries.push(url);
     }
 
-    Ok(ConfigFile { binaries })
+    let post_install = root_object_node.take_string("postInstall");
+
+    for (key, _) in root_object_node.into_iter() {
+        return err!("Unknown key in configuration file: {}", key);
+    }
+
+    Ok(ConfigFile { binaries, post_install })
 }

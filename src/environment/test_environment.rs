@@ -15,6 +15,7 @@ pub struct TestEnvironment {
     files: Arc<Mutex<HashMap<PathBuf, Bytes>>>,
     logged_messages: Arc<Mutex<Vec<String>>>,
     logged_errors: Arc<Mutex<Vec<String>>>,
+    run_shell_commands: Arc<Mutex<Vec<(String, String)>>>,
     remote_files: Arc<Mutex<HashMap<String, Bytes>>>,
     deleted_directories: Arc<Mutex<Vec<PathBuf>>>,
     path_dirs: Arc<Mutex<Vec<PathBuf>>>,
@@ -28,6 +29,7 @@ impl TestEnvironment {
             files: Arc::new(Mutex::new(HashMap::new())),
             logged_messages: Arc::new(Mutex::new(Vec::new())),
             logged_errors: Arc::new(Mutex::new(Vec::new())),
+            run_shell_commands: Arc::new(Mutex::new(Vec::new())),
             remote_files: Arc::new(Mutex::new(HashMap::new())),
             deleted_directories: Arc::new(Mutex::new(Vec::new())),
             path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims")])),
@@ -45,6 +47,10 @@ impl TestEnvironment {
 
     pub fn take_logged_errors(&self) -> Vec<String> {
         self.logged_errors.lock().unwrap().drain(..).collect()
+    }
+
+    pub fn take_run_shell_commands(&self) -> Vec<(String, String)> {
+        self.run_shell_commands.lock().unwrap().drain(..).collect()
     }
 
     pub fn add_remote_file(&self, path: &str, bytes: &'static [u8]) {
@@ -91,6 +97,11 @@ impl Drop for TestEnvironment {
                 self.logged_errors.lock().unwrap().clone(),
                 Vec::<String>::new(),
                 "should not have logged errors left on drop"
+            );
+            assert_eq!(
+                self.run_shell_commands.lock().unwrap().clone(),
+                Vec::<(String, String)>::new(),
+                "should not have run shell commands left on drop"
             );
         }
     }
@@ -186,7 +197,8 @@ impl Environment for TestEnvironment {
     }
 
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox> {
-        // todo
+        let mut run_shell_commands = self.run_shell_commands.lock().unwrap();
+        run_shell_commands.push((cwd.to_string_lossy().to_string(), command.to_string()));
         Ok(())
     }
 

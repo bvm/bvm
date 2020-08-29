@@ -135,7 +135,7 @@ impl Environment for RealEnvironment {
         return finalize_and_run_command(cwd, Command::new("/bin/sh").arg("-c").arg(command));
 
         #[cfg(target_os = "windows")]
-        return finalize_and_run_command(cwd, Command::new("cmd").arg("/k").arg(command));
+        return finalize_and_run_command(cwd, Command::new("cmd").arg("/C").arg(command));
 
         fn finalize_and_run_command(cwd: &Path, command: &mut Command) -> Result<(), ErrBox> {
             let status = command
@@ -151,7 +151,7 @@ impl Environment for RealEnvironment {
             match exit_status.code() {
                 Some(code) => {
                     if code != 0 {
-                        Ok(())
+                        return err!("Received non zero exit code from shell command: {}", code);
                     } else {
                         Ok(())
                     }

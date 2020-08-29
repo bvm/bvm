@@ -115,6 +115,10 @@ async fn handle_install_command<TEnvironment: Environment>(
         plugins::write_manifest(environment, &plugin_manifest)?;
     }
 
+    if let Some(post_install) = &config_file.post_install {
+        environment.run_shell_command(&environment.cwd()?, post_install)?;
+    }
+
     Ok(())
 }
 
@@ -806,6 +810,43 @@ mod test {
         // go up a directory and it should resolve to binary on the path still
         environment.set_cwd("/");
         assert_resolves!(environment, path_exe_path);
+    }
+
+    #[tokio::test]
+    async fn install_command_post_install() {
+        let environment = TestEnvironment::new();
+        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        environment
+            .write_file_text(
+                &PathBuf::from("/project/.bvmrc.json"),
+                r#"{"postInstall": "echo \"Hello world!\"", "binaries": ["http://localhost/package.json"]}"#,
+            )
+            .unwrap();
+
+        // run the install command in the correct directory
+        environment.set_cwd("/project");
+        run_cli(vec!["install"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0..."]);
+        let logged_shell_commands = environment.take_run_shell_commands();
+        assert_eq!(
+            logged_shell_commands,
+            vec![("/project".to_string(), "echo \"Hello world!\"".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn install_unknown_config_key() {
+        let environment = TestEnvironment::new();
+        environment
+            .write_file_text(
+                &PathBuf::from("/.bvmrc.json"),
+                r#"{"test": "", "binaries": ["http://localhost/package.json"]}"#,
+            )
+            .unwrap();
+
+        let error_message = run_cli(vec!["install"], &environment).await.err().unwrap();
+        assert_eq!(error_message.to_string(), "Unknown key in configuration file: test");
     }
 
     #[tokio::test]

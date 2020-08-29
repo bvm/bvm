@@ -27,6 +27,7 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {
+     "postInstall": "", // optional post install commands
      "binaries": [
        "https://bvm.land/deno/1.3.1.json",
        "https://bvm.land/dprint/0.9.1.json"
@@ -184,17 +185,6 @@ Supported types: `zip`, `exe` (will add more later)
 Low effort:
 
 1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
-2. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
-3. Ability to specify pre & post install commands in the configuration file.
-4. Command aliases in the configuration file.
-   ```jsonc
-   {
-     "binaries": [{
-       "manifest": "https://bvm.land/deno/1.3.1.json",
-       "alias": "deno-1.3.1"
-     }]
-   }
-   ```
 
 Medium effort:
 
@@ -210,8 +200,17 @@ Medium effort:
 2. Support for file paths everywhere in addition to urls.
 3. Ability to easily create and remove aliases (ex. `deno2`)
    - These should be associated with the binary they alias so when you uninstall the binary it deletes the alias.
-4. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
-5. Add `bvm lock` to update the configuration file urls with checksums.
+4. Command aliases in the configuration file.
+   ```jsonc
+   {
+     "binaries": [{
+       "manifest": "https://bvm.land/deno/1.3.1.json",
+       "alias": "deno-1.3.1"
+     }]
+   }
+   ```
+5. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
+6. Add `bvm lock` to update the configuration file urls with checksums.
 
 Large effort:
 
@@ -225,3 +224,4 @@ Probably unnecessary complexity:
 2. ~~Something similar to `npm run <script-name>`? Or is that out of scope?~~ Yes. I think there should be another tool people can install with bvm that does this. This tool should be very simple. There should definitely be pre and post install scripts though.
 3. `bvm use <binary name> <executable file path>` for using the executable at the specified file path.
 4. Ability to purge any binaries that haven't been run for X days.
+5. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
