@@ -2,21 +2,28 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::*;
+use crate::environment::Environment;
 use crate::types::ErrBox;
 use crate::utils;
 
-pub fn get_plugin_dir(owner: &str, name: &str, version: &str) -> Result<PathBuf, ErrBox> {
-    let data_dir = utils::get_user_data_dir()?;
+pub fn get_plugin_dir(
+    enviroment: &impl Environment,
+    owner: &str,
+    name: &str,
+    version: &str,
+) -> Result<PathBuf, ErrBox> {
+    let data_dir = enviroment.get_user_data_dir()?;
     Ok(data_dir.join("binaries").join(owner).join(name).join(version))
 }
 
-pub async fn setup_plugin<'a>(
+pub async fn setup_plugin<'a, TEnvironment: Environment>(
+    environment: &TEnvironment,
     plugin_manifest: &'a mut PluginsManifest,
     checksum_url: &utils::ChecksumUrl,
     bin_dir: &Path,
 ) -> Result<&'a BinaryManifestItem, ErrBox> {
     // download the plugin file
-    let plugin_file_bytes = utils::download_file(&checksum_url.url).await?;
+    let plugin_file_bytes = environment.download_file(&checksum_url.url).await?;
 
     if let Some(checksum) = &checksum_url.checksum {
         utils::verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
@@ -50,24 +57,25 @@ pub async fn setup_plugin<'a>(
     // download the url's bytes
     let url = plugin_file.get_url()?;
     let download_type = plugin_file.get_download_type()?;
-    let url_file_bytes = utils::download_file(url).await?;
+    let url_file_bytes = environment.download_file(url).await?;
     utils::verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
-    let plugin_cache_dir_path = get_plugin_dir(&plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
-    let _ignore = fs::remove_dir_all(&plugin_cache_dir_path);
-    fs::create_dir_all(&plugin_cache_dir_path)?;
+    let plugin_cache_dir_path =
+        get_plugin_dir(environment, &plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
+    let _ignore = environment.remove_dir_all(&plugin_cache_dir_path);
+    environment.create_dir_all(&plugin_cache_dir_path)?;
 
     // handle the setup based on the download type
     let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
     match download_type {
-        DownloadType::Zip => utils::extract_zip(&url_file_bytes, &plugin_cache_dir_path)?,
-        DownloadType::Binary => fs::write(&binary_path, &url_file_bytes)?,
+        DownloadType::Zip => utils::extract_zip(environment, &url_file_bytes, &plugin_cache_dir_path)?,
+        DownloadType::Binary => environment.write_file(&binary_path, &url_file_bytes)?,
     }
 
     // run the post install script
     if let Some(post_install_script) = plugin_file.get_post_install_script()? {
-        utils::run_shell_command(&plugin_cache_dir_path, post_install_script)?;
+        environment.run_shell_command(&plugin_cache_dir_path, post_install_script)?;
     }
 
     // add the plugin information to the manifestscript
@@ -76,7 +84,7 @@ pub async fn setup_plugin<'a>(
         owner: plugin_file.owner.clone(),
         name: plugin_file.name.clone(),
         version: plugin_file.version,
-        created_time: utils::get_time_secs(),
+        created_time: environment.get_time_secs(),
         file_name: file_name.clone(),
     };
     let identifier = item.get_identifier();
@@ -84,7 +92,7 @@ pub async fn setup_plugin<'a>(
     plugin_manifest.add_binary(item);
 
     // create the script that runs on the path
-    create_path_script(&bin_dir, &command_name)?;
+    create_path_script(environment, &bin_dir, &command_name)?;
 
     Ok(plugin_manifest.get_binary(&identifier).unwrap())
 }

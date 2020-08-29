@@ -10,6 +10,7 @@ license = "MIT"
 
 [dependencies]
 app_dirs = { version = "2", package = "app_dirs2" }
+async-trait = "0.1.30"
 bytes = "0.5.4"
 clap = "2.33.0"
 jsonc-parser = { version = "0.12.1" }

@@ -1,11 +1,12 @@
 use std::io::prelude::*;
 use std::path::Path;
 
+use crate::environment::Environment;
 use crate::types::ErrBox;
 
 // todo: consolidate with code in dprint (maybe move to crate?)
 
-pub fn extract_zip(zip_bytes: &[u8], dir_path: &Path) -> Result<(), ErrBox> {
+pub fn extract_zip(environment: &impl Environment, zip_bytes: &[u8], dir_path: &Path) -> Result<(), ErrBox> {
     // adapted from https://github.com/mvdnes/zip-rs/blob/master/examples/extract.rs
     let reader = std::io::Cursor::new(&zip_bytes);
     let mut zip = zip::ZipArchive::new(reader)?;
@@ -18,18 +19,18 @@ pub fn extract_zip(zip_bytes: &[u8], dir_path: &Path) -> Result<(), ErrBox> {
 
         if !file.is_dir() {
             if let Some(parent_dir_path) = file_path.parent() {
-                std::fs::create_dir_all(&parent_dir_path)?
+                environment.create_dir_all(&parent_dir_path)?
             }
             let mut file_bytes = Vec::with_capacity(file.size() as usize);
             file.read_to_end(&mut file_bytes)?;
-            std::fs::write(&file_path, &file_bytes)?;
+            environment.write_file(&file_path, &file_bytes)?;
         } else {
-            std::fs::create_dir_all(&file_path)?
+            environment.create_dir_all(&file_path)?
         }
 
         // Get and Set permissions
         #[cfg(unix)]
-        {
+        if environment.is_real {
             use std::fs;
             use std::os::unix::fs::PermissionsExt;
 

@@ -5,6 +5,7 @@ use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::environment::Environment;
 use crate::types::{BinaryName, CommandName, ErrBox};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
@@ -269,9 +270,9 @@ impl PluginsManifest {
     }
 }
 
-pub fn read_manifest() -> Result<PluginsManifest, ErrBox> {
-    let file_path = get_manifest_file_path()?;
-    match std::fs::read_to_string(&file_path) {
+pub fn read_manifest(environment: &impl Environment) -> Result<PluginsManifest, ErrBox> {
+    let file_path = get_manifest_file_path(environment)?;
+    match environment.read_file_text(&file_path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(manifest) => Ok(manifest),
             Err(err) => {
@@ -283,14 +284,14 @@ pub fn read_manifest() -> Result<PluginsManifest, ErrBox> {
     }
 }
 
-pub fn write_manifest(manifest: &PluginsManifest) -> Result<(), ErrBox> {
-    let file_path = get_manifest_file_path()?;
+pub fn write_manifest(environment: &impl Environment, manifest: &PluginsManifest) -> Result<(), ErrBox> {
+    let file_path = get_manifest_file_path(environment)?;
     let serialized_manifest = serde_json::to_string(&manifest)?;
-    std::fs::write(&file_path, &serialized_manifest)?;
+    environment.write_file_text(&file_path, &serialized_manifest)?;
     Ok(())
 }
 
-fn get_manifest_file_path() -> Result<PathBuf, ErrBox> {
-    let user_data_dir = crate::utils::get_user_data_dir()?;
+fn get_manifest_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
+    let user_data_dir = environment.get_user_data_dir()?;
     Ok(user_data_dir.join("binaries-manifest.json"))
 }
