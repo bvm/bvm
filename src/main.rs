@@ -1033,19 +1033,19 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
-    "windows": {{
+    "win-x86_64": {{
         "url": "{}",
         "type": "zip",
         "checksum": "{}",
         "binaryPath": "binary.exe"
     }},
-    "linux": {{
+    "linux-x86_64": {{
         "url": "{}",
         "type": "zip",
         "checksum": "{}",
         "binaryPath": "binary"
     }},
-    "mac": {{
+    "darwin-x86_64": {{
         "url": "{}",
         "type": "zip",
         "checksum": "{}",
@@ -1102,19 +1102,19 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
-    "windows": {{
+    "win-x86_64": {{
         "url": "{}",
         "type": "tar.gz",
         "checksum": "{}",
         "binaryPath": "binary.exe"
     }},
-    "linux": {{
+    "linux-x86_64": {{
         "url": "{}",
         "type": "tar.gz",
         "checksum": "{}",
         "binaryPath": "binary"
     }},
-    "mac": {{
+    "darwin-x86_64": {{
         "url": "{}",
         "type": "tar.gz",
         "checksum": "{}",

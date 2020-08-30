@@ -148,7 +148,7 @@ Example: `https://bvm.land/dprint/0.9.1.json`
 
 ## Binary manifest file
 
-At the moment, it looks like this (will add architecture specific stuff later):
+At the moment, it looks like this:
 
 ```json
 {
@@ -156,20 +156,20 @@ At the moment, it looks like this (will add architecture specific stuff later):
   "name": "deno",
   "owner": "denoland",
   "version": "1.3.1",
-  "windows": {
+  "win-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
     "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",
     "binaryPath": "deno.exe",
     "postInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
-  "linux": {
+  "linux-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
     "type": "zip",
     "checksum": "ef3a8740bdceab105808c91cfb918c883a23defb6719b9c511e2be30d5bfdc01",
     "binaryPath": "deno"
   },
-  "mac": {
+  "darwin-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
     "type": "zip",
     "checksum": "b1bc5de79b71c3f33d0151486249d088f5f5604126812dc55b1dd21b28704d8a",
@@ -214,8 +214,8 @@ Medium effort:
 
 Large effort:
 
-1. Some way for binaries to specify all their version numbers and the ability to get their latest. ~~I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.~~ I think this should be explicit as people will have to trust the source. They could add "binary list" files to their individual CLI tools then install via `bvm install [binary name] [version]` or just `bvm install [binary name]`.
-2. `bvm upgrade <binary name>` - Upgrade to the latest version (requires a "binary list" to be set—not implemented)
+1. Some way for binaries to specify all their version numbers and the ability to get their latest. ~~I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.~~ I think this should be explicit as people will have to trust the source. They could add registry file to their individual CLI tools then install via `bvm install [binary name] [version]` or just `bvm install [binary name]`.
+2. `bvm upgrade <binary name>` - Upgrade to the latest version (requires a registry file to be set—not implemented)
 3. Support downstream binary dependencies (should also support a range of dependencies).
 
 Probably unnecessary complexity:

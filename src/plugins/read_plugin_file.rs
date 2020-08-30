@@ -8,8 +8,11 @@ pub struct PluginFile {
     pub name: String,
     pub owner: String,
     pub version: String,
+    #[serde(rename = "linux-x86_64")]
     linux: Option<PlatformInfo>,
+    #[serde(rename = "darwin-x86_64")]
     mac: Option<PlatformInfo>,
+    #[serde(rename = "win-x86_64")]
     windows: Option<PlatformInfo>,
 }
 
