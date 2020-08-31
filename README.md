@@ -29,7 +29,8 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
    {
      "postInstall": "", // optional post install commands
      "binaries": [
-       "https://bvm.land/deno/1.3.1.json",
+       "https://bvm.land/deno/1.3.2.json",
+       "https://bvm.land/node/14.9.0.json",
        "https://bvm.land/dprint/0.9.1.json"
      ]
    }
@@ -38,8 +39,8 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
    ```jsonc
    {
      "binaries": [
-       "https://bvm.land/deno/1.3.1.json@c6fc34cc8a48a6b7c0b9bf12af51f07edb3f33cd295582a6b52632abf5e5c09e",
-       "https://bvm.land/dprint/0.9.1.json@d667c18b9c78d18a991602bdb180b8fbc4e17e68c12e3a49bebdd0a17c2f4ad2"
+       "https://bvm.land/deno/1.3.2.json@6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97",
+       "https://bvm.land/dprint/0.9.1.json@52b473cd29888badf1620ea501afbd210373e6dec66d249019d1a284cf43380b"
      ]
    }
    ```
@@ -64,9 +65,9 @@ Installs a binary at the specified manifest file.
 
 ```
 # Examples
-bvm install https://bvm.land/deno/1.3.1.json
+bvm install https://bvm.land/deno/1.3.2.json
 # optionally specify a checksum
-bvm install https://bvm.land/deno/1.3.1.json@c6fc34cc8a48a6b7c0b9bf12af51f07edb3f33cd295582a6b52632abf5e5c09e
+bvm install https://bvm.land/deno/1.3.2.json@6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97
 # if a previous installation is on the path, use this one instead
 bvm install --use https://bvm.land/deno/1.3.1.json
 ```
@@ -82,8 +83,8 @@ The binary and version must have been previously installed.
 
 ```
 # Examples
-bvm use deno 1.3.1
-bvm use denoland/deno 1.3.1
+bvm use deno 1.3.2
+bvm use denoland/deno 1.3.2
 bvm use name-stealer/deno 2.0.0
 ```
 
@@ -121,7 +122,7 @@ Uninstalls the specified binary version.
 ```
 # Examples
 bvm uninstall deno 1.2.0
-bvm uninstall denoland/deno 1.3.1
+bvm uninstall denoland/deno 1.3.2
 bvm uninstall name-stealer/deno 2.0.0
 ```
 
@@ -133,8 +134,9 @@ Example output:
 
 ```
 denoland/deno 1.2.0
-denoland/deno 1.3.1
+denoland/deno 1.3.2
 dprint/dprint 9.0.1
+nodejs/node 14.9.0
 ```
 
 ## Redirect Service
@@ -188,6 +190,10 @@ At the moment, it looks like this:
 ```
 
 Supported types: `zip`, `exe`, `tar.gz` (will add more later)
+
+Other examples:
+
+- Multiple commands: [https://bvm.land/node/14.9.0.json](https://bvm.land/node/14.9.0.json)
 
 ## Future improvements
 

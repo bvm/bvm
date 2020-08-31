@@ -39,6 +39,7 @@ fn get_executable_file_names(command_name: &str) -> Vec<String> {
     {
         results.push(format!("{}.bat", command_name));
         results.push(format!("{}.exe", command_name));
+        results.push(format!("{}.cmd", command_name));
     }
 
     results

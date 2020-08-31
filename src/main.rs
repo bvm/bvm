@@ -61,7 +61,7 @@ fn handle_resolve_command<TEnvironment: Environment>(
         } else {
             if info.had_uninstalled_binary {
                 environment.log_error(&format!(
-                    "[bvm warning]: There were some not installed binaries (run `bvm install`). Resolving global '{}'.",
+                    "[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global '{}'.",
                     command_name.display()
                 ));
             }
