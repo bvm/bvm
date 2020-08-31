@@ -15,7 +15,7 @@ pub fn create_path_script(
         &format!(
             r#"#!/bin/sh
 exe_path=$(bvm resolve {})
-$exe_path "$@""#,
+"$exe_path" "$@""#,
             command_name.as_str()
         ),
     )?;
@@ -41,7 +41,7 @@ pub fn create_path_script(
 FOR /F "tokens=* USEBACKQ" %%F IN (`bvm resolve {}`) DO (
   SET exe_path=%%F
 )
-%exe_path% %*"#,
+"%exe_path%" %*"#,
             command_name.as_str()
         ),
     )?;
