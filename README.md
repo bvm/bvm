@@ -182,6 +182,10 @@ Supported types: `zip`, `exe`, `tar.gz` (will add more later)
 
 ## Future improvements
 
+High priority:
+
+1. Support multiple binaries on the path per binary manifest file (ex. node has `node` and `npm`)
+
 Low effort:
 
 1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
