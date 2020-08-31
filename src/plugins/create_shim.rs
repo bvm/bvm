@@ -4,12 +4,12 @@ use crate::environment::Environment;
 use crate::types::{CommandName, ErrBox};
 
 #[cfg(unix)]
-pub fn create_path_script(
+pub fn create_shim(
     environment: &impl Environment,
     binaries_cache_dir: &Path,
     command_name: &CommandName,
 ) -> Result<(), ErrBox> {
-    let file_path = get_path_script_path(binaries_cache_dir, command_name);
+    let file_path = get_shim_path(binaries_cache_dir, command_name);
     environment.write_file_text(
         &file_path,
         &format!(
@@ -26,14 +26,14 @@ exe_path=$(bvm resolve {})
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_path_script(
+pub fn create_shim(
     environment: &impl Environment,
     binaries_cache_dir: &Path,
     command_name: &CommandName,
 ) -> Result<(), ErrBox> {
     // https://stackoverflow.com/a/6362922/188246
     // todo: needs to handle when this fails to find the binary or something
-    let file_path = get_path_script_path(binaries_cache_dir, command_name);
+    let file_path = get_shim_path(binaries_cache_dir, command_name);
     environment.write_file_text(
         &file_path,
         &format!(
@@ -48,7 +48,7 @@ FOR /F "tokens=* USEBACKQ" %%F IN (`bvm resolve {}`) DO (
     Ok(())
 }
 
-pub fn get_path_script_path(binaries_cache_dir: &Path, command_name: &CommandName) -> PathBuf {
+pub fn get_shim_path(binaries_cache_dir: &Path, command_name: &CommandName) -> PathBuf {
     #[cfg(target_os = "windows")]
     return binaries_cache_dir.join(format!("{}.bat", command_name.as_str()));
     #[cfg(unix)]

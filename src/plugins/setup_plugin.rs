@@ -41,11 +41,18 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     environment.create_dir_all(&plugin_cache_dir_path)?;
 
     // handle the setup based on the download type
-    let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
+    let commands = plugin_file.get_commands()?;
+    verify_commands(commands)?;
+    //let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
     match download_type {
         DownloadType::Zip => utils::extract_zip(environment, &url_file_bytes, &plugin_cache_dir_path)?,
         DownloadType::TarGz => utils::extract_tar_gz(environment, &url_file_bytes, &plugin_cache_dir_path)?,
-        DownloadType::Binary => environment.write_file(&binary_path, &url_file_bytes)?,
+        DownloadType::Binary => {
+            if commands.len() != 1 {
+                return err!("The binary download type must have exactly one command specified.");
+            }
+            environment.write_file(&plugin_cache_dir_path.join(&commands[0].path), &url_file_bytes)?
+        }
     }
 
     // run the post install script
@@ -53,21 +60,27 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
         environment.run_shell_command(&plugin_cache_dir_path, post_install_script)?;
     }
 
-    // add the plugin information to the manifestscript
-    let file_name = binary_path.to_string_lossy().to_string();
+    // create the shims
+    for command in commands {
+        create_shim(environment, &bin_dir, &command.get_command_name())?;
+    }
+
+    // add the plugin information to the manifest
     let item = BinaryManifestItem {
         owner: plugin_file.owner.clone(),
         name: plugin_file.name.clone(),
         version: plugin_file.version.clone(),
         created_time: environment.get_time_secs(),
-        file_name: file_name.clone(),
+        commands: commands
+            .iter()
+            .map(|c| BinaryManifestItemCommand {
+                name: c.name.clone(),
+                path: c.path.clone(),
+            })
+            .collect(),
     };
     let identifier = item.get_identifier();
-    let command_name = item.get_command_name();
     plugin_manifest.add_binary(item);
-
-    // create the script that runs on the path
-    create_path_script(environment, &bin_dir, &command_name)?;
 
     Ok(plugin_manifest.get_binary(&identifier).unwrap())
 }
@@ -98,4 +111,22 @@ async fn get_and_associate_plugin_file(
     plugin_manifest.set_identifier_for_url(checksum_url.url.clone(), identifier);
 
     Ok(plugin_file)
+}
+
+fn verify_commands(commands: &Vec<PlatformInfoCommand>) -> Result<(), ErrBox> {
+    if commands.is_empty() {
+        return err!("One command must be specified.");
+    }
+
+    // prevent funny business
+    for command in commands.iter() {
+        if command.path.contains("../") || command.path.contains("..\\") {
+            return err!("A command path cannot go down directories.");
+        }
+        if PathBuf::from(&command.path).is_absolute() {
+            return err!("A command path cannot be absolute.");
+        }
+    }
+
+    Ok(())
 }

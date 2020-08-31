@@ -160,20 +160,29 @@ At the moment, it looks like this:
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
     "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",
-    "binaryPath": "deno.exe",
+    "commands": [{
+      "name": "deno",
+      "path": "deno.exe"
+    }],
     "postInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
   "linux-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
     "type": "zip",
     "checksum": "ef3a8740bdceab105808c91cfb918c883a23defb6719b9c511e2be30d5bfdc01",
-    "binaryPath": "deno"
+    "commands": [{
+      "name": "deno",
+      "path": "deno"
+    }]
   },
   "darwin-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
     "type": "zip",
     "checksum": "b1bc5de79b71c3f33d0151486249d088f5f5604126812dc55b1dd21b28704d8a",
-    "binaryPath": "deno"
+    "commands": [{
+      "name": "deno",
+      "path": "deno"
+    }]
   }
 }
 ```
@@ -182,13 +191,10 @@ Supported types: `zip`, `exe`, `tar.gz` (will add more later)
 
 ## Future improvements
 
-High priority:
-
-1. Support multiple binaries on the path per binary manifest file (ex. node has `node` and `npm`)
-
 Low effort:
 
 1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
+2. Progress bars everywhere!!
 
 Medium effort:
 

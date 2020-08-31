@@ -23,10 +23,6 @@ impl BinaryName {
         }
     }
 
-    pub fn get_command_name(&self) -> CommandName {
-        CommandName(self.name.clone())
-    }
-
     pub fn display(&self) -> String {
         if let Some(owner) = &self.owner {
             format!("{}/{}", owner, self.name)

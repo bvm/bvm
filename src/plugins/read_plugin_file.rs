@@ -1,4 +1,5 @@
 use crate::types::ErrBox;
+use crate::CommandName;
 use serde::{self, Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -23,8 +24,21 @@ pub struct PlatformInfo {
     checksum: String,
     #[serde(rename = "type")]
     download_type: String,
-    binary_path: String,
+    commands: Vec<PlatformInfoCommand>,
     post_install: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformInfoCommand {
+    pub name: String,
+    pub path: String,
+}
+
+impl PlatformInfoCommand {
+    pub fn get_command_name(&self) -> CommandName {
+        CommandName::from_string(self.name.clone())
+    }
 }
 
 pub enum DownloadType {
@@ -42,8 +56,8 @@ impl PluginFile {
         Ok(&self.get_platform_info()?.checksum)
     }
 
-    pub fn get_binary_path(&self) -> Result<&String, ErrBox> {
-        Ok(&self.get_platform_info()?.binary_path)
+    pub fn get_commands(&self) -> Result<&Vec<PlatformInfoCommand>, ErrBox> {
+        Ok(&self.get_platform_info()?.commands)
     }
 
     pub fn get_download_type(&self) -> Result<DownloadType, ErrBox> {

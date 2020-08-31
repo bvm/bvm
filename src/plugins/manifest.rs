@@ -26,9 +26,9 @@ pub struct BinaryManifestItem {
     pub owner: String,
     pub name: String,
     pub version: String,
-    pub file_name: String,
     /// Created time in *seconds* since epoch.
     pub created_time: u64,
+    pub commands: Vec<BinaryManifestItemCommand>,
 }
 
 impl BinaryManifestItem {
@@ -45,8 +45,8 @@ impl BinaryManifestItem {
         name.is_match(&self.owner, &self.name)
     }
 
-    pub fn get_command_name(&self) -> CommandName {
-        CommandName::from_string(self.name.clone())
+    pub fn get_command_names(&self) -> Vec<CommandName> {
+        self.commands.iter().map(|c| c.get_command_name()).collect()
     }
 
     pub fn get_binary_name(&self) -> BinaryName {
@@ -61,6 +61,20 @@ impl BinaryManifestItem {
             Ordering::Equal => self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap(),
             _ => name_ordering,
         }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryManifestItemCommand {
+    pub name: String,
+    /// The relative path to the file name.
+    pub path: String,
+}
+
+impl BinaryManifestItemCommand {
+    pub fn get_command_name(&self) -> CommandName {
+        CommandName::from_string(self.name.clone())
     }
 }
 
@@ -153,21 +167,22 @@ impl PluginsManifest {
     }
 
     pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) {
-        let binary_name = if let Some(item) = self.binaries.get(identifier) {
-            Some(item.get_binary_name())
+        let binary_info = if let Some(item) = self.binaries.get(identifier) {
+            Some((item.get_binary_name(), item.get_command_names()))
         } else {
             None
         };
 
         self.binaries.remove(identifier);
 
-        if let Some(binary_name) = binary_name {
+        if let Some((binary_name, command_names)) = binary_info {
             // update the selected global binary
-            let command_name = binary_name.get_command_name();
-            if !self.has_binary_with_command(&command_name) {
-                self.remove_global_binary(&command_name); // could be removing the path entry
-            } else {
-                self.remove_if_global_binary(&binary_name, identifier);
+            for command_name in command_names {
+                if !self.has_binary_with_command(&command_name) {
+                    self.remove_global_binary(&command_name); // could be removing the path entry
+                } else {
+                    self.remove_if_global_binary(&binary_name, &command_name, identifier);
+                }
             }
         }
     }
@@ -190,9 +205,11 @@ impl PluginsManifest {
         self.binaries().any(|b| b.name == name.as_str())
     }
 
-    /// Gets if this command has all the same owner.
-    pub fn command_has_same_owner(&self, name: &CommandName) -> bool {
-        let binaries = self.get_binaries_with_command(name);
+    pub fn binary_name_has_same_owner(&self, name: &BinaryName) -> bool {
+        let binaries = self
+            .binaries()
+            .filter(|b| b.name == name.name.as_str())
+            .collect::<Vec<_>>();
         if let Some(first_binary) = binaries.get(0) {
             let first_owner = &first_binary.owner;
             binaries.iter().all(|b| &b.owner == first_owner)
@@ -232,20 +249,20 @@ impl PluginsManifest {
     fn remove_if_global_binary(
         &mut self,
         removed_binary_name: &BinaryName,
+        removed_command_name: &CommandName,
         removed_binary_identifier: &BinaryIdentifier,
     ) {
-        let command_name = removed_binary_name.get_command_name();
-        if let Some(GlobalBinaryLocation::Bvm(current_identifier)) = self.global_versions.get(&command_name) {
+        if let Some(GlobalBinaryLocation::Bvm(current_identifier)) = self.global_versions.get(removed_command_name) {
             if &current_identifier == removed_binary_identifier {
                 // set the latest binary as the global binary
                 let latest_binary = self
                     .get_latest_binary_with_name(&removed_binary_name)
-                    .or_else(|| self.get_latest_binary_with_command(&removed_binary_name.get_command_name()));
+                    .or_else(|| self.get_latest_binary_with_command(removed_command_name));
                 if let Some(latest_binary) = latest_binary {
                     let latest_identifier = latest_binary.get_identifier();
-                    self.use_global_version(command_name, latest_identifier.into());
+                    self.use_global_version(removed_command_name.clone(), latest_identifier.into());
                 } else {
-                    self.remove_global_binary(&command_name);
+                    self.remove_global_binary(removed_command_name);
                 }
             }
         }
@@ -255,18 +272,24 @@ impl PluginsManifest {
         self.global_versions.remove(command_name);
     }
 
-    pub fn is_global_version(&mut self, identifier: &BinaryIdentifier) -> bool {
-        if let Some(item) = self.binaries.get(identifier) {
-            if let Some(GlobalBinaryLocation::Bvm(global_version_identifier)) =
-                self.global_versions.get(&item.get_command_name())
-            {
-                &global_version_identifier == identifier
-            } else {
-                false
-            }
+    pub fn is_global_version(&self, identifier: &BinaryIdentifier, command_name: &CommandName) -> bool {
+        if let Some(GlobalBinaryLocation::Bvm(global_version_identifier)) = self.global_versions.get(command_name) {
+            &global_version_identifier == identifier
         } else {
             false
         }
+    }
+
+    pub fn get_global_command_names(&self, identifier: &BinaryIdentifier) -> Vec<CommandName> {
+        let mut result = Vec::new();
+        if let Some(item) = self.binaries.get(identifier) {
+            for command_name in item.get_command_names() {
+                if self.is_global_version(identifier, &command_name) {
+                    result.push(command_name);
+                }
+            }
+        }
+        result
     }
 }
 

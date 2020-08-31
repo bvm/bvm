@@ -53,11 +53,7 @@ impl TestEnvironment {
         self.run_shell_commands.lock().unwrap().drain(..).collect()
     }
 
-    pub fn add_remote_file(&self, path: &str, bytes: &'static [u8]) {
-        self.add_remote_file_bytes(path, Bytes::from(bytes));
-    }
-
-    pub fn add_remote_file_bytes(&self, path: &str, bytes: Bytes) {
+    pub fn add_remote_file(&self, path: &str, bytes: Bytes) {
         let mut remote_files = self.remote_files.lock().unwrap();
         remote_files.insert(String::from(path), bytes);
     }
