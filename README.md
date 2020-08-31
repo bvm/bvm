@@ -156,7 +156,7 @@ At the moment, it looks like this:
   "name": "deno",
   "owner": "denoland",
   "version": "1.3.1",
-  "win-x86_64": {
+  "windows-x86_64": {
     "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
     "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",

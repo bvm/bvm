@@ -1033,7 +1033,7 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
-    "win-x86_64": {{
+    "windows-x86_64": {{
         "url": "{}",
         "type": "zip",
         "checksum": "{}",
@@ -1102,7 +1102,7 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
-    "win-x86_64": {{
+    "windows-x86_64": {{
         "url": "{}",
         "type": "tar.gz",
         "checksum": "{}",

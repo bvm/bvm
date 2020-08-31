@@ -12,7 +12,7 @@ pub struct PluginFile {
     linux: Option<PlatformInfo>,
     #[serde(rename = "darwin-x86_64")]
     mac: Option<PlatformInfo>,
-    #[serde(rename = "win-x86_64")]
+    #[serde(rename = "windows-x86_64")]
     windows: Option<PlatformInfo>,
 }
 

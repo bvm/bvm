@@ -9,16 +9,7 @@ pub struct ConfigFile {
 }
 
 pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
-    let value = match parse_to_value(file_text) {
-        Ok(value) => value,
-        Err(err) => {
-            return err!(
-                "Error parsing configuration file. {}",
-                err.get_message_with_range(file_text)
-            )
-        }
-    };
-
+    let value = parse_to_value(file_text)?;
     let mut root_object_node = match value {
         Some(JsonValue::Object(obj)) => obj,
         _ => return err!("Expected a root object in the json"),
