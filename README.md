@@ -230,7 +230,7 @@ Medium effort:
 Large effort:
 
 1. Some way for binaries to specify all their version numbers and the ability to get their latest. ~~I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.~~ I think this should be explicit as people will have to trust the source. They could add registry file to their individual CLI tools then install via `bvm install [binary name] [version]` or just `bvm install [binary name]`.
-2. `bvm upgrade <binary name>` - Upgrade to the latest version (requires a registry file to be set—not implemented)
+2. `bvm install <binary name>` - Upgrade to the latest version (requires a registry file to be set—not implemented)
 3. Support downstream binary dependencies (should also support a range of dependencies).
 
 Probably unnecessary complexity:
