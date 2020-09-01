@@ -1,7 +1,7 @@
+use dprint_cli_core::types::ErrBox;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::ErrBox;
 
 pub fn get_shim_dir(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
     let user_data_dir = environment.get_user_data_dir()?;

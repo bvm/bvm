@@ -1,7 +1,7 @@
+use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
 
 use crate::environment::Environment;
-use crate::types::ErrBox;
 
 pub fn find_config_file(environment: &impl Environment) -> Result<Option<PathBuf>, ErrBox> {
     let cwd = environment.cwd()?;

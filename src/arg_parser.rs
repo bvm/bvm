@@ -1,4 +1,6 @@
-use super::types::{BinaryName, ErrBox};
+use dprint_cli_core::types::ErrBox;
+
+use super::types::BinaryName;
 
 pub struct CliArgs {
     pub sub_command: SubCommand,

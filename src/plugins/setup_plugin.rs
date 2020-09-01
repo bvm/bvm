@@ -1,8 +1,9 @@
+use dprint_cli_core::checksums::{verify_sha256_checksum, ChecksumPathOrUrl};
+use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::environment::Environment;
-use crate::types::ErrBox;
 use crate::utils;
 
 pub fn get_plugin_dir(
@@ -18,21 +19,16 @@ pub fn get_plugin_dir(
 pub async fn setup_plugin<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
     plugin_manifest: &'a mut PluginsManifest,
-    checksum_url: &utils::ChecksumUrl,
+    checksum_url: &ChecksumPathOrUrl,
     bin_dir: &Path,
 ) -> Result<&'a BinaryManifestItem, ErrBox> {
     let plugin_file = get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?;
-
-    environment.log_error(&format!(
-        "Installing {}/{} {}...",
-        plugin_file.owner, plugin_file.name, plugin_file.version
-    ));
 
     // download the url's bytes
     let url = plugin_file.get_url()?;
     let download_type = plugin_file.get_download_type()?;
     let url_file_bytes = environment.download_file(url).await?;
-    utils::verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
+    verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
     let plugin_cache_dir_path =
@@ -43,10 +39,31 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     // handle the setup based on the download type
     let commands = plugin_file.get_commands()?;
     verify_commands(commands)?;
-    //let binary_path = plugin_cache_dir_path.join(plugin_file.get_binary_path()?);
     match download_type {
-        DownloadType::Zip => utils::extract_zip(environment, &url_file_bytes, &plugin_cache_dir_path)?,
-        DownloadType::TarGz => utils::extract_tar_gz(environment, &url_file_bytes, &plugin_cache_dir_path)?,
+        DownloadType::Zip => {
+            utils::extract_zip(
+                &format!(
+                    "Extracting archive for {}/{} {}...",
+                    plugin_file.owner, plugin_file.name, plugin_file.version
+                ),
+                environment,
+                &url_file_bytes,
+                &plugin_cache_dir_path,
+            )
+            .await?
+        }
+        DownloadType::TarGz => {
+            utils::extract_tar_gz(
+                &format!(
+                    "Extracting archive for {}/{} {}...",
+                    plugin_file.owner, plugin_file.name, plugin_file.version
+                ),
+                environment,
+                &url_file_bytes,
+                &plugin_cache_dir_path,
+            )
+            .await?
+        }
         DownloadType::Binary => {
             if commands.len() != 1 {
                 return err!("The binary download type must have exactly one command specified.");
@@ -88,12 +105,12 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
 async fn get_and_associate_plugin_file(
     environment: &impl Environment,
     plugin_manifest: &mut PluginsManifest,
-    checksum_url: &utils::ChecksumUrl,
+    checksum_url: &ChecksumPathOrUrl,
 ) -> Result<PluginFile, ErrBox> {
-    let plugin_file_bytes = environment.download_file(&checksum_url.url).await?;
+    let plugin_file_bytes = environment.download_file(&checksum_url.path_or_url).await?;
 
     if let Some(checksum) = &checksum_url.checksum {
-        utils::verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
+        verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
     }
 
     let plugin_file = read_plugin_file(&plugin_file_bytes)?;
@@ -108,7 +125,7 @@ async fn get_and_associate_plugin_file(
 
     // associate the url to the binary identifier
     let identifier = plugin_file.get_identifier();
-    plugin_manifest.set_identifier_for_url(checksum_url.url.clone(), identifier);
+    plugin_manifest.set_identifier_for_url(checksum_url.path_or_url.clone(), identifier);
 
     Ok(plugin_file)
 }

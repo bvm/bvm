@@ -1,7 +1,8 @@
+use dprint_cli_core::types::ErrBox;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{CommandName, ErrBox};
+use crate::types::CommandName;
 
 pub fn get_path_executable_path(
     environment: &impl Environment,

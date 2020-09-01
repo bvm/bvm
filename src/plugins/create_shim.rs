@@ -1,7 +1,8 @@
+use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
 
 use crate::environment::Environment;
-use crate::types::{CommandName, ErrBox};
+use crate::types::CommandName;
 
 #[cfg(unix)]
 pub fn create_shim(

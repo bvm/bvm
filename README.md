@@ -200,7 +200,6 @@ Other examples:
 Low effort:
 
 1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
-2. Progress bars everywhere!!
 
 Medium effort:
 

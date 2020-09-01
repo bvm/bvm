@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
+use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
-
-use crate::types::ErrBox;
 
 #[async_trait]
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
@@ -20,6 +19,15 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn log(&self, text: &str);
     fn log_error(&self, text: &str);
     async fn download_file(&self, url: &str) -> Result<Bytes, ErrBox>;
+    async fn log_action_with_progress<
+        TResult: std::marker::Send + std::marker::Sync,
+        TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,
+    >(
+        &self,
+        message: &str,
+        action: TCreate,
+        total_size: usize,
+    ) -> Result<TResult, ErrBox>;
     fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox>;
     fn get_time_secs(&self) -> u64;
     /// Gets the directories in the path environment variable.

@@ -1,6 +1,7 @@
-use crate::types::ErrBox;
-use crate::CommandName;
+use dprint_cli_core::types::ErrBox;
 use serde::{self, Deserialize, Serialize};
+
+use crate::CommandName;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]

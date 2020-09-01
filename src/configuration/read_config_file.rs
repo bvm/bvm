@@ -1,11 +1,10 @@
+use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
+use dprint_cli_core::types::ErrBox;
 use jsonc_parser::{parse_to_value, JsonValue};
-
-use crate::types::ErrBox;
-use crate::utils;
 
 pub struct ConfigFile {
     pub post_install: Option<String>,
-    pub binaries: Vec<utils::ChecksumUrl>,
+    pub binaries: Vec<ChecksumPathOrUrl>,
 }
 
 pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
@@ -23,7 +22,7 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
     let mut binaries = Vec::new();
     for value in json_binaries.into_iter() {
         let url = match value {
-            JsonValue::String(text) => utils::parse_checksum_url(&text),
+            JsonValue::String(text) => parse_checksum_path_or_url(&text),
             _ => return err!("Expected a string for all items in 'binaries' array."),
         };
         binaries.push(url);

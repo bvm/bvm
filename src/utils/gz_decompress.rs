@@ -1,4 +1,4 @@
-use crate::types::ErrBox;
+use dprint_cli_core::types::ErrBox;
 use flate2::read::GzDecoder;
 use std::io::prelude::*;
 

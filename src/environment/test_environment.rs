@@ -1,6 +1,6 @@
-use crate::types::ErrBox;
 use async_trait::async_trait;
 use bytes::Bytes;
+use dprint_cli_core::types::ErrBox;
 use path_clean::PathClean;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -209,6 +209,19 @@ impl Environment for TestEnvironment {
 
     fn log_error(&self, text: &str) {
         self.logged_errors.lock().unwrap().push(String::from(text));
+    }
+
+    async fn log_action_with_progress<
+        TResult: std::marker::Send + std::marker::Sync,
+        TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,
+    >(
+        &self,
+        message: &str,
+        action: TCreate,
+        _: usize,
+    ) -> Result<TResult, ErrBox> {
+        self.log_error(message);
+        Ok(action(Box::new(|_| {})))
     }
 
     fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {

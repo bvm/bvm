@@ -1,4 +1,5 @@
-#[macro_use]
+#[macro_use(err)]
+extern crate dprint_cli_core;
 mod types;
 #[macro_use]
 mod environment;
@@ -11,8 +12,10 @@ mod utils;
 use std::path::PathBuf;
 
 use arg_parser::*;
+use dprint_cli_core::checksums::parse_checksum_path_or_url;
+use dprint_cli_core::types::ErrBox;
 use environment::Environment;
-use types::{BinaryName, CommandName, ErrBox};
+use types::{BinaryName, CommandName};
 
 #[tokio::main]
 async fn main() -> Result<(), ErrBox> {
@@ -90,7 +93,7 @@ async fn handle_install_command<TEnvironment: Environment>(
 
     for entry in config_file.binaries.iter() {
         let is_installed = plugin_manifest
-            .get_identifier_from_url(&entry.url)
+            .get_identifier_from_url(&entry.path_or_url)
             .map(|identifier| plugin_manifest.get_binary(&identifier).is_some())
             .unwrap_or(false);
 
@@ -108,7 +111,10 @@ async fn handle_install_command<TEnvironment: Environment>(
 
     if command.use_command {
         for entry in config_file.binaries.iter() {
-            let identifier = plugin_manifest.get_identifier_from_url(&entry.url).unwrap().clone();
+            let identifier = plugin_manifest
+                .get_identifier_from_url(&entry.path_or_url)
+                .unwrap()
+                .clone();
             let binary = plugin_manifest.get_binary(&identifier).unwrap();
             for command_name in binary.get_command_names() {
                 plugin_manifest
@@ -129,7 +135,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: InstallUrlCommand,
 ) -> Result<(), ErrBox> {
-    let checksum_url = utils::parse_checksum_url(&command.url);
+    let checksum_url = parse_checksum_path_or_url(&command.url);
     let shim_dir = utils::get_shim_dir(environment)?;
     let mut plugin_manifest = plugins::read_manifest(environment)?;
     let identifier = plugin_manifest
@@ -286,7 +292,7 @@ fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> 
     for entry in config_file.binaries.iter() {
         let mut was_installed = false;
         let identifier = plugin_manifest
-            .get_identifier_from_url(&entry.url)
+            .get_identifier_from_url(&entry.path_or_url)
             .map(|i| i.to_owned());
         if let Some(identifier) = identifier {
             let binary = plugin_manifest.get_binary(&identifier);
@@ -406,7 +412,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
         let mut executable_path = None;
 
         for url in config_file.binaries.iter() {
-            if let Some(identifier) = plugin_manifest.get_identifier_from_url(&url.url) {
+            if let Some(identifier) = plugin_manifest.get_identifier_from_url(&url.path_or_url) {
                 if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
                     for command in cache_item.commands.iter() {
                         if command.name == command_name.as_str() {
@@ -575,7 +581,7 @@ mod test {
 
     use super::run;
     use crate::environment::{Environment, TestEnvironment};
-    use crate::types::ErrBox;
+    use dprint_cli_core::types::ErrBox;
 
     macro_rules! assert_has_path {
         ($environment:expr, $path:expr) => {
@@ -648,7 +654,7 @@ mod test {
         // install the package
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
 
         // check setup was correct
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -678,7 +684,7 @@ mod test {
         assert_eq!(
             logged_errors,
             vec![
-                "Installing owner/name 1.0.0...",
+                "Extracting archive for owner/name 1.0.0...",
                 "Installed. Run `bvm use name 1.0.0` to use it on the path as 'name'."
             ]
         );
@@ -719,7 +725,7 @@ mod test {
         // install the first package
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0...",]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0...",]);
 
         // now install the second
         install_url!(environment, "http://localhost/package2.json");
@@ -727,7 +733,7 @@ mod test {
         assert_eq!(
             logged_errors,
             vec![
-                "Installing owner/name 2.0.0...",
+                "Extracting archive for owner/name 2.0.0...",
                 "Installed. Run `bvm use name 2.0.0` to use it on the path as 'name'."
             ]
         );
@@ -742,7 +748,7 @@ mod test {
             .await
             .unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 3.0.0...",]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 3.0.0...",]);
         assert_resolves!(&environment, third_binary_path);
 
         // install the fourth package
@@ -751,7 +757,7 @@ mod test {
         assert_eq!(
             logged_errors,
             vec![
-                "Installing owner/name 4.0.0...",
+                "Extracting archive for owner/name 4.0.0...",
                 "Installed. Run `bvm use name 4.0.0` to use it on the path as 'name', 'name-second'."
             ]
         );
@@ -777,7 +783,7 @@ mod test {
         .await
         .unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 4.0.0...",]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 4.0.0...",]);
         assert_resolves!(&environment, fourth_binary_path);
         assert_resolves_name!(&environment, "name-second", fourth_binary_path_second);
     }
@@ -792,7 +798,7 @@ mod test {
         // install and check setup
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0...",]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0...",]);
         assert_has_path!(environment, &binary_path);
         assert_has_path!(environment, &get_shim_path("name"));
 
@@ -821,7 +827,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -851,7 +857,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 2.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.0..."]);
 
         // now try to resolve the binary
         assert_resolves!(environment, second_binary_path);
@@ -864,7 +870,7 @@ mod test {
         // try reinstalling, but provide --force
         run_cli(vec!["install", "--force"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 2.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.0..."]);
 
         // go up a directory and it should resolve to the previously set global
         environment.set_cwd("/");
@@ -892,7 +898,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -918,7 +924,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Installing owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
         let logged_shell_commands = environment.take_run_shell_commands();
         assert_eq!(
             logged_shell_commands,
@@ -1302,7 +1308,7 @@ mod test {
         zip.start_file(file_name, options).unwrap();
         zip.write(format!("test-{}2", url).as_bytes()).unwrap();
         let result = zip.finish().unwrap().into_inner();
-        let zip_file_checksum = crate::utils::get_sha256_checksum(&result);
+        let zip_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
         environment.add_remote_file(url, Bytes::from(result));
         zip_file_checksum
     }
@@ -1391,9 +1397,9 @@ mod test {
         e.write_all(&archive.into_inner().unwrap().into_inner()).unwrap();
         let result = e.finish().unwrap();
 
-        let zip_file_checksum = crate::utils::get_sha256_checksum(&result);
+        let tar_gz_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
         environment.add_remote_file(url, Bytes::from(result));
-        zip_file_checksum
+        tar_gz_file_checksum
     }
 
     async fn run_cli(args: Vec<&str>, environment: &TestEnvironment) -> Result<(), ErrBox> {

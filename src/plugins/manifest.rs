@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use dprint_cli_core::types::ErrBox;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Values;
@@ -6,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{BinaryName, CommandName, ErrBox};
+use crate::types::{BinaryName, CommandName};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
