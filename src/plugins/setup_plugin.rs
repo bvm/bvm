@@ -36,6 +36,11 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     let _ignore = environment.remove_dir_all(&plugin_cache_dir_path);
     environment.create_dir_all(&plugin_cache_dir_path)?;
 
+    // run the pre install script
+    if let Some(pre_install_script) = plugin_file.get_pre_install_script()? {
+        environment.run_shell_command(&plugin_cache_dir_path, pre_install_script)?;
+    }
+
     // handle the setup based on the download type
     let commands = plugin_file.get_commands()?;
     verify_commands(commands)?;

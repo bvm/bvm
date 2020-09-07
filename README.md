@@ -27,7 +27,10 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {
-     "postInstall": "", // optional post install commands
+     // optional commands to run on pre and post install
+     "preInstall": "",
+     "postInstall": "",
+     // list of binaries to use
      "binaries": [
        "https://bvm.land/deno/1.3.2.json",
        "https://bvm.land/node/14.9.0.json",
@@ -166,6 +169,7 @@ At the moment, it looks like this:
       "name": "deno",
       "path": "deno.exe"
     }],
+    "preInstall": "# run any command pre installation (ex. kill process)",
     "postInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
   "linux-x86_64": {

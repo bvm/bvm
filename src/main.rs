@@ -91,6 +91,10 @@ async fn handle_install_command<TEnvironment: Environment>(
     let shim_dir = utils::get_shim_dir(environment)?;
     let mut plugin_manifest = plugins::read_manifest(environment)?;
 
+    if let Some(pre_install) = &config_file.pre_install {
+        environment.run_shell_command(&environment.cwd()?, pre_install)?;
+    }
+
     for entry in config_file.binaries.iter() {
         let is_installed = plugin_manifest
             .get_identifier_from_url(&entry.path_or_url)
@@ -910,13 +914,13 @@ mod test {
     }
 
     #[tokio::test]
-    async fn install_command_post_install() {
+    async fn install_command_pre_post_install() {
         let environment = TestEnvironment::new();
         create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
         environment
             .write_file_text(
                 &PathBuf::from("/project/.bvmrc.json"),
-                r#"{"postInstall": "echo \"Hello world!\"", "binaries": ["http://localhost/package.json"]}"#,
+                r#"{"preInstall": "echo \"Test\"", "postInstall": "echo \"Hello world!\"", "binaries": ["http://localhost/package.json"]}"#,
             )
             .unwrap();
 
@@ -928,7 +932,10 @@ mod test {
         let logged_shell_commands = environment.take_run_shell_commands();
         assert_eq!(
             logged_shell_commands,
-            vec![("/project".to_string(), "echo \"Hello world!\"".to_string())]
+            vec![
+                ("/project".to_string(), "echo \"Test\"".to_string()),
+                ("/project".to_string(), "echo \"Hello world!\"".to_string())
+            ]
         );
     }
 

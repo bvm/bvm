@@ -26,6 +26,7 @@ pub struct PlatformInfo {
     #[serde(rename = "type")]
     download_type: String,
     commands: Vec<PlatformInfoCommand>,
+    pre_install: Option<String>,
     post_install: Option<String>,
 }
 
@@ -69,6 +70,10 @@ impl PluginFile {
             "tar.gz" => DownloadType::TarGz,
             _ => return err!("Unknown download type: {}", download_type),
         })
+    }
+
+    pub fn get_pre_install_script(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.pre_install)
     }
 
     pub fn get_post_install_script(&self) -> Result<&Option<String>, ErrBox> {
