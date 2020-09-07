@@ -108,15 +108,19 @@ fn get_plugin_platform_info<'a>(platform_info: &'a Option<PlatformInfo>) -> Resu
 pub fn read_plugin_file(file_bytes: &[u8]) -> Result<PluginFile, ErrBox> {
     // todo: don't use serde because this should fail with a nice error message if the schema version is not equal
     match serde_json::from_slice::<PluginFile>(&file_bytes) {
-        Ok(plugin_file) => {
-            if plugin_file.schema_version != 1 {
+        Ok(file) => {
+            if file.schema_version != 1 {
                 return err!(
                     "Expected schema version 1, but found {}. This may indicate you need to upgrade your CLI version to use this binary.",
-                    plugin_file.schema_version
+                    file.schema_version
                 );
             }
 
-            Ok(plugin_file)
+            if file.name.contains("/") || file.owner.contains("/") {
+                return err!("The binary owner and name may not contain a forward slash.");
+            }
+
+            Ok(file)
         }
         Err(err) => err!("Error deserializing binary manifest file. {}", err.to_string()),
     }

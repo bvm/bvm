@@ -15,6 +15,7 @@ pub enum SubCommand {
     Install(InstallCommand),
     InstallUrl(InstallUrlCommand),
     Uninstall(UninstallCommand),
+    Registry(RegistrySubCommand),
     Version,
     Init,
     ClearUrlCache,
@@ -44,6 +45,20 @@ pub struct InstallUrlCommand {
 pub struct UninstallCommand {
     pub binary_name: BinaryName,
     pub version: String,
+}
+
+pub enum RegistrySubCommand {
+    Add(RegistryAddCommand),
+    Remove(RegistryRemoveCommand),
+    List,
+}
+
+pub struct RegistryAddCommand {
+    pub url: String,
+}
+
+pub struct RegistryRemoveCommand {
+    pub url: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -97,6 +112,23 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         SubCommand::Init
     } else if matches.is_present("clear-url-cache") {
         SubCommand::ClearUrlCache
+    } else if matches.is_present("registry") {
+        let registry_matches = matches.subcommand_matches("registry").unwrap();
+        if registry_matches.is_present("add") {
+            let add_matches = registry_matches.subcommand_matches("add").unwrap();
+            SubCommand::Registry(RegistrySubCommand::Add(RegistryAddCommand {
+                url: add_matches.value_of("url").map(String::from).unwrap(),
+            }))
+        } else if registry_matches.is_present("remove") {
+            let remove_matches = registry_matches.subcommand_matches("remove").unwrap();
+            SubCommand::Registry(RegistrySubCommand::Remove(RegistryRemoveCommand {
+                url: remove_matches.value_of("url").map(String::from).unwrap(),
+            }))
+        } else if registry_matches.is_present("list") {
+            SubCommand::Registry(RegistrySubCommand::List)
+        } else {
+            return err!("Unknown registry command.");
+        }
     } else {
         SubCommand::Help({
             let mut text = Vec::new();
@@ -221,6 +253,34 @@ ARGS:
                 ),
         )
         .subcommand(SubCommand::with_name("clear-url-cache").about("Clears the cache of downloaded urls. Does not remove any installed binaries."))
+        .subcommand(
+            SubCommand::with_name("registry")
+                .about("Commands related to storing urls to binary version registries.")
+                .subcommand(
+                    SubCommand::with_name("add")
+                        .about("Add a url to a registry.")
+                        .arg(
+                            Arg::with_name("url")
+                                .help("The url of the binary registry.")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("remove")
+                        .about("Remove a url from the registry.")
+                        .arg(
+                            Arg::with_name("url")
+                                .help("The url of the binary registry.")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("list")
+                        .about("List all the urls in the registry.")
+                )
+        )
         .arg(
             Arg::with_name("version")
                 .short("v")

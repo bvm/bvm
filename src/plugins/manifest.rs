@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{BinaryName, CommandName};
+use crate::types::{BinaryFullName, BinaryName, CommandName};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -55,10 +55,18 @@ impl BinaryManifestItem {
         BinaryName::new(Some(self.owner.clone()), self.name.clone())
     }
 
+    pub fn get_binary_full_name(&self) -> BinaryFullName {
+        BinaryFullName {
+            owner: self.owner.clone(),
+            name: self.name.clone(),
+        }
+    }
+
     pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
-        let self_full_name = format!("{}/{}", self.owner, self.name);
-        let other_full_name = format!("{}/{}", other.owner, other.name);
-        let name_ordering = self_full_name.partial_cmp(&other_full_name).unwrap();
+        // todo: improve inefficiencies here
+        let self_full_name = self.get_binary_full_name();
+        let other_full_name = other.get_binary_full_name();
+        let name_ordering = self_full_name.compare(&other_full_name);
         match name_ordering {
             Ordering::Equal => self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap(),
             _ => name_ordering,
@@ -136,12 +144,33 @@ impl GlobalVersionsMap {
 }
 
 impl PluginsManifest {
-    pub(super) fn new() -> PluginsManifest {
+    fn new() -> PluginsManifest {
         PluginsManifest {
             global_versions: GlobalVersionsMap(HashMap::new()),
             binaries: HashMap::new(),
             urls_to_identifier: HashMap::new(),
         }
+    }
+
+    pub fn load(environment: &impl Environment) -> Result<PluginsManifest, ErrBox> {
+        let file_path = get_manifest_file_path(environment)?;
+        match environment.read_file_text(&file_path) {
+            Ok(text) => match serde_json::from_str(&text) {
+                Ok(manifest) => Ok(manifest),
+                Err(err) => {
+                    environment.log_error(&format!("Error deserializing plugins manifest: {}", err));
+                    Ok(PluginsManifest::new())
+                }
+            },
+            Err(_) => Ok(PluginsManifest::new()),
+        }
+    }
+
+    pub fn save(&self, environment: &impl Environment) -> Result<(), ErrBox> {
+        let file_path = get_manifest_file_path(environment)?;
+        let serialized_manifest = serde_json::to_string(&self)?;
+        environment.write_file_text(&file_path, &serialized_manifest)?;
+        Ok(())
     }
 
     // url to identifier
@@ -297,27 +326,6 @@ impl PluginsManifest {
         }
         result
     }
-}
-
-pub fn read_manifest(environment: &impl Environment) -> Result<PluginsManifest, ErrBox> {
-    let file_path = get_manifest_file_path(environment)?;
-    match environment.read_file_text(&file_path) {
-        Ok(text) => match serde_json::from_str(&text) {
-            Ok(manifest) => Ok(manifest),
-            Err(err) => {
-                environment.log_error(&format!("Error deserializing cache manifest, but ignoring: {}", err));
-                Ok(PluginsManifest::new())
-            }
-        },
-        Err(_) => Ok(PluginsManifest::new()),
-    }
-}
-
-pub fn write_manifest(environment: &impl Environment, manifest: &PluginsManifest) -> Result<(), ErrBox> {
-    let file_path = get_manifest_file_path(environment)?;
-    let serialized_manifest = serde_json::to_string(&manifest)?;
-    environment.write_file_text(&file_path, &serialized_manifest)?;
-    Ok(())
 }
 
 fn get_manifest_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {

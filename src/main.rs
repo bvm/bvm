@@ -7,6 +7,7 @@ mod environment;
 mod arg_parser;
 mod configuration;
 mod plugins;
+mod registry;
 mod utils;
 
 use std::path::PathBuf;
@@ -47,6 +48,7 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::List => handle_list_command(environment)?,
         SubCommand::Init => handle_init_command(environment)?,
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
+        SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
     }
 
     Ok(())
@@ -56,7 +58,7 @@ fn handle_resolve_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     resolve_command: ResolveCommand,
 ) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::read_manifest(environment)?;
+    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let command_name = CommandName::from_string(resolve_command.binary_name);
     let info = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?;
     let executable_path = if let Some(info) = info {
@@ -90,7 +92,7 @@ async fn handle_install_command<TEnvironment: Environment>(
 ) -> Result<(), ErrBox> {
     let config_file = get_config_file_or_error(environment)?;
     let shim_dir = utils::get_shim_dir(environment)?;
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
 
     if let Some(pre_install) = &config_file.pre_install {
         environment.run_shell_command(&environment.cwd()?, pre_install)?;
@@ -106,7 +108,7 @@ async fn handle_install_command<TEnvironment: Environment>(
             for command_name in binary_item.get_command_names() {
                 set_global_binary_if_not_set(environment, &mut plugin_manifest, &identifier, &command_name)?;
             }
-            plugins::write_manifest(environment, &plugin_manifest)?; // write for every setup plugin in case a further one fails
+            plugin_manifest.save(environment)?; // write for every setup plugin in case a further one fails
         }
     }
 
@@ -119,7 +121,7 @@ async fn handle_install_command<TEnvironment: Environment>(
                     .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
             }
         }
-        plugins::write_manifest(environment, &plugin_manifest)?;
+        plugin_manifest.save(environment)?;
     }
 
     if let Some(post_install) = &config_file.post_install {
@@ -134,7 +136,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
     command: InstallUrlCommand,
 ) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment)?;
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let install_action = get_url_install_action(environment, &mut plugin_manifest, &command.url, command.force).await?;
 
     match install_action {
@@ -145,7 +147,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
             let previous_global_command_names = {
                 let previous_global_command_names = plugin_manifest.get_global_command_names(&identifier);
                 plugin_manifest.remove_binary(&identifier);
-                plugins::write_manifest(environment, &plugin_manifest)?;
+                plugin_manifest.save(environment)?;
                 // check if this is the last binary with this name. If so, delete the shim
                 for command_name in previous_global_command_names.iter() {
                     if !plugin_manifest.has_binary_with_command(&command_name) {
@@ -203,7 +205,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
         }
     }
 
-    plugins::write_manifest(environment, &plugin_manifest)?;
+    plugin_manifest.save(environment)?;
 
     Ok(())
 }
@@ -235,7 +237,7 @@ fn handle_uninstall_command<TEnvironment: Environment>(
     uninstall_command: UninstallCommand,
 ) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment)?;
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let binary = get_binary_with_name_and_version(
         &plugin_manifest,
         &uninstall_command.binary_name,
@@ -247,7 +249,7 @@ fn handle_uninstall_command<TEnvironment: Environment>(
 
     // remove the plugin from the manifest first
     plugin_manifest.remove_binary(&binary_identifier);
-    plugins::write_manifest(environment, &plugin_manifest)?;
+    plugin_manifest.save(environment)?;
 
     // check if this is the last binary using these command names. If so, delete the shim
     for command_name in command_names.iter() {
@@ -275,7 +277,7 @@ fn handle_uninstall_command<TEnvironment: Environment>(
 
 fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     // use all the binaries in the current configuration file
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let config_file = get_config_file_or_error(environment)?;
 
     for entry in config_file.binaries.iter() {
@@ -297,7 +299,7 @@ fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> 
         }
     }
 
-    plugins::write_manifest(environment, &plugin_manifest)?;
+    plugin_manifest.save(environment)?;
     Ok(())
 }
 
@@ -305,7 +307,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     use_command: UseBinaryCommand,
 ) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let command_names = if use_command.version.to_lowercase() == "path" {
         let global_location =
             plugin_manifest.get_global_binary_location(&CommandName::from_string(use_command.binary_name.name.clone()));
@@ -350,13 +352,13 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             environment.log_error(&format!("Updated globally used version of '{}', but local version remains using version specified in the current working directory's config file. If you wish to change the local version, then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file).", command_name.display()));
         }
     }
-    plugins::write_manifest(environment, &plugin_manifest)?;
+    plugin_manifest.save(environment)?;
 
     Ok(())
 }
 
 fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::read_manifest(environment)?;
+    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let mut binaries = plugin_manifest.binaries().collect::<Vec<_>>();
     if !binaries.is_empty() {
         binaries.sort_by(|a, b| a.compare(b));
@@ -385,9 +387,55 @@ fn handle_init_command<TEnvironment: Environment>(environment: &TEnvironment) ->
 }
 
 fn handle_clear_url_cache<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::read_manifest(environment)?;
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     plugin_manifest.clear_cached_urls();
-    plugins::write_manifest(environment, &plugin_manifest)?;
+    plugin_manifest.save(environment)?;
+    Ok(())
+}
+
+async fn handle_registry_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    sub_command: RegistrySubCommand,
+) -> Result<(), ErrBox> {
+    match sub_command {
+        RegistrySubCommand::Add(command) => handle_registry_add_command(environment, command).await,
+        RegistrySubCommand::Remove(command) => handle_registry_remove_command(environment, command),
+        RegistrySubCommand::List => handle_registry_list_command(environment),
+    }
+}
+
+async fn handle_registry_add_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: RegistryAddCommand,
+) -> Result<(), ErrBox> {
+    let mut registry = registry::Registry::load(environment)?;
+    let registry_file = registry::download_registry_file(environment, &command.url).await?;
+    registry.add_url(&registry_file.get_binary_full_name(), command.url);
+    registry.save(environment)?;
+    Ok(())
+}
+
+fn handle_registry_remove_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: RegistryRemoveCommand,
+) -> Result<(), ErrBox> {
+    let mut registry = registry::Registry::load(environment)?;
+    registry.remove_url(&command.url);
+    registry.save(environment)?;
+    Ok(())
+}
+
+fn handle_registry_list_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+    let registry = registry::Registry::load(environment)?;
+    let mut items = registry.items();
+
+    items.sort_by(|a, b| a.compare(b));
+
+    let lines = items.into_iter().map(|item| item.display()).collect::<Vec<_>>();
+
+    if !lines.is_empty() {
+        environment.log(&lines.join("\n"));
+    }
     Ok(())
 }
 
@@ -436,7 +484,7 @@ async fn get_url_install_action<TEnvironment: Environment>(
         checksum_url: &ChecksumPathOrUrl,
     ) -> Result<plugins::PluginFile, ErrBox> {
         let plugin_file = plugins::get_and_associate_plugin_file(environment, plugin_manifest, &checksum_url).await?;
-        plugins::write_manifest(environment, &plugin_manifest)?;
+        plugin_manifest.save(environment)?;
         Ok(plugin_file)
     }
 }
@@ -623,6 +671,7 @@ mod test {
     use std::io::Write;
     use std::path::PathBuf;
 
+    use super::registry;
     use super::run;
     use crate::environment::{Environment, TestEnvironment};
     use dprint_cli_core::types::ErrBox;
@@ -1173,6 +1222,93 @@ mod test {
         assert_resolves!(environment, binary_path);
     }
 
+    #[tokio::test]
+    async fn registry_add_remove_list_command_path() {
+        let environment = TestEnvironment::new();
+        create_remote_registry_file(
+            &environment,
+            "http://localhost/registry.json",
+            "owner",
+            "name",
+            vec![registry::RegistryVersionInfo {
+                version: "1.0.0".to_string(),
+                url: "https://localhost/test.json".to_string(),
+            }],
+        );
+        create_remote_registry_file(
+            &environment,
+            "http://localhost/registry2.json",
+            "owner",
+            "name",
+            vec![registry::RegistryVersionInfo {
+                version: "2.0.0".to_string(),
+                url: "https://localhost/test.json".to_string(),
+            }],
+        );
+        create_remote_registry_file(
+            &environment,
+            "http://localhost/registry3.json",
+            "owner2",
+            "name2",
+            vec![registry::RegistryVersionInfo {
+                version: "1.0.0".to_string(),
+                url: "https://localhost/test.json".to_string(),
+            }],
+        );
+
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap();
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap(); // add twice
+        run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
+            .await
+            .unwrap();
+        run_cli(vec!["registry", "add", "http://localhost/registry3.json"], &environment)
+            .await
+            .unwrap();
+        run_cli(vec!["registry", "list"], &environment).await.unwrap();
+        let logged_messages = environment.take_logged_messages();
+        assert_eq!(logged_messages, vec!["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
+        run_cli(
+            vec!["registry", "remove", "http://localhost/registry.json"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        run_cli(
+            vec!["registry", "remove", "http://localhost/registry.json"],
+            &environment,
+        )
+        .await
+        .unwrap(); // remove twice should silently ignore
+        run_cli(vec!["registry", "list"], &environment).await.unwrap();
+        let logged_messages = environment.take_logged_messages();
+        assert_eq!(
+            logged_messages,
+            vec!["owner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]
+        );
+        run_cli(
+            vec!["registry", "remove", "http://localhost/registry2.json"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        run_cli(vec!["registry", "list"], &environment).await.unwrap();
+        let logged_messages = environment.take_logged_messages();
+        assert_eq!(logged_messages, vec!["owner2/name2 - http://localhost/registry3.json"]);
+        run_cli(
+            vec!["registry", "remove", "http://localhost/registry3.json"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        run_cli(vec!["registry", "list"], &environment).await.unwrap();
+        let logged_messages = environment.take_logged_messages();
+        assert_eq!(logged_messages.len(), 0);
+    }
+
     fn add_binary_to_path(environment: &TestEnvironment, name: &str) -> String {
         let path_dir = PathBuf::from("/path-dir");
         if !environment.get_system_path_dirs().contains(&path_dir) {
@@ -1478,6 +1614,31 @@ mod test {
         let tar_gz_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
         environment.add_remote_file(url, Bytes::from(result));
         tar_gz_file_checksum
+    }
+
+    fn create_remote_registry_file(
+        environment: &TestEnvironment,
+        url: &str,
+        owner: &str,
+        name: &str,
+        items: Vec<registry::RegistryVersionInfo>,
+    ) {
+        let file_text = format!(
+            r#"{{
+    "schemaVersion": 1,
+    "owner": "{}",
+    "name": "{}",
+    "versions": [{}]
+}}"#,
+            owner,
+            name,
+            items
+                .into_iter()
+                .map(|item| format!(r#"{{"version": "{}", "url": "{}"}}"#, item.version, item.url))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        environment.add_remote_file(url, Bytes::from(file_text));
     }
 
     async fn run_cli(args: Vec<&str>, environment: &TestEnvironment) -> Result<(), ErrBox> {

@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct BinaryName {
     pub owner: Option<String>,
@@ -35,6 +37,28 @@ impl BinaryName {
         } else {
             self.name.clone()
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct BinaryFullName {
+    pub owner: String,
+    pub name: String,
+}
+
+impl BinaryFullName {
+    pub fn new(owner: String, name: String) -> BinaryFullName {
+        BinaryFullName { owner, name }
+    }
+
+    pub fn compare(&self, other: &BinaryFullName) -> Ordering {
+        let self_full_name = format!("{}/{}", self.owner, self.name);
+        let other_full_name = format!("{}/{}", other.owner, other.name);
+        self_full_name.partial_cmp(&other_full_name).unwrap()
+    }
+
+    pub fn display(&self) -> String {
+        format!("{}/{}", self.owner, self.name)
     }
 }
 

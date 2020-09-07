@@ -1,0 +1,60 @@
+use dprint_cli_core::types::ErrBox;
+use serde::{self, Deserialize, Serialize};
+
+use crate::environment::Environment;
+use crate::types::BinaryFullName;
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryFile {
+    pub schema_version: u32,
+    pub name: String,
+    pub owner: String,
+    pub versions: Vec<RegistryVersionInfo>,
+}
+
+impl RegistryFile {
+    pub fn get_binary_full_name(&self) -> BinaryFullName {
+        BinaryFullName {
+            owner: self.owner.clone(),
+            name: self.name.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryVersionInfo {
+    pub version: String,
+    pub url: String,
+}
+
+pub async fn download_registry_file<'a, TEnvironment: Environment>(
+    environment: &TEnvironment,
+    url: &str,
+) -> Result<RegistryFile, ErrBox> {
+    let plugin_file_bytes = environment.download_file(&url).await?;
+
+    read_registry_file(&plugin_file_bytes)
+}
+
+fn read_registry_file(file_bytes: &[u8]) -> Result<RegistryFile, ErrBox> {
+    // todo: don't use serde because this should transform up to the latest schema version
+    match serde_json::from_slice::<RegistryFile>(&file_bytes) {
+        Ok(file) => {
+            if file.schema_version != 1 {
+                return err!(
+                    "Expected schema version 1, but found {}. This may indicate you need to upgrade your CLI version to use this registry file.",
+                    file.schema_version
+                );
+            }
+
+            if file.name.contains("/") || file.owner.contains("/") {
+                return err!("The binary owner and name may not contain a forward slash.");
+            }
+
+            Ok(file)
+        }
+        Err(err) => err!("Error deserializing registry file. {}", err.to_string()),
+    }
+}
