@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -145,16 +146,16 @@ impl PluginsManifest {
 
     // url to identifier
 
-    pub fn get_identifier_from_url(&self, url: &str) -> Option<&BinaryIdentifier> {
-        self.urls_to_identifier.get(url)
+    pub fn get_identifier_from_url(&self, url: &ChecksumPathOrUrl) -> Option<&BinaryIdentifier> {
+        self.urls_to_identifier.get(&url.path_or_url)
     }
 
-    pub fn set_identifier_for_url(&mut self, url: String, identifier: BinaryIdentifier) {
-        self.urls_to_identifier.insert(url, identifier);
+    pub fn set_identifier_for_url(&mut self, url: &ChecksumPathOrUrl, identifier: BinaryIdentifier) {
+        self.urls_to_identifier.insert(url.path_or_url.clone(), identifier);
     }
 
-    pub fn remove_url(&mut self, url: &str) {
-        self.urls_to_identifier.remove(url);
+    pub fn clear_cached_urls(&mut self) {
+        self.urls_to_identifier.clear();
     }
 
     // binary
@@ -165,6 +166,10 @@ impl PluginsManifest {
 
     pub fn get_binary(&self, identifier: &BinaryIdentifier) -> Option<&BinaryManifestItem> {
         self.binaries.get(identifier)
+    }
+
+    pub fn has_binary(&self, identifier: &BinaryIdentifier) -> bool {
+        self.get_binary(identifier).is_some()
     }
 
     pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) {

@@ -142,6 +142,10 @@ dprint/dprint 9.0.1
 nodejs/node 14.9.0
 ```
 
+### `bvm clear-url-cache`
+
+Clears any cached urls.
+
 ## Redirect Service
 
 The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
@@ -200,10 +204,6 @@ Other examples:
 - Multiple commands: [https://bvm.land/node/14.9.0.json](https://bvm.land/node/14.9.0.json)
 
 ## Future improvements
-
-Low effort:
-
-1. `bvm clear-url-cache` - Clear the url caches, but not the binary caches.
 
 Medium effort:
 

@@ -16,14 +16,40 @@ pub fn get_plugin_dir(
     Ok(data_dir.join("binaries").join(owner).join(name).join(version))
 }
 
-pub async fn setup_plugin<'a, TEnvironment: Environment>(
+pub async fn get_and_associate_plugin_file<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
     plugin_manifest: &'a mut PluginsManifest,
     checksum_url: &ChecksumPathOrUrl,
+) -> Result<PluginFile, ErrBox> {
+    let plugin_file_bytes = environment.download_file(&checksum_url.path_or_url).await?;
+
+    if let Some(checksum) = &checksum_url.checksum {
+        verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
+    }
+
+    let plugin_file = read_plugin_file(&plugin_file_bytes)?;
+
+    // ensure the plugin version can parse to a semver
+    if let Err(err) = semver::Version::parse(&plugin_file.version) {
+        return err!(
+            "The version found in the binary manifest file was invalid. {}",
+            err.to_string()
+        );
+    }
+
+    // associate the url to the binary identifier
+    let identifier = plugin_file.get_identifier();
+    plugin_manifest.set_identifier_for_url(&checksum_url, identifier);
+
+    Ok(plugin_file)
+}
+
+pub async fn setup_plugin<'a, TEnvironment: Environment>(
+    environment: &TEnvironment,
+    plugin_manifest: &'a mut PluginsManifest,
+    plugin_file: &PluginFile,
     bin_dir: &Path,
 ) -> Result<&'a BinaryManifestItem, ErrBox> {
-    let plugin_file = get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?;
-
     // download the url's bytes
     let url = plugin_file.get_url()?;
     let download_type = plugin_file.get_download_type()?;
@@ -105,34 +131,6 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     plugin_manifest.add_binary(item);
 
     Ok(plugin_manifest.get_binary(&identifier).unwrap())
-}
-
-async fn get_and_associate_plugin_file(
-    environment: &impl Environment,
-    plugin_manifest: &mut PluginsManifest,
-    checksum_url: &ChecksumPathOrUrl,
-) -> Result<PluginFile, ErrBox> {
-    let plugin_file_bytes = environment.download_file(&checksum_url.path_or_url).await?;
-
-    if let Some(checksum) = &checksum_url.checksum {
-        verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
-    }
-
-    let plugin_file = read_plugin_file(&plugin_file_bytes)?;
-
-    // ensure the plugin version can parse to a semver
-    if let Err(err) = semver::Version::parse(&plugin_file.version) {
-        return err!(
-            "The version found in the binary manifest file was invalid. {}",
-            err.to_string()
-        );
-    }
-
-    // associate the url to the binary identifier
-    let identifier = plugin_file.get_identifier();
-    plugin_manifest.set_identifier_for_url(checksum_url.path_or_url.clone(), identifier);
-
-    Ok(plugin_file)
 }
 
 fn verify_commands(commands: &Vec<PlatformInfoCommand>) -> Result<(), ErrBox> {

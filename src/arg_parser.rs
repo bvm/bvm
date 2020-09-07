@@ -1,3 +1,4 @@
+use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
 use super::types::BinaryName;
@@ -6,7 +7,6 @@ pub struct CliArgs {
     pub sub_command: SubCommand,
 }
 
-#[derive(Debug, PartialEq)]
 pub enum SubCommand {
     Resolve(ResolveCommand),
     Use,
@@ -17,34 +17,30 @@ pub enum SubCommand {
     Uninstall(UninstallCommand),
     Version,
     Init,
+    ClearUrlCache,
     Help(String),
 }
 
-#[derive(Debug, PartialEq)]
 pub struct ResolveCommand {
     pub binary_name: String,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct UseBinaryCommand {
     pub binary_name: BinaryName,
     pub version: String,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct InstallCommand {
     pub use_command: bool,
     pub force: bool,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct InstallUrlCommand {
-    pub url: String,
+    pub url: ChecksumPathOrUrl,
     pub use_command: bool,
     pub force: bool,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct UninstallCommand {
     pub binary_name: BinaryName,
     pub version: String,
@@ -70,7 +66,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let force = install_matches.is_present("force");
         if let Some(url) = install_matches.value_of("url").map(String::from) {
             SubCommand::InstallUrl(InstallUrlCommand {
-                url,
+                url: parse_checksum_path_or_url(&url),
                 use_command,
                 force,
             })
@@ -99,6 +95,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         SubCommand::List
     } else if matches.is_present("init") {
         SubCommand::Init
+    } else if matches.is_present("clear-url-cache") {
+        SubCommand::ClearUrlCache
     } else {
         SubCommand::Help({
             let mut text = Vec::new();
@@ -222,6 +220,7 @@ ARGS:
                         .required(true),
                 ),
         )
+        .subcommand(SubCommand::with_name("clear-url-cache").about("Clears the cache of downloaded urls. Does not remove any installed binaries."))
         .arg(
             Arg::with_name("version")
                 .short("v")
