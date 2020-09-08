@@ -144,6 +144,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         } else if registry_matches.is_present("list") {
             SubCommand::Registry(RegistrySubCommand::List)
         } else {
+            // toodo: improve this because it happens
             return err!("Unknown registry command.");
         }
     } else {

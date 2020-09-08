@@ -148,23 +148,47 @@ Clears any cached urls.
 
 ## Registry commands
 
-No registries currently exist so there's not a way to test this out. I'll add an example soon.
+Adding a registry allows you to more easily install copies of a binary without dealing with urls.
 
 ### `bvm registry add [url]`
 
 Adds the registry at the specified url to the local CLI.
 
-### `bvm registry removes [url]`
+```
+# Examples
+bvm registry add https://bvm.land/deno/registry.json
+bvm registry add https://bvm.land/node/registry.json
+```
+
+### `bvm registry remove [url]`
 
 Removes the registry at the specified url from the local CLI.
+
+```
+# Example
+bvm registry remove https://bvm.land/node/registry.json
+```
 
 ### `bvm registry list`
 
 Lists the current registries
 
+Example output:
+
+```
+denoland/deno - https://bvm.land/deno/registry.json
+nodejs/node - https://bvm.land/node/registry.json
+```
+
 ### `bvm install [binary-name or owner-name/binary-name] [version]`
 
 Installs the specified binary and version based on the first matching version in the CLI's registries.
+
+```
+# Examples
+bvm install --use deno 1.3.3
+bvm install node 14.9.0
+```
 
 ## Redirect Service
 
@@ -229,6 +253,9 @@ Low effort:
 
 1. `bvm install <binary name>` - Upgrade to the latest version based on the registries.
 2. Ability to list versions of a binary in the registries.
+3. List 10 most similar versions found when calling `bvm install <binary-name> <version>`
+4. Add warning when using `bvm install --use` and binary is in config file similar to what happens with `bvm use` (should use same code).
+5. Ability to get url of version from registry.
 
 Medium effort:
 
