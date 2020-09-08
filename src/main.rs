@@ -1310,7 +1310,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum: "".to_string(),
-                url: "https://localhost/test.json".to_string(),
+                path: "https://localhost/test.json".to_string(),
             }],
         );
         create_remote_registry_file(
@@ -1321,7 +1321,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "2.0.0".to_string(),
                 checksum: "".to_string(),
-                url: "https://localhost/test.json".to_string(),
+                path: "https://localhost/test.json".to_string(),
             }],
         );
         create_remote_registry_file(
@@ -1332,7 +1332,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum: "".to_string(),
-                url: "https://localhost/test.json".to_string(),
+                path: "https://localhost/test.json".to_string(),
             }],
         );
 
@@ -1402,7 +1402,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum,
-                url: "http://localhost/package.json".to_string(),
+                path: "http://localhost/package.json".to_string(),
             }],
         );
 
@@ -1428,7 +1428,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum: "wrong-checksum".to_string(),
-                url: "http://localhost/package.json".to_string(),
+                path: "http://localhost/package.json".to_string(),
             }],
         );
 
@@ -1475,7 +1475,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum,
-                url: "http://localhost/package.json".to_string(),
+                path: "http://localhost/package.json".to_string(),
             }],
         );
 
@@ -1494,7 +1494,7 @@ mod test {
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".to_string(),
                 checksum,
-                url: "http://localhost/package2.json".to_string(),
+                path: "http://localhost/package2.json".to_string(),
             }],
         );
 
@@ -1596,7 +1596,7 @@ mod test {
     "name": "{}",
     "version": "{}",
     "windows-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1605,7 +1605,7 @@ mod test {
         }}]
     }},
     "linux-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1614,7 +1614,7 @@ mod test {
         }}]
     }},
     "darwin-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1669,7 +1669,7 @@ mod test {
     "name": "{}",
     "version": "{}",
     "windows-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1681,7 +1681,7 @@ mod test {
         }}]
     }},
     "linux-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1693,7 +1693,7 @@ mod test {
         }}]
     }},
     "darwin-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "zip",
         "checksum": "{}",
         "commands": [{{
@@ -1763,7 +1763,7 @@ mod test {
     "name": "{}",
     "version": "{}",
     "windows-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "tar.gz",
         "checksum": "{}",
         "commands": [{{
@@ -1772,7 +1772,7 @@ mod test {
         }}]
     }},
     "linux-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "tar.gz",
         "checksum": "{}",
         "commands": [{{
@@ -1781,7 +1781,7 @@ mod test {
         }}]
     }},
     "darwin-x86_64": {{
-        "url": "{}",
+        "path": "{}",
         "type": "tar.gz",
         "checksum": "{}",
         "commands": [{{
@@ -1847,8 +1847,8 @@ mod test {
             items
                 .into_iter()
                 .map(|item| format!(
-                    r#"{{"version": "{}", "url": "{}", "checksum": "{}"}}"#,
-                    item.version, item.url, item.checksum
+                    r#"{{"version": "{}", "path": "{}", "checksum": "{}"}}"#,
+                    item.version, item.path, item.checksum
                 ))
                 .collect::<Vec<_>>()
                 .join(",")

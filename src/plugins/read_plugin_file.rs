@@ -22,7 +22,7 @@ pub struct PluginFile {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInfo {
-    url: String,
+    path: String,
     checksum: String,
     #[serde(rename = "type")]
     download_type: String,
@@ -56,7 +56,7 @@ impl PluginFile {
     }
 
     pub fn get_url(&self) -> Result<&String, ErrBox> {
-        Ok(&self.get_platform_info()?.url)
+        Ok(&self.get_platform_info()?.path)
     }
 
     pub fn get_url_checksum(&self) -> Result<&String, ErrBox> {

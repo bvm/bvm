@@ -24,14 +24,14 @@ impl RegistryFile {
 #[serde(rename_all = "camelCase")]
 pub struct RegistryVersionInfo {
     pub version: String,
-    pub url: String,
+    pub path: String,
     pub checksum: String,
 }
 
 impl RegistryVersionInfo {
     pub fn get_url(&self) -> ChecksumPathOrUrl {
         ChecksumPathOrUrl {
-            path_or_url: self.url.clone(),
+            path_or_url: self.path.clone(),
             checksum: Some(self.checksum.clone()),
         }
     }

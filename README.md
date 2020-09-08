@@ -210,7 +210,7 @@ At the moment, it looks like this:
   "owner": "denoland",
   "version": "1.3.1",
   "windows-x86_64": {
-    "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
     "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",
     "commands": [{
@@ -221,7 +221,7 @@ At the moment, it looks like this:
     "postInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
   "linux-x86_64": {
-    "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
     "type": "zip",
     "checksum": "ef3a8740bdceab105808c91cfb918c883a23defb6719b9c511e2be30d5bfdc01",
     "commands": [{
@@ -230,7 +230,7 @@ At the moment, it looks like this:
     }]
   },
   "darwin-x86_64": {
-    "url": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
     "type": "zip",
     "checksum": "b1bc5de79b71c3f33d0151486249d088f5f5604126812dc55b1dd21b28704d8a",
     "commands": [{
@@ -287,6 +287,10 @@ Medium effort:
 Large effort:
 
 1. Support downstream binary dependencies (should also support a range of dependencies).
+
+Far future:
+
+1. Support breaking up package registries into multiple files (ex. it would give a semver range for a file internally). This would only be useful for extremely large files.
 
 Probably unnecessary complexity:
 
