@@ -1,6 +1,7 @@
 use dprint_cli_core::types::ErrBox;
 use serde::{self, Deserialize, Serialize};
 
+use crate::types::BinaryName;
 use crate::CommandName;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -50,6 +51,10 @@ pub enum DownloadType {
 }
 
 impl PluginFile {
+    pub fn get_binary_name(&self) -> BinaryName {
+        BinaryName::new(self.owner.clone(), self.name.clone())
+    }
+
     pub fn get_url(&self) -> Result<&String, ErrBox> {
         Ok(&self.get_platform_info()?.url)
     }
@@ -93,7 +98,8 @@ impl PluginFile {
     }
 
     pub fn get_identifier(&self) -> super::BinaryIdentifier {
-        super::BinaryIdentifier::new(&self.owner, &self.name, &self.version)
+        let binary_name = BinaryName::new(self.owner.clone(), self.name.clone());
+        super::BinaryIdentifier::new(&binary_name, &self.version)
     }
 }
 

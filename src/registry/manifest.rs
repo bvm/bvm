@@ -5,17 +5,17 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::BinaryFullName;
+use crate::types::{BinaryName, BinarySelector};
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Registry {
     /// Long name (ex. "denoland/deno") to urls.
-    name_to_urls: HashMap<String, Vec<String>>,
+    name_to_urls: HashMap<BinaryName, Vec<String>>,
 }
 
 pub struct RegistryItem {
-    name: BinaryFullName,
+    name: BinaryName,
     url: String,
 }
 
@@ -31,6 +31,11 @@ impl RegistryItem {
     pub fn display(&self) -> String {
         format!("{} - {}", self.name.display(), self.url)
     }
+}
+
+pub struct UrlResult {
+    pub owner: String,
+    pub url: String,
 }
 
 impl Registry {
@@ -61,18 +66,34 @@ impl Registry {
         Ok(())
     }
 
-    pub fn add_url(&mut self, name: &BinaryFullName, url: String) {
-        let key = get_full_name_key(name);
-        let mut items = self.name_to_urls.remove(&key).unwrap_or(Vec::new());
+    pub fn get_urls(&self, selector: &BinarySelector) -> Vec<UrlResult> {
+        let mut result = Vec::new();
+
+        for (url_name, urls) in self.name_to_urls.iter() {
+            if selector.is_match(url_name) {
+                for url in urls.iter() {
+                    result.push(UrlResult {
+                        owner: url_name.owner.clone(),
+                        url: url.clone(),
+                    });
+                }
+            }
+        }
+
+        result
+    }
+
+    pub fn add_url(&mut self, name: BinaryName, url: String) {
+        let mut items = self.name_to_urls.remove(&name).unwrap_or(Vec::new());
         if !items.contains(&url) {
             items.push(url);
         }
-        self.name_to_urls.insert(key, items);
+        self.name_to_urls.insert(name, items);
     }
 
     pub fn remove_url(&mut self, url: &str) {
         let mut keys_to_remove = Vec::new();
-        for (key, urls) in self.name_to_urls.iter_mut() {
+        for (name, urls) in self.name_to_urls.iter_mut() {
             let mut indexes_to_remove = Vec::new();
             for (i, item) in urls.iter().enumerate() {
                 if item == url {
@@ -85,7 +106,7 @@ impl Registry {
             }
 
             if urls.is_empty() {
-                keys_to_remove.push(key.clone());
+                keys_to_remove.push(name.clone());
             }
         }
 
@@ -96,25 +117,16 @@ impl Registry {
 
     pub fn items(&self) -> Vec<RegistryItem> {
         let mut results = Vec::new();
-        for (key, urls) in self.name_to_urls.iter() {
+        for (name, urls) in self.name_to_urls.iter() {
             for url in urls.iter() {
                 results.push(RegistryItem {
-                    name: get_full_name_from_key(key),
+                    name: name.clone(),
                     url: url.clone(),
                 });
             }
         }
         results
     }
-}
-
-fn get_full_name_key(name: &BinaryFullName) -> String {
-    format!("{}/{}", name.owner, name.name)
-}
-
-fn get_full_name_from_key(key: &str) -> BinaryFullName {
-    let items = key.split("/").collect::<Vec<_>>();
-    BinaryFullName::new(items[0].to_string(), items[1].to_string())
 }
 
 fn get_registry_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {

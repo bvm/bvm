@@ -125,7 +125,7 @@ checksum = "2e8c087f005730276d1096a652e92a8bacee2e2472bcc9715a74d2bec38b5820"
 
 [[package]]
 name = "bvm"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "app_dirs2",
  "async-trait",
@@ -328,9 +328,9 @@ dependencies = [
 
 [[package]]
 name = "dprint-cli-core"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e7830205bdf9d67903b5b2d7c1ebf1438de612d61844e4fed840c4c04636e74"
+checksum = "0473b36a20875efc200b1bced1f09bd989ee2b3a4a93713c5be6992cf62b342c"
 dependencies = [
  "app_dirs2",
  "async-trait",

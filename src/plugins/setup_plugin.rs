@@ -4,16 +4,20 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::environment::Environment;
+use crate::types::BinaryName;
 use crate::utils;
 
 pub fn get_plugin_dir(
     enviroment: &impl Environment,
-    owner: &str,
-    name: &str,
+    binary_name: &BinaryName,
     version: &str,
 ) -> Result<PathBuf, ErrBox> {
     let data_dir = enviroment.get_user_data_dir()?;
-    Ok(data_dir.join("binaries").join(owner).join(name).join(version))
+    Ok(data_dir
+        .join("binaries")
+        .join(&binary_name.owner)
+        .join(binary_name.name.as_str())
+        .join(version))
 }
 
 pub async fn get_and_associate_plugin_file<'a, TEnvironment: Environment>(
@@ -57,8 +61,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
-    let plugin_cache_dir_path =
-        get_plugin_dir(environment, &plugin_file.owner, &plugin_file.name, &plugin_file.version)?;
+    let plugin_cache_dir_path = get_plugin_dir(environment, &plugin_file.get_binary_name(), &plugin_file.version)?;
     let _ignore = environment.remove_dir_all(&plugin_cache_dir_path);
     environment.create_dir_all(&plugin_cache_dir_path)?;
 
@@ -115,8 +118,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
 
     // add the plugin information to the manifest
     let item = BinaryManifestItem {
-        owner: plugin_file.owner.clone(),
-        name: plugin_file.name.clone(),
+        name: plugin_file.get_binary_name(),
         version: plugin_file.version.clone(),
         created_time: environment.get_time_secs(),
         commands: commands

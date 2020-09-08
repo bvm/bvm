@@ -1,24 +1,22 @@
+use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 use serde::{self, Deserialize, Serialize};
 
 use crate::environment::Environment;
-use crate::types::BinaryFullName;
+use crate::types::BinaryName;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryFile {
     pub schema_version: u32,
-    pub name: String,
-    pub owner: String,
+    name: String,
+    owner: String,
     pub versions: Vec<RegistryVersionInfo>,
 }
 
 impl RegistryFile {
-    pub fn get_binary_full_name(&self) -> BinaryFullName {
-        BinaryFullName {
-            owner: self.owner.clone(),
-            name: self.name.clone(),
-        }
+    pub fn get_binary_name(&self) -> BinaryName {
+        BinaryName::new(self.owner.clone(), self.name.clone())
     }
 }
 
@@ -27,6 +25,16 @@ impl RegistryFile {
 pub struct RegistryVersionInfo {
     pub version: String,
     pub url: String,
+    pub checksum: String,
+}
+
+impl RegistryVersionInfo {
+    pub fn get_url(&self) -> ChecksumPathOrUrl {
+        ChecksumPathOrUrl {
+            path_or_url: self.url.clone(),
+            checksum: Some(self.checksum.clone()),
+        }
+    }
 }
 
 pub async fn download_registry_file<'a, TEnvironment: Environment>(

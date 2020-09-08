@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{BinaryFullName, BinaryName, CommandName};
+use crate::types::{BinaryName, BinarySelector, CommandName};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -25,8 +25,7 @@ pub struct PluginsManifest {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
-    pub owner: String,
-    pub name: String,
+    pub name: BinaryName,
     pub version: String,
     /// Created time in *seconds* since epoch.
     pub created_time: u64,
@@ -35,7 +34,7 @@ pub struct BinaryManifestItem {
 
 impl BinaryManifestItem {
     pub fn get_identifier(&self) -> BinaryIdentifier {
-        BinaryIdentifier::new(&self.owner, &self.name, &self.version)
+        BinaryIdentifier::new(&self.name, &self.version)
     }
 
     pub fn get_sem_ver(&self) -> Version {
@@ -43,30 +42,16 @@ impl BinaryManifestItem {
         Version::parse(&self.version).unwrap()
     }
 
-    pub fn has_name(&self, name: &BinaryName) -> bool {
-        name.is_match(&self.owner, &self.name)
+    pub fn matches(&self, selector: &BinarySelector) -> bool {
+        selector.is_match(&self.name)
     }
 
     pub fn get_command_names(&self) -> Vec<CommandName> {
         self.commands.iter().map(|c| c.get_command_name()).collect()
     }
 
-    pub fn get_binary_name(&self) -> BinaryName {
-        BinaryName::new(Some(self.owner.clone()), self.name.clone())
-    }
-
-    pub fn get_binary_full_name(&self) -> BinaryFullName {
-        BinaryFullName {
-            owner: self.owner.clone(),
-            name: self.name.clone(),
-        }
-    }
-
     pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
-        // todo: improve inefficiencies here
-        let self_full_name = self.get_binary_full_name();
-        let other_full_name = other.get_binary_full_name();
-        let name_ordering = self_full_name.compare(&other_full_name);
+        let name_ordering = self.name.compare(&other.name);
         match name_ordering {
             Ordering::Equal => self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap(),
             _ => name_ordering,
@@ -93,8 +78,8 @@ impl BinaryManifestItemCommand {
 pub struct BinaryIdentifier(String);
 
 impl BinaryIdentifier {
-    pub fn new(owner: &str, name: &str, version: &str) -> Self {
-        BinaryIdentifier(format!("{}||{}||{}", owner, name, version))
+    pub fn new(name: &BinaryName, version: &str) -> Self {
+        BinaryIdentifier(format!("{}||{}||{}", name.owner, name.name.as_str(), version))
     }
 }
 
@@ -203,7 +188,7 @@ impl PluginsManifest {
 
     pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) {
         let binary_info = if let Some(item) = self.binaries.get(identifier) {
-            Some((item.get_binary_name(), item.get_command_names()))
+            Some((item.name.clone(), item.get_command_names()))
         } else {
             None
         };
@@ -222,9 +207,13 @@ impl PluginsManifest {
         }
     }
 
-    pub fn get_binaries_by_name_and_version(&self, name: &BinaryName, version: &str) -> Vec<&BinaryManifestItem> {
+    pub fn get_binaries_by_selector_and_version(
+        &self,
+        selector: &BinarySelector,
+        version: &str,
+    ) -> Vec<&BinaryManifestItem> {
         self.binaries()
-            .filter(|b| b.has_name(name) && b.version == version)
+            .filter(|b| b.matches(selector) && b.version == version)
             .collect()
     }
 
@@ -232,37 +221,37 @@ impl PluginsManifest {
         self.binaries.values()
     }
 
-    pub fn has_binary_with_name(&self, name: &BinaryName) -> bool {
-        self.binaries().any(|b| b.has_name(name))
+    pub fn has_binary_with_selector(&self, selector: &BinarySelector) -> bool {
+        self.binaries().any(|b| b.matches(selector))
     }
 
     pub fn has_binary_with_command(&self, name: &CommandName) -> bool {
-        self.binaries().any(|b| b.name == name.as_str())
+        self.binaries().any(|b| &b.name.name == name)
     }
 
-    pub fn binary_name_has_same_owner(&self, name: &BinaryName) -> bool {
+    pub fn command_name_has_same_owner(&self, command_name: &CommandName) -> bool {
         let binaries = self
             .binaries()
-            .filter(|b| b.name == name.name.as_str())
+            .filter(|b| &b.name.name == command_name)
             .collect::<Vec<_>>();
         if let Some(first_binary) = binaries.get(0) {
-            let first_owner = &first_binary.owner;
-            binaries.iter().all(|b| &b.owner == first_owner)
+            let first_owner = &first_binary.name.owner;
+            binaries.iter().all(|b| &b.name.owner == first_owner)
         } else {
             true
         }
     }
 
-    pub fn get_binaries_with_name(&self, name: &BinaryName) -> Vec<&BinaryManifestItem> {
-        self.binaries().filter(|b| b.has_name(name)).collect()
+    pub fn get_binaries_matching(&self, selector: &BinarySelector) -> Vec<&BinaryManifestItem> {
+        self.binaries().filter(|b| b.matches(selector)).collect()
     }
 
     pub fn get_binaries_with_command(&self, name: &CommandName) -> Vec<&BinaryManifestItem> {
-        self.binaries().filter(|b| b.name == name.as_str()).collect()
+        self.binaries().filter(|b| &b.name.name == name).collect()
     }
 
     pub fn get_latest_binary_with_name(&self, name: &BinaryName) -> Option<&BinaryManifestItem> {
-        let mut binaries = self.get_binaries_with_name(name);
+        let mut binaries = self.binaries().filter(|b| &b.name == name).collect::<Vec<_>>();
         binaries.sort_by(|a, b| a.compare(b));
         binaries.pop()
     }

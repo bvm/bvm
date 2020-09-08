@@ -146,6 +146,26 @@ nodejs/node 14.9.0
 
 Clears any cached urls.
 
+## Registry commands
+
+No registries currently exist so there's not a way to test this out. I'll add an example soon.
+
+### `bvm registry add [url]`
+
+Adds the registry at the specified url to the local CLI.
+
+### `bvm registry removes [url]`
+
+Removes the registry at the specified url from the local CLI.
+
+### `bvm registry list`
+
+Lists the current registries
+
+### `bvm install [binary-name or owner-name/binary-name] [version]`
+
+Installs the specified binary and version based on the first matching version in the CLI's registries.
+
 ## Redirect Service
 
 The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
@@ -205,6 +225,11 @@ Other examples:
 
 ## Future improvements
 
+Low effort:
+
+1. `bvm install <binary name>` - Upgrade to the latest version based on the registries.
+2. Ability to list versions of a binary in the registries.
+
 Medium effort:
 
 1. Ability to specify a range of supported versions in _.bvmrc.json_ to reduce the number of downloaded binaries:
@@ -230,12 +255,11 @@ Medium effort:
    ```
 5. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
 6. Add `bvm lock` to update the configuration file urls with checksums.
+7. Multiple sub binary download locations (ex. say `npm` were installed from a different zip for `node`).
 
 Large effort:
 
-1. Some way for binaries to specify all their version numbers and the ability to get their latest. ~~I'm thinking each binary manifest file may have a url to a global binary manifest file where all that data is stored.~~ I think this should be explicit as people will have to trust the source. They could add registry file to their individual CLI tools then install via `bvm install [binary name] [version]` or just `bvm install [binary name]`.
-2. `bvm install <binary name>` - Upgrade to the latest version (requires a registry file to be set—not implemented)
-3. Support downstream binary dependencies (should also support a range of dependencies).
+1. Support downstream binary dependencies (should also support a range of dependencies).
 
 Probably unnecessary complexity:
 

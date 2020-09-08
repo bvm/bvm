@@ -1,7 +1,7 @@
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::BinaryName;
+use super::types::{BinarySelector, CommandName};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -27,7 +27,7 @@ pub struct ResolveCommand {
 }
 
 pub struct UseBinaryCommand {
-    pub binary_name: BinaryName,
+    pub selector: BinarySelector,
     pub version: String,
 }
 
@@ -37,13 +37,23 @@ pub struct InstallCommand {
 }
 
 pub struct InstallUrlCommand {
-    pub url: ChecksumPathOrUrl,
+    pub url_or_name: UrlOrName,
     pub use_command: bool,
     pub force: bool,
 }
 
+pub enum UrlOrName {
+    Url(ChecksumPathOrUrl),
+    Name(InstallName),
+}
+
+pub struct InstallName {
+    pub selector: BinarySelector,
+    pub version: String,
+}
+
 pub struct UninstallCommand {
-    pub binary_name: BinaryName,
+    pub selector: BinarySelector,
     pub version: String,
 }
 
@@ -79,9 +89,16 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let install_matches = matches.subcommand_matches("install").unwrap();
         let use_command = install_matches.is_present("use");
         let force = install_matches.is_present("force");
-        if let Some(url) = install_matches.value_of("url").map(String::from) {
+        if let Some(version) = install_matches.value_of("version").map(String::from) {
+            let selector = parse_binary_selector(install_matches.value_of("url_or_name").map(String::from).unwrap());
             SubCommand::InstallUrl(InstallUrlCommand {
-                url: parse_checksum_path_or_url(&url),
+                url_or_name: UrlOrName::Name(InstallName { selector, version }),
+                use_command,
+                force,
+            })
+        } else if let Some(url) = install_matches.value_of("url_or_name").map(String::from) {
+            SubCommand::InstallUrl(InstallUrlCommand {
+                url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url)),
                 use_command,
                 force,
             })
@@ -91,9 +108,9 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
         if let Some(binary_name) = use_matches.value_of("binary_name").map(String::from) {
-            let binary_name = parse_binary_name(binary_name);
+            let selector = parse_binary_selector(binary_name);
             SubCommand::UseBinary(UseBinaryCommand {
-                binary_name,
+                selector,
                 version: use_matches.value_of("version").map(String::from).unwrap(),
             })
         } else {
@@ -101,9 +118,9 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         }
     } else if matches.is_present("uninstall") {
         let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
-        let binary_name = parse_binary_name(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
+        let selector = parse_binary_selector(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
         SubCommand::Uninstall(UninstallCommand {
-            binary_name,
+            selector,
             version: uninstall_matches.value_of("version").map(String::from).unwrap(),
         })
     } else if matches.is_present("list") {
@@ -140,19 +157,19 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     Ok(CliArgs { sub_command })
 }
 
-fn parse_binary_name(text: String) -> BinaryName {
+fn parse_binary_selector(text: String) -> BinarySelector {
     let index = text.find('/');
     if let Some(index) = index {
         let owner_name = text[0..index].to_string();
         let name = text[index + 1..].to_string();
-        BinaryName {
+        BinarySelector {
             owner: Some(owner_name),
-            name,
+            name: CommandName::from_string(name),
         }
     } else {
-        BinaryName {
+        BinarySelector {
             owner: None,
-            name: text,
+            name: CommandName::from_string(text),
         }
     }
 }
@@ -190,21 +207,27 @@ ARGS:
         .after_help(r#"TODO: Will fill in this info later..."#)
         .subcommand(
             SubCommand::with_name("install")
-                .about("Installs the binaries for the current configuration file.")
+                .about("Installs the binaries for the current configuration file when no arguments or installs based on the provided arguments.")
                 .arg(
-                    Arg::with_name("url")
-                        .help("The url of the binary manifest to install.")
-                        .takes_value(true),
+                    Arg::with_name("url_or_name")
+                        .help("The url of the binary manifest to install or the name if also providing a version.")
+                        .takes_value(true)
+                        .conflicts_with("name"),
+                )
+                .arg(
+                    Arg::with_name("version")
+                        .help("The version of the binary to install.")
+                        .takes_value(true)
                 )
                 .arg(
                     Arg::with_name("use")
-                        .help("Use the installed binary or binaries on the path.")
+                        .help("Use the installed binary/binaries on the path.")
                         .long("use")
                         .takes_value(false),
                 )
                 .arg(
                     Arg::with_name("force")
-                        .help("Reinstall the binary if it is already installed.")
+                        .help("Reinstall the binary/binaries if it is already installed.")
                         .long("force")
                         .takes_value(false),
                 ),
