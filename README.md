@@ -254,8 +254,7 @@ Low effort:
 1. `bvm install <binary name>` - Upgrade to the latest version based on the registries.
 2. Ability to list versions of a binary in the registries.
 3. List 10 most similar versions found when calling `bvm install <binary-name> <version>`
-4. Add warning when using `bvm install --use` and binary is in config file similar to what happens with `bvm use` (should use same code).
-5. Ability to get url of version from registry.
+4. Ability to get url of version from registry.
 
 Medium effort:
 
@@ -263,7 +262,7 @@ Medium effort:
    ```jsonc
    {
      "binaries": [{
-       "manifest": "https://bvm.land/deno/1.3.1.json",
+       "path": "https://bvm.land/deno/1.3.1.json",
        "version": "^1.3.0"
      }]
    }
@@ -275,7 +274,7 @@ Medium effort:
    ```jsonc
    {
      "binaries": [{
-       "manifest": "https://bvm.land/deno/1.3.1.json",
+       "path": "https://bvm.land/deno/1.3.1.json",
        "alias": "deno-1.3.1"
      }]
    }
@@ -290,7 +289,7 @@ Large effort:
 
 Far future:
 
-1. Support breaking up package registries into multiple files (ex. it would give a semver range for a file internally). This would only be useful for extremely large files.
+1. Support breaking up registries into multiple files (ex. it would give a semver range for a file internally). This would only be useful for extremely large files.
 
 Probably unnecessary complexity:
 

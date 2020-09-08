@@ -152,7 +152,14 @@ async fn handle_install_url_command<TEnvironment: Environment>(
             .unwrap();
         let command_names = plugin_manifest.get_binary(&identifier).unwrap().get_command_names();
         for command_name in command_names {
-            plugin_manifest.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
+            let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
+            plugin_manifest.use_global_version(
+                command_name.clone(),
+                plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
+            );
+            if is_command_in_config_file {
+                display_command_in_config_file_error(environment, &command_name);
+            }
         }
     }
 
@@ -407,11 +414,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
         binary.get_command_names()
     };
     for command_name in command_names {
-        let is_binary_in_config_file =
-            get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?
-                .map(|info| info.executable_path)
-                .flatten()
-                .is_some();
+        let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
         if use_command.version.to_lowercase() == "path" {
             if !plugin_manifest.has_binary_with_selector(&use_command.selector) {
                 return err!(
@@ -433,13 +436,37 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
         }
 
-        if is_binary_in_config_file {
-            environment.log_error(&format!("Updated globally used version of '{}', but local version remains using version specified in the current working directory's config file. If you wish to change the local version, then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file).", command_name.display()));
+        if is_command_in_config_file {
+            display_command_in_config_file_error(environment, &command_name);
         }
     }
     plugin_manifest.save(environment)?;
 
     Ok(())
+}
+
+fn get_is_command_in_config_file(
+    environment: &impl Environment,
+    plugin_manifest: &plugins::PluginsManifest,
+    command_name: &CommandName,
+) -> bool {
+    let result = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name);
+    match result {
+        Ok(result) => result.map(|info| info.executable_path).flatten().is_some(),
+        Err(_) => false,
+    }
+}
+
+fn display_command_in_config_file_error(environment: &impl Environment, command_name: &CommandName) {
+    let message = format!(
+        concat!(
+            "Updated globally used version of '{}', but local version remains using version specified ",
+            "in the current working directory's config file. If you wish to change the local version, ",
+            "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+        ),
+        command_name.display()
+    );
+    environment.log_error(&message);
 }
 
 fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
@@ -978,6 +1005,44 @@ mod test {
             "test-https://github.com/dsherret/bvm/releases/download/1.0.0/name-windows.tar.gz"
         );
     }
+    #[tokio::test]
+    async fn install_url_command_use_with_config_file_same_command() {
+        let environment = TestEnvironment::new();
+        let first_binary_path = get_binary_path("owner", "name", "1.0.0");
+        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        create_remote_zip_package(
+            &environment,
+            "http://localhost/package2.json",
+            "owner2",
+            "name",
+            "2.0.0",
+        );
+        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+
+        // install the package
+        environment.set_cwd("/project");
+        run_cli(vec!["install"], &environment).await.unwrap();
+        environment.clear_logs();
+
+        // install and use the other package
+        run_cli(vec!["install", "--use", "http://localhost/package2.json"], &environment)
+            .await
+            .unwrap();
+        assert_eq!(
+            environment.take_logged_errors(),
+            vec![
+                "Extracting archive for owner2/name 2.0.0...",
+                concat!(
+                    "Updated globally used version of 'name', but local version remains using version specified ",
+                    "in the current working directory's config file. If you wish to change the local version, ",
+                    "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+                )
+            ]
+        );
+
+        // should still resolve to the cwd's binary
+        assert_resolves!(&environment, first_binary_path);
+    }
 
     #[tokio::test]
     async fn install_command_no_existing_binary() {
@@ -1266,6 +1331,43 @@ mod test {
         run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
         assert_resolves!(&environment, second_binary_path);
         assert_resolves_name!(&environment, "name-second", second_binary_path_second);
+    }
+
+    #[tokio::test]
+    async fn use_command_config_file_same_command() {
+        let environment = TestEnvironment::new();
+        let first_binary_path = get_binary_path("owner", "name", "1.0.0");
+        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        create_remote_zip_package(
+            &environment,
+            "http://localhost/package2.json",
+            "owner2",
+            "name",
+            "2.0.0",
+        );
+        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+
+        // install the package
+        environment.set_cwd("/project");
+        run_cli(vec!["install"], &environment).await.unwrap();
+
+        // install the other package
+        install_url!(environment, "http://localhost/package2.json");
+        environment.clear_logs();
+
+        // now try to use it
+        run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
+        assert_eq!(
+            environment.take_logged_errors(),
+            vec![concat!(
+                "Updated globally used version of 'name', but local version remains using version specified ",
+                "in the current working directory's config file. If you wish to change the local version, ",
+                "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+            )]
+        );
+
+        // should still resolve to the cwd's binary
+        assert_resolves!(&environment, first_binary_path);
     }
 
     #[tokio::test]
