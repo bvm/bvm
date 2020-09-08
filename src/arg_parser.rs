@@ -144,8 +144,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         } else if registry_matches.is_present("list") {
             SubCommand::Registry(RegistrySubCommand::List)
         } else {
-            // toodo: improve this because it happens
-            return err!("Unknown registry command.");
+            unreachable!();
         }
     } else {
         SubCommand::Help({
@@ -280,6 +279,7 @@ ARGS:
         .subcommand(
             SubCommand::with_name("registry")
                 .about("Commands related to storing urls to binary version registries.")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(
                     SubCommand::with_name("add")
                         .about("Add a url to a registry.")
