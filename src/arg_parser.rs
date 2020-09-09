@@ -1,3 +1,5 @@
+use url::Url;
+
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
@@ -49,7 +51,7 @@ pub enum UrlOrName {
 
 pub struct InstallName {
     pub selector: BinarySelector,
-    pub version: String,
+    pub version: Option<String>,
 }
 
 pub struct UninstallCommand {
@@ -89,19 +91,22 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let install_matches = matches.subcommand_matches("install").unwrap();
         let use_command = install_matches.is_present("use");
         let force = install_matches.is_present("force");
-        if let Some(version) = install_matches.value_of("version").map(String::from) {
-            let selector = parse_binary_selector(install_matches.value_of("url_or_name").map(String::from).unwrap());
-            SubCommand::InstallUrl(InstallUrlCommand {
-                url_or_name: UrlOrName::Name(InstallName { selector, version }),
-                use_command,
-                force,
-            })
-        } else if let Some(url) = install_matches.value_of("url_or_name").map(String::from) {
-            SubCommand::InstallUrl(InstallUrlCommand {
-                url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url)),
-                use_command,
-                force,
-            })
+        if let Some(url_or_name) = install_matches.value_of("url_or_name").map(String::from) {
+            let version = install_matches.value_of("version").map(String::from);
+            if version.is_some() || Url::parse(&url_or_name).is_err() {
+                let selector = parse_binary_selector(url_or_name);
+                SubCommand::InstallUrl(InstallUrlCommand {
+                    url_or_name: UrlOrName::Name(InstallName { selector, version }),
+                    use_command,
+                    force,
+                })
+            } else {
+                SubCommand::InstallUrl(InstallUrlCommand {
+                    url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url_or_name)),
+                    use_command,
+                    force,
+                })
+            }
         } else {
             SubCommand::Install(InstallCommand { use_command, force })
         }

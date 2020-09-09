@@ -10,6 +10,7 @@ mod plugins;
 mod registry;
 mod utils;
 
+use semver::Version;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -268,39 +269,72 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                 }
 
                 // now get the url
-                let selected_url = find_version_url(
-                    environment,
-                    &name.version,
-                    &url_results.into_iter().map(|r| r.url).collect(),
-                )
-                .await?;
+                let urls = url_results.into_iter().map(|r| r.url).collect();
+                let selected_url = if let Some(version) = &name.version {
+                    find_url(environment, &urls, |item| &item.version == version).await?
+                } else {
+                    find_latest_url(environment, &urls).await?
+                };
                 if let Some(selected_url) = selected_url {
                     Ok(selected_url)
                 } else {
-                    return err!(
-                        "Could not find binary {} {} in any registry.",
-                        name.selector.display(),
-                        name.version
-                    );
+                    if let Some(version) = &name.version {
+                        err!(
+                            "Could not find binary {} {} in any registry.",
+                            name.selector.display(),
+                            version
+                        )
+                    } else {
+                        return err!("Could not find binary {} in any registry.", name.selector.display(),);
+                    }
                 }
             }
         }
     }
 
-    async fn find_version_url<TEnvironment: Environment>(
+    async fn find_url<TEnvironment: Environment>(
         environment: &TEnvironment,
-        version: &str,
         urls: &Vec<String>,
+        is_match: impl Fn(&registry::RegistryVersionInfo) -> bool,
     ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
             for item in registry_file.versions {
-                if &item.version == version {
+                if is_match(&item) {
                     return Ok(Some(item.get_url()));
                 }
             }
         }
         Ok(None)
+    }
+
+    async fn find_latest_url<TEnvironment: Environment>(
+        environment: &TEnvironment,
+        urls: &Vec<String>,
+    ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
+        let mut latest_pre_release: Option<registry::RegistryVersionInfo> = None;
+        let mut latest_release: Option<registry::RegistryVersionInfo> = None;
+        for url in urls.iter() {
+            let registry_file = registry::download_registry_file(environment, &url).await?;
+            for item in registry_file.versions {
+                let item_version = Version::parse(&item.version).unwrap();
+                let latest = if item_version.is_prerelease() {
+                    &mut latest_pre_release
+                } else {
+                    &mut latest_release
+                };
+                if let Some(latest) = latest.as_mut() {
+                    let latest_version = Version::parse(&latest.version).unwrap();
+                    if item_version.gt(&latest_version) {
+                        *latest = item;
+                    }
+                } else {
+                    *latest = Some(item);
+                }
+            }
+        }
+
+        Ok(latest_release.or(latest_pre_release).map(|item| item.get_url()))
     }
 }
 
@@ -1515,6 +1549,105 @@ mod test {
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
         assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+    }
+
+    #[tokio::test]
+    async fn registry_install_command_latest() {
+        let environment = TestEnvironment::new();
+        let checksum1 =
+            create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let checksum2 =
+            create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
+        let checksum3 =
+            create_remote_zip_package(&environment, "http://localhost/package3.json", "owner", "name", "2.0.1");
+        let checksum4 = create_remote_zip_package(
+            &environment,
+            "http://localhost/package4.json",
+            "owner",
+            "name",
+            "3.0.0-alpha",
+        );
+        create_remote_registry_file(
+            &environment,
+            "http://localhost/registry.json",
+            "owner",
+            "name",
+            vec![
+                registry::RegistryVersionInfo {
+                    version: "1.0.0".to_string(),
+                    checksum: checksum1,
+                    path: "http://localhost/package.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "2.0.1".to_string(),
+                    checksum: checksum3,
+                    path: "http://localhost/package3.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "2.0.0".to_string(),
+                    checksum: checksum2,
+                    path: "http://localhost/package2.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "3.0.0-alpha".to_string(),
+                    checksum: checksum4,
+                    path: "http://localhost/package4.json".to_string(),
+                },
+            ],
+        );
+
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap();
+
+        run_cli(vec!["install", "name"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.1..."]);
+    }
+
+    #[tokio::test]
+    async fn registry_install_command_latest_all_pre_releases() {
+        let environment = TestEnvironment::new();
+        let checksum1 = create_remote_zip_package(
+            &environment,
+            "http://localhost/package.json",
+            "owner",
+            "name",
+            "1.0.0-alpha",
+        );
+        let checksum2 = create_remote_zip_package(
+            &environment,
+            "http://localhost/package2.json",
+            "owner",
+            "name",
+            "1.0.0-beta",
+        );
+        create_remote_registry_file(
+            &environment,
+            "http://localhost/registry.json",
+            "owner",
+            "name",
+            vec![
+                registry::RegistryVersionInfo {
+                    version: "1.0.0-beta".to_string(),
+                    checksum: checksum2,
+                    path: "http://localhost/package2.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "1.0.0-alpha".to_string(),
+                    checksum: checksum1,
+                    path: "http://localhost/package.json".to_string(),
+                },
+            ],
+        );
+
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap();
+
+        run_cli(vec!["install", "name"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0-beta..."]);
     }
 
     #[tokio::test]

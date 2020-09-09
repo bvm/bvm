@@ -171,7 +171,7 @@ bvm registry remove https://bvm.land/node/registry.json
 
 ### `bvm registry list`
 
-Lists the current registries
+Lists the registries saved in the CLI.
 
 Example output:
 
@@ -180,14 +180,24 @@ denoland/deno - https://bvm.land/deno/registry.json
 nodejs/node - https://bvm.land/node/registry.json
 ```
 
+### `bvm install [binary-name or owner-name/binary-name]`
+
+Installs the latest non-pre-release version of the specified binary based on the CLI's registries.
+
+```
+# Examples
+bvm install deno
+bvm install --use node
+```
+
 ### `bvm install [binary-name or owner-name/binary-name] [version]`
 
 Installs the specified binary and version based on the first matching version in the CLI's registries.
 
 ```
 # Examples
-bvm install --use deno 1.3.3
-bvm install node 14.9.0
+bvm install deno 1.3.3
+bvm install --use node 14.9.0
 ```
 
 ## Redirect Service
@@ -251,10 +261,13 @@ Other examples:
 
 Low effort:
 
-1. `bvm install <binary name>` - Upgrade to the latest version based on the registries.
-2. Ability to list versions of a binary in the registries.
-3. List 10 most similar versions found when calling `bvm install <binary-name> <version>`
-4. Ability to get url of version from registry.
+1. Ability to list versions of a binary in the registries.
+2. List 10 most similar versions found when calling `bvm install <binary-name> <version>`
+3. Ability to get url of version from registry.
+4. Perhaps rename "registry" to something else since it's a binary per registry.
+5. Document why there won't be support for multiple binaries per registry (open an issue and write it in there).
+6. Output the binary owner/name, description (add), and recent versions after adding a registry.
+7. Urls should be `url::Url`. Versions should be `semver::Version`.
 
 Medium effort:
 

@@ -23,7 +23,7 @@ impl RegistryFile {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryVersionInfo {
-    pub version: String,
+    pub version: String, // todo: deserialize to semver::Version
     pub path: String,
     pub checksum: String,
 }
