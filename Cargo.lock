@@ -151,7 +151,6 @@ name = "bvm"
 version = "0.0.19"
 dependencies = [
  "async-trait",
- "bytes",
  "clap",
  "dirs",
  "dprint-cli-core",
@@ -161,6 +160,7 @@ dependencies = [
  "path-clean",
  "pretty_assertions",
  "semver",
+ "semver-parser 0.9.0",
  "serde",
  "serde_json",
  "tar",
@@ -388,13 +388,12 @@ dependencies = [
 
 [[package]]
 name = "dprint-cli-core"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0473b36a20875efc200b1bced1f09bd989ee2b3a4a93713c5be6992cf62b342c"
+checksum = "1a89e5013aebf113f8ec8da12a84d48858b591dcefadc9bd0f7101a8d436230f"
 dependencies = [
  "app_dirs2",
  "async-trait",
- "bytes",
  "console 0.11.3",
  "indicatif",
  "reqwest",
@@ -1463,7 +1462,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "394cec28fa623e00903caf7ba4fa6fb9a0e260280bb8cdbbba029611108a0190"
 dependencies = [
- "semver-parser",
+ "semver-parser 0.7.0",
 ]
 
 [[package]]
@@ -1471,6 +1470,12 @@ name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
+
+[[package]]
+name = "semver-parser"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b46e1121e8180c12ff69a742aabc4f310542b6ccb69f1691689ac17fdf8618aa"
 
 [[package]]
 name = "serde"

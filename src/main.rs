@@ -10,7 +10,7 @@ mod plugins;
 mod registry;
 mod utils;
 
-use semver::Version;
+use semver::Version as SemVersion;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -18,7 +18,7 @@ use arg_parser::*;
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 use environment::Environment;
-use types::{BinarySelector, CommandName};
+use types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
 
 #[tokio::main]
 async fn main() -> Result<(), ErrBox> {
@@ -317,14 +317,14 @@ async fn handle_install_url_command<TEnvironment: Environment>(
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
             for item in registry_file.versions {
-                let item_version = Version::parse(&item.version).unwrap();
+                let item_version = SemVersion::parse(&item.version).unwrap();
                 let latest = if item_version.is_prerelease() {
                     &mut latest_pre_release
                 } else {
                     &mut latest_release
                 };
                 if let Some(latest) = latest.as_mut() {
-                    let latest_version = Version::parse(&latest.version).unwrap();
+                    let latest_version = SemVersion::parse(&latest.version).unwrap();
                     if item_version.gt(&latest_version) {
                         *latest = item;
                     }
@@ -435,39 +435,48 @@ fn handle_use_binary_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     use_command: UseBinaryCommand,
 ) -> Result<(), ErrBox> {
+    // todo: select version based on version selector
     let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
-    let command_names = if use_command.version.to_lowercase() == "path" {
-        let global_location = plugin_manifest.get_global_binary_location(&use_command.selector.name);
-        let identifier = match global_location {
-            Some(plugins::GlobalBinaryLocation::Bvm(identifier)) => identifier,
-            None | Some(plugins::GlobalBinaryLocation::Path) => return Ok(()), // already done
-        };
-        plugin_manifest.get_global_command_names(&identifier)
-    } else {
-        let binary = get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &use_command.version)?;
-        binary.get_command_names()
+    let command_names = match &use_command.version {
+        PathOrVersionSelector::Path => {
+            let global_location = plugin_manifest.get_global_binary_location(&use_command.selector.name);
+            let identifier = match global_location {
+                Some(plugins::GlobalBinaryLocation::Bvm(identifier)) => identifier,
+                None | Some(plugins::GlobalBinaryLocation::Path) => return Ok(()), // already done
+            };
+            plugin_manifest.get_global_command_names(&identifier)
+        }
+        PathOrVersionSelector::Version(version) => {
+            let binary =
+                get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.as_version()?)?;
+            binary.get_command_names()
+        }
     };
     for command_name in command_names {
         let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
-        if use_command.version.to_lowercase() == "path" {
-            if !plugin_manifest.has_binary_with_selector(&use_command.selector) {
-                return err!(
-                    "Could not find any installed binaries named '{}'.",
-                    use_command.selector.display()
-                );
+        match &use_command.version {
+            PathOrVersionSelector::Path => {
+                if !plugin_manifest.has_binary_with_selector(&use_command.selector) {
+                    return err!(
+                        "Could not find any installed binaries named '{}'.",
+                        use_command.selector.display()
+                    );
+                }
+                if utils::get_path_executable_path(environment, &command_name)?.is_none() {
+                    return err!(
+                        "Could not find any installed binaries on the path that matched '{}'.",
+                        command_name.display()
+                    );
+                }
+                plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path);
             }
-            if utils::get_path_executable_path(environment, &command_name)?.is_none() {
-                return err!(
-                    "Could not find any installed binaries on the path that matched '{}'.",
-                    command_name.display()
-                );
+            PathOrVersionSelector::Version(version) => {
+                let binary =
+                    get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.as_version()?)?;
+                let identifier = binary.get_identifier();
+                plugin_manifest
+                    .use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
             }
-            plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path);
-        } else {
-            let binary =
-                get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &use_command.version)?;
-            let identifier = binary.get_identifier();
-            plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
         }
 
         if is_command_in_config_file {
@@ -680,7 +689,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
 fn get_binary_with_name_and_version<'a>(
     plugin_manifest: &'a plugins::PluginsManifest,
     selector: &BinarySelector,
-    version: &str,
+    version: &Version,
 ) -> Result<&'a plugins::BinaryManifestItem, ErrBox> {
     let binaries = plugin_manifest.get_binaries_by_selector_and_version(selector, version);
     if binaries.len() == 0 {
@@ -691,7 +700,7 @@ fn get_binary_with_name_and_version<'a>(
             err!(
                 "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
                 selector.display(),
-                version,
+                version.as_str(),
                 display_binaries_versions(binaries).join("\n "),
             )
         }
@@ -699,7 +708,7 @@ fn get_binary_with_name_and_version<'a>(
         return err!(
             "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
             selector.display(),
-            version,
+            version.as_str(),
             display_binaries_versions(binaries).join("\n  "),
         );
     } else {
@@ -804,7 +813,6 @@ fn get_config_file(environment: &impl Environment) -> Result<Option<configuratio
 
 #[cfg(test)]
 mod test {
-    use bytes::Bytes;
     use pretty_assertions::assert_eq;
     use std::io::Write;
     use std::path::PathBuf;
@@ -1869,7 +1877,7 @@ mod test {
             mac_checksum
         );
         let checksum = dprint_cli_core::checksums::get_sha256_checksum(file_text.as_bytes());
-        environment.add_remote_file(url, Bytes::from(file_text));
+        environment.add_remote_file(url, file_text.into_bytes());
 
         checksum
     }
@@ -1950,7 +1958,7 @@ mod test {
             mac_zip_url,
             mac_checksum
         );
-        environment.add_remote_file(url, Bytes::from(file_text));
+        environment.add_remote_file(url, file_text.into_bytes());
     }
 
     fn create_remote_zip(environment: &TestEnvironment, url: &str, is_windows: bool) -> String {
@@ -1970,7 +1978,7 @@ mod test {
         zip.write(format!("test-{}2", url).as_bytes()).unwrap();
         let result = zip.finish().unwrap().into_inner();
         let zip_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
-        environment.add_remote_file(url, Bytes::from(result));
+        environment.add_remote_file(url, result);
         zip_file_checksum
     }
 
@@ -2035,7 +2043,7 @@ mod test {
             mac_tar_gz_url,
             mac_checksum
         );
-        environment.add_remote_file(url, Bytes::from(file_text));
+        environment.add_remote_file(url, file_text.into_bytes());
     }
 
     fn create_remote_tar_gz(environment: &TestEnvironment, url: &str, is_windows: bool) -> String {
@@ -2059,7 +2067,7 @@ mod test {
         let result = e.finish().unwrap();
 
         let tar_gz_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
-        environment.add_remote_file(url, Bytes::from(result));
+        environment.add_remote_file(url, result);
         tar_gz_file_checksum
     }
 
@@ -2088,7 +2096,7 @@ mod test {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        environment.add_remote_file(url, Bytes::from(file_text));
+        environment.add_remote_file(url, file_text.into_bytes());
     }
 
     async fn run_cli(args: Vec<&str>, environment: &TestEnvironment) -> Result<(), ErrBox> {

@@ -1,3 +1,5 @@
+use dprint_cli_core::types::ErrBox;
+use semver_parser;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
@@ -27,6 +29,99 @@ impl BinarySelector {
         } else {
             self.name.display().to_string()
         }
+    }
+}
+
+pub enum PathOrVersionSelector {
+    Path,
+    Version(VersionSelector),
+}
+
+impl PathOrVersionSelector {
+    pub fn parse(text: &str) -> Result<PathOrVersionSelector, ErrBox> {
+        Ok(if text.to_lowercase() == "path" {
+            PathOrVersionSelector::Path
+        } else {
+            PathOrVersionSelector::Version(VersionSelector::parse(text)?)
+        })
+    }
+}
+
+pub struct Version {
+    full_text: String,
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64,
+}
+
+impl Version {
+    pub fn parse(text: &str) -> Result<Version, ErrBox> {
+        VersionSelector::parse(text)?.as_version()
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.full_text
+    }
+}
+
+pub struct VersionSelector {
+    full_text: String,
+    pub major: u64,
+    pub minor: Option<u64>,
+    pub patch: Option<u64>,
+}
+
+impl VersionSelector {
+    pub fn parse(text: &str) -> Result<VersionSelector, ErrBox> {
+        // todo: unit tests
+        match VersionSelector::inner_parse(text.trim()) {
+            Ok(result) => Ok(result),
+            Err(err) => err!("Error parsing {} to a version. {}", text, err.to_string()),
+        }
+    }
+
+    fn inner_parse<'a>(text: &'a str) -> Result<VersionSelector, semver_parser::parser::Error<'a>> {
+        let mut p = semver_parser::parser::Parser::new(text)?;
+        let major = p.numeric()?;
+        let mut minor = None;
+        let mut patch = None;
+
+        if !p.is_eof() {
+            minor = Some(p.dot_numeric()?);
+            if !p.is_eof() {
+                // Patch is good enough for our purposes
+                // do not worry about pre and build as they are
+                // in the full text.
+                patch = Some(p.dot_numeric()?);
+            }
+        }
+        Ok(VersionSelector {
+            full_text: text.to_string(),
+            major,
+            minor,
+            patch,
+        })
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.full_text
+    }
+
+    pub fn as_version(&self) -> Result<Version, ErrBox> {
+        if let Some(minor) = self.minor {
+            if let Some(patch) = self.patch {
+                return Ok(Version {
+                    full_text: self.as_str().to_string(),
+                    major: self.major,
+                    minor,
+                    patch,
+                });
+            }
+        }
+        return err!(
+            "Could not parse '{}' as semantic version with three parts (ex. 1.0.0).",
+            self.as_str()
+        );
     }
 }
 

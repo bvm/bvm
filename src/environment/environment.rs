@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use bytes::Bytes;
 use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
 
 #[async_trait]
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn is_real(&self) -> bool;
-    fn read_file(&self, file_path: &Path) -> Result<Bytes, ErrBox>;
+    fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox>;
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox>;
     fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox>;
     fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox>;
@@ -18,7 +17,7 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn cwd(&self) -> Result<PathBuf, ErrBox>;
     fn log(&self, text: &str);
     fn log_error(&self, text: &str);
-    async fn download_file(&self, url: &str) -> Result<Bytes, ErrBox>;
+    async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox>;
     async fn log_action_with_progress<
         TResult: std::marker::Send + std::marker::Sync,
         TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,

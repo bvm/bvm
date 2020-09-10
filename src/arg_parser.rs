@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{BinarySelector, CommandName};
+use super::types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -30,7 +30,7 @@ pub struct ResolveCommand {
 
 pub struct UseBinaryCommand {
     pub selector: BinarySelector,
-    pub version: String,
+    pub version: PathOrVersionSelector,
 }
 
 pub struct InstallCommand {
@@ -56,7 +56,7 @@ pub struct InstallName {
 
 pub struct UninstallCommand {
     pub selector: BinarySelector,
-    pub version: String,
+    pub version: Version,
 }
 
 pub enum RegistrySubCommand {
@@ -116,7 +116,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             let selector = parse_binary_selector(binary_name);
             SubCommand::UseBinary(UseBinaryCommand {
                 selector,
-                version: use_matches.value_of("version").map(String::from).unwrap(),
+                version: PathOrVersionSelector::parse(&use_matches.value_of("version").map(String::from).unwrap())?,
             })
         } else {
             SubCommand::Use
@@ -126,7 +126,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let selector = parse_binary_selector(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
         SubCommand::Uninstall(UninstallCommand {
             selector,
-            version: uninstall_matches.value_of("version").map(String::from).unwrap(),
+            version: Version::parse(&uninstall_matches.value_of("version").map(String::from).unwrap())?,
         })
     } else if matches.is_present("list") {
         SubCommand::List

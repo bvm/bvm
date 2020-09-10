@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use bytes::Bytes;
 use dprint_cli_core::types::ErrBox;
 use dprint_cli_core::{download_url, log_action_with_progress, ProgressBars};
 use std::fs;
@@ -34,13 +33,13 @@ impl Environment for RealEnvironment {
     }
 
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
-        log_verbose!(self, "Reading file: {}", file_path.display());
-        Ok(fs::read_to_string(file_path)?)
+        let file_bytes = self.read_file(file_path)?;
+        Ok(String::from_utf8(file_bytes)?)
     }
 
-    fn read_file(&self, file_path: &Path) -> Result<Bytes, ErrBox> {
+    fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox> {
         log_verbose!(self, "Reading file: {}", file_path.display());
-        Ok(Bytes::from(fs::read(file_path)?))
+        Ok(fs::read(file_path)?)
     }
 
     fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox> {
@@ -51,7 +50,7 @@ impl Environment for RealEnvironment {
         log_verbose!(self, "Writing file: {}", file_path.display());
         match fs::write(file_path, bytes) {
             Ok(_) => Ok(()),
-            Err(err) => err!("Error writing file {}: {}", file_path.display(), err.to_string())
+            Err(err) => err!("Error writing file {}: {}", file_path.display(), err.to_string()),
         }
     }
 
@@ -67,7 +66,7 @@ impl Environment for RealEnvironment {
         Ok(())
     }
 
-    async fn download_file(&self, url: &str) -> Result<Bytes, ErrBox> {
+    async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
         log_verbose!(self, "Downloading url: {}", url);
         download_url(url, &self.progress_bars).await
     }

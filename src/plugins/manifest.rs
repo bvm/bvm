@@ -1,14 +1,14 @@
 use core::cmp::Ordering;
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
-use semver::Version;
+use semver::Version as SemVersion;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{BinaryName, BinarySelector, CommandName};
+use crate::types::{BinaryName, BinarySelector, CommandName, Version};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -37,9 +37,9 @@ impl BinaryManifestItem {
         BinaryIdentifier::new(&self.name, &self.version)
     }
 
-    pub fn get_sem_ver(&self) -> Version {
+    pub fn get_sem_ver(&self) -> SemVersion {
         // at this point, expect this to be ok since we validated it on setup
-        Version::parse(&self.version).unwrap()
+        SemVersion::parse(&self.version).unwrap()
     }
 
     pub fn matches(&self, selector: &BinarySelector) -> bool {
@@ -210,10 +210,10 @@ impl PluginsManifest {
     pub fn get_binaries_by_selector_and_version(
         &self,
         selector: &BinarySelector,
-        version: &str,
+        version: &Version,
     ) -> Vec<&BinaryManifestItem> {
         self.binaries()
-            .filter(|b| b.matches(selector) && b.version == version)
+            .filter(|b| b.matches(selector) && b.version == version.as_str())
             .collect()
     }
 
