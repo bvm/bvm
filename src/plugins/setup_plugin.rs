@@ -8,11 +8,11 @@ use crate::types::BinaryName;
 use crate::utils;
 
 pub fn get_plugin_dir(
-    enviroment: &impl Environment,
+    environment: &impl Environment,
     binary_name: &BinaryName,
     version: &str,
 ) -> Result<PathBuf, ErrBox> {
-    let data_dir = enviroment.get_user_data_dir()?;
+    let data_dir = environment.get_bvm_home_dir()?;
     Ok(data_dir
         .join("binaries")
         .join(&binary_name.owner)

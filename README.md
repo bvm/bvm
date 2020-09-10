@@ -22,8 +22,8 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 
 1. For now, install `bvm` via cargo—`cargo install bvm`.
 2. Manually add the shims folder as the first item on the path:
-   - Windows: `C:\Users\<user-name>\AppData\Local\bvm\bvm\shims`
-   - Mac/Linux: `~/.local/share/bvm/shims`
+   - Windows: `C:\Users\<user-name>\.bvm\shims`
+   - Mac/Linux: `~/.bvm/shims`
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {
@@ -268,6 +268,7 @@ Low effort:
 5. Document why there won't be support for multiple binaries per registry (open an issue and write it in there).
 6. Output the binary owner/name, description (add), and recent versions after adding a registry.
 7. Urls should be `url::Url`. Versions should be `semver::Version`.
+8. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
 
 Medium effort:
 
@@ -311,3 +312,4 @@ Probably unnecessary complexity:
 3. `bvm use <binary name> <executable file path>` for using the executable at the specified file path.
 4. Ability to purge any binaries that haven't been run for X days.
 5. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
+6. Consider creating a `bvm resolve-v1` hidden sub command. Too much complexity. Better to just have a command to recreate the shims.

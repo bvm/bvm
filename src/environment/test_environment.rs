@@ -224,7 +224,7 @@ impl Environment for TestEnvironment {
         Ok(action(Box::new(|_| {})))
     }
 
-    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+    fn get_bvm_home_dir(&self) -> Result<PathBuf, ErrBox> {
         Ok(PathBuf::from("/data"))
     }
 

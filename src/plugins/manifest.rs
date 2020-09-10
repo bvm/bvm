@@ -318,6 +318,6 @@ impl PluginsManifest {
 }
 
 fn get_manifest_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_user_data_dir()?;
+    let user_data_dir = environment.get_bvm_home_dir()?;
     Ok(user_data_dir.join("binaries-manifest.json"))
 }

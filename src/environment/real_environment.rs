@@ -27,11 +27,6 @@ impl RealEnvironment {
     }
 }
 
-const APP_INFO: app_dirs::AppInfo = app_dirs::AppInfo {
-    name: "bvm",
-    author: "bvm",
-};
-
 #[async_trait]
 impl Environment for RealEnvironment {
     fn is_real(&self) -> bool {
@@ -49,15 +44,15 @@ impl Environment for RealEnvironment {
     }
 
     fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox> {
-        log_verbose!(self, "Writing file: {}", file_path.display());
-        fs::write(file_path, file_text)?;
-        Ok(())
+        self.write_file(file_path, file_text.as_bytes())
     }
 
     fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox> {
         log_verbose!(self, "Writing file: {}", file_path.display());
-        fs::write(file_path, bytes)?;
-        Ok(())
+        match fs::write(file_path, bytes) {
+            Ok(_) => Ok(()),
+            Err(err) => err!("Error writing file {}: {}", file_path.display(), err.to_string())
+        }
     }
 
     fn remove_file(&self, file_path: &Path) -> Result<(), ErrBox> {
@@ -117,11 +112,15 @@ impl Environment for RealEnvironment {
         log_action_with_progress(&self.progress_bars, message, action, total_size).await
     }
 
-    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
-        log_verbose!(self, "Getting user data directory.");
-        match app_dirs::app_root(app_dirs::AppDataType::UserData, &APP_INFO) {
-            Ok(path) => Ok(path),
-            Err(err) => err!("Error getting user data directory: {:?}", err),
+    fn get_bvm_home_dir(&self) -> Result<PathBuf, ErrBox> {
+        log_verbose!(self, "Getting home directory.");
+        match dirs::home_dir() {
+            Some(path) => {
+                let bvm_dir = path.join(".bvm");
+                self.create_dir_all(&bvm_dir)?;
+                Ok(bvm_dir)
+            }
+            None => err!("Could not get home directory."),
         }
     }
 

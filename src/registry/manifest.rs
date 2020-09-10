@@ -10,7 +10,6 @@ use crate::types::{BinaryName, BinarySelector};
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Registry {
-    /// Long name (ex. "denoland/deno") to urls.
     name_to_urls: HashMap<BinaryName, Vec<String>>,
 }
 
@@ -130,6 +129,6 @@ impl Registry {
 }
 
 fn get_registry_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_user_data_dir()?;
+    let user_data_dir = environment.get_bvm_home_dir()?;
     Ok(user_data_dir.join("registry.json"))
 }

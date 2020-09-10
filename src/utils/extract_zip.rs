@@ -26,12 +26,9 @@ pub async fn extract_zip(
                     update_size(i);
                     let mut file = zip.by_index(i).unwrap();
                     let file_name = file.sanitized_name();
-                    let file_path = dir_path.join(file_name);
+                    let file_path = dir_path.join(&file_name);
 
                     if !file.is_dir() {
-                        if let Some(parent_dir_path) = file_path.parent() {
-                            environment.create_dir_all(&parent_dir_path)?
-                        }
                         let mut file_bytes = Vec::with_capacity(file.size() as usize);
                         file.read_to_end(&mut file_bytes)?;
                         environment.write_file(&file_path, &file_bytes)?;
