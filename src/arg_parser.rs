@@ -22,6 +22,7 @@ pub enum SubCommand {
     Init,
     ClearUrlCache,
     Help(String),
+    Util(UtilSubCommand)
 }
 
 pub struct ResolveCommand {
@@ -71,6 +72,14 @@ pub struct RegistryAddCommand {
 
 pub struct RegistryRemoveCommand {
     pub url: String,
+}
+
+pub enum UtilSubCommand {
+    EnsurePath(UtilEnsurePathCommand),
+}
+
+pub struct UtilEnsurePathCommand {
+    pub path: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -148,6 +157,16 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             }))
         } else if registry_matches.is_present("list") {
             SubCommand::Registry(RegistrySubCommand::List)
+        } else {
+            unreachable!();
+        }
+    } else if matches.is_present("util") {
+        let util_matches = matches.subcommand_matches("util").unwrap();
+        if util_matches.is_present("ensure-path") {
+            let ensure_path_matches = util_matches.subcommand_matches("ensure-path").unwrap();
+            SubCommand::Util(UtilSubCommand::EnsurePath(UtilEnsurePathCommand {
+                path: ensure_path_matches.value_of("path").map(String::from).unwrap(),
+            }))
         } else {
             unreachable!();
         }
@@ -308,6 +327,21 @@ ARGS:
                 .subcommand(
                     SubCommand::with_name("list")
                         .about("List all the urls in the registry.")
+                )
+        )
+        .subcommand(
+            SubCommand::with_name("util")
+                .about("Commands that can be used for setting up the system.")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(
+                    SubCommand::with_name("ensure-path")
+                        .about("Ensures the provided directory path is on the system PATH.")
+                        .arg(
+                            Arg::with_name("path")
+                                .help("The directory path.")
+                                .takes_value(true)
+                                .required(true)
+                        )
                 )
         )
         .arg(

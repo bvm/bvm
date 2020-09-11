@@ -9,6 +9,11 @@ use std::time::SystemTime;
 
 use super::Environment;
 
+#[cfg(unix)]
+use super::unix as sys_impl;
+#[cfg(target_os = "windows")]
+use super::windows as sys_impl;
+
 #[derive(Clone)]
 pub struct RealEnvironment {
     output_lock: Arc<Mutex<u8>>,
@@ -124,11 +129,14 @@ impl Environment for RealEnvironment {
     }
 
     fn get_system_path_dirs(&self) -> Vec<PathBuf> {
-        if let Some(path) = std::env::var_os("PATH") {
-            std::env::split_paths(&path).collect() // todo: how to return an iterator?
-        } else {
-            Vec::new()
-        }
+        log_verbose!(self, "Getting system path directories.");
+        super::common::get_system_path_dirs()
+    }
+
+    fn ensure_system_path(&self, directory_path: &Path) -> Result<(), ErrBox> {
+        log_verbose!(self, "Ensuring '{}' is on the path.", directory_path.display());
+        sys_impl::ensure_system_path(&directory_path)?;
+        Ok(())
     }
 
     fn get_time_secs(&self) -> u64 {

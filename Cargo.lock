@@ -166,6 +166,7 @@ dependencies = [
  "tar",
  "tokio",
  "url",
+ "winreg",
  "zip",
 ]
 

@@ -191,6 +191,14 @@ impl Environment for TestEnvironment {
         self.path_dirs.lock().unwrap().clone()
     }
 
+    fn ensure_system_path(&self, directory_path: &Path) -> Result<(), ErrBox> {
+        let mut path_dirs = self.path_dirs.lock().unwrap();
+        if !path_dirs.contains(&directory_path.to_path_buf()) {
+            path_dirs.push(directory_path.to_path_buf());
+        }
+        Ok(())
+    }
+
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox> {
         let mut run_shell_commands = self.run_shell_commands.lock().unwrap();
         run_shell_commands.push((cwd.to_string_lossy().to_string(), command.to_string()));
