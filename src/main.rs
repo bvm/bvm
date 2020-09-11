@@ -51,6 +51,7 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::Init => handle_init_command(environment)?,
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
+        SubCommand::Util(command) => handle_util_command(environment, command)?,
     }
 
     Ok(())
@@ -590,6 +591,30 @@ fn handle_registry_list_command<TEnvironment: Environment>(environment: &TEnviro
 
     if !lines.is_empty() {
         environment.log(&lines.join("\n"));
+    }
+    Ok(())
+}
+
+fn handle_util_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    sub_command: UtilSubCommand,
+) -> Result<(), ErrBox> {
+    match sub_command {
+        UtilSubCommand::EnsurePath(command) => handle_util_ensure_path_command(environment, command),
+    }
+}
+
+fn handle_util_ensure_path_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: UtilEnsurePathCommand,
+) -> Result<(), ErrBox> {
+    let system_path_dirs = environment.get_system_path_dirs();
+    let dir_path = PathBuf::from(&command.path);
+    environment.ensure_system_path(&dir_path)?;
+    if !system_path_dirs.contains(&dir_path) {
+        // It is unfortunately not possible for a process to modify the current shell's environment
+        // variables. For this reason, we need to ask the user to restart their application.
+        environment.log_error(&format!("The path '{}' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect.", command.path));
     }
     Ok(())
 }
@@ -1753,6 +1778,29 @@ mod test {
             .err()
             .unwrap();
         assert_eq!(error.to_string(), "There were multiple binaries with the name 'name'. Please include the owner in the name:\n  owner/name\n  owner2/name");
+    }
+
+    #[tokio::test]
+    async fn util_ensure_path_works() {
+        let environment = TestEnvironment::new();
+        run_cli(vec!["util", "ensure-path", "test"], &environment)
+            .await
+            .unwrap();
+        assert_eq!(
+            environment.get_system_path_dirs(),
+            vec![PathBuf::from("/data/shims"), PathBuf::from("test")]
+        );
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, vec!["The path 'test' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect."]);
+
+        // should make no changes and not log
+        run_cli(vec!["util", "ensure-path", "test"], &environment)
+            .await
+            .unwrap();
+        assert_eq!(
+            environment.get_system_path_dirs(),
+            vec![PathBuf::from("/data/shims"), PathBuf::from("test")]
+        );
     }
 
     fn add_binary_to_path(environment: &TestEnvironment, name: &str) -> String {

@@ -23,7 +23,7 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 1. For now, install `bvm` via cargo—`cargo install bvm`.
 2. Manually add the shims folder as the first item on the path:
    - Windows: `C:\Users\<user-name>\.bvm\shims`
-   - Mac/Linux: `~/.bvm/shims`
+   - Mac/Linux: `$HOME/.bvm/shims`
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
    {
@@ -198,6 +198,19 @@ Installs the specified binary and version based on the first matching version in
 # Examples
 bvm install deno 1.3.3
 bvm install --use node 14.9.0
+```
+
+## Utility Commands
+
+The `bvm` binary provides some utility commands (currently only 1) that can be used in pre and post install scripts.
+
+### `bvm util ensure-path <dir-path>`
+
+This utility will ensure the provided directory is on the system path and output to the user to restart their terminal when necessary to do so.
+
+```
+# Examples
+bvm util ensure-path %APPDATA%\npm
 ```
 
 ## Redirect Service

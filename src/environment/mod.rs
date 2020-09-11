@@ -1,5 +1,13 @@
 #[macro_use]
 mod environment;
+
+mod common;
+
+#[cfg(unix)]
+mod unix;
+#[cfg(target_os = "windows")]
+mod windows;
+
 mod real_environment;
 #[cfg(test)]
 mod test_environment;
