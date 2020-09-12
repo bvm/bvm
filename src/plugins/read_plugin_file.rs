@@ -11,6 +11,7 @@ pub struct SerializedPluginFile {
     pub name: String,
     pub owner: String,
     pub version: Version,
+    pub description: String,
     #[serde(rename = "linux-x86_64")]
     pub linux: Option<PlatformInfo>,
     #[serde(rename = "darwin-x86_64")]
@@ -34,14 +35,8 @@ pub struct PlatformInfo {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformInfoCommand {
-    pub name: String,
+    pub name: CommandName,
     pub path: String,
-}
-
-impl PlatformInfoCommand {
-    pub fn get_command_name(&self) -> CommandName {
-        CommandName::from_string(self.name.clone())
-    }
 }
 
 pub fn read_plugin_file(file_bytes: &[u8]) -> Result<SerializedPluginFile, ErrBox> {

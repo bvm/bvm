@@ -202,15 +202,26 @@ bvm install --use node 14.9.0
 
 ## Utility Commands
 
-The `bvm` binary provides some utility commands (currently only 1) that can be used in pre and post install scripts.
+THESE ARE PROBABLY GOING AWAY. I HAVE THOUGHT OF A BETTER IDEA.
+
+The `bvm` binary provides some utility commands that can be used in pre and post install scripts.
 
 ### `bvm util ensure-path <dir-path>`
 
 This utility will ensure the provided directory is on the system path and output to the user to restart their terminal when necessary to do so.
 
 ```
-# Examples
+# Example
 bvm util ensure-path %APPDATA%\npm
+```
+
+### `bvm util command-exists <owner-name/binary-name> <command-name>`
+
+Checks if the provided command is on the path or exists in bvm. If it exists, exits with code 0 and if not returns 1.
+
+```
+# Example
+bvm util command-exists nodejs/node npm || (...do something here... high likelihood this is the first time installing)
 ```
 
 ## Redirect Service
@@ -232,6 +243,7 @@ At the moment, it looks like this:
   "name": "deno",
   "owner": "denoland",
   "version": "1.3.1",
+  "description": "A secure JavaScript and TypeScript runtime.",
   "windows-x86_64": {
     "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
@@ -272,6 +284,13 @@ Other examples:
 
 ## Future improvements
 
+High priority:
+
+1. Better support for scenario where commands install other commands globally. (For example, with nvm if you switch versions then you also switch the globally installed npm packages.)
+   - I was thinking the utils above could maybe be used to solve this, but this is an annoying solution because processes cannot modify the parent environment. What might be better instead is to have `bvm` instead be a shell and cmd script that uses the `bvm.exe` process.
+     - After any `install` or `use` command it should change the current environment based on any removed and added paths.
+     - Probably in each binary manifest file it can do: `"environmentPaths": ["npm/bin"]`
+
 Low effort:
 
 1. Ability to list versions of a binary in the registries.
@@ -283,6 +302,7 @@ Low effort:
 7. Urls should be `url::Url`. Versions should be `semver::Version`.
 8. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
 9. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally).
+10. Add "postUninstall" script (ex. removing environment variables)
 
 Medium effort:
 

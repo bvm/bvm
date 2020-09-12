@@ -37,6 +37,7 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     /// Ensures the provided directory to be on the system path environment variable.
     fn ensure_system_path(&self, directory_path: &Path) -> Result<(), ErrBox>;
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox>;
+    fn exit(&self, code: i32) -> Result<(), ErrBox>;
     fn is_verbose(&self) -> bool;
 }
 

@@ -190,7 +190,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
 
     // create the shims
     for command in commands {
-        create_shim(environment, &bin_dir, &command.get_command_name())?;
+        create_shim(environment, &bin_dir, &command.name)?;
     }
 
     // add the plugin information to the manifest

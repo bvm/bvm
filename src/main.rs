@@ -28,7 +28,7 @@ async fn main() -> Result<(), ErrBox> {
         Ok(_) => {}
         Err(err) => {
             eprintln!("{}", err.to_string());
-            std::process::exit(1);
+            environment.exit(1).unwrap();
         }
     }
 
@@ -71,7 +71,7 @@ fn handle_resolve_command<TEnvironment: Environment>(
             if info.had_uninstalled_binary {
                 environment.log_error(&format!(
                     "[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global '{}'.",
-                    command_name.display()
+                    command_name
                 ));
             }
             None
@@ -189,7 +189,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                     let previous_global_command_names = plugin_manifest.get_global_command_names(&identifier);
                     plugin_manifest.remove_binary(&identifier);
                     plugin_manifest.save(environment)?;
-                    // check if this is the last binary with this name. If so, delete the shim
+                    // check if this is the last binary with this command. If so, delete the shim
                     for command_name in previous_global_command_names.iter() {
                         if !plugin_manifest.has_binary_with_command(&command_name) {
                             environment.remove_file(&plugins::get_shim_path(&shim_dir, &command_name))?;
@@ -223,11 +223,11 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                         environment.log_error(&format!(
                             "Installed. Run `bvm use {} {}` to use it on the path as {}.",
                             binary_name
-                                .display_toggled_owner(!plugin_manifest.command_name_has_same_owner(&binary_name.name)),
+                                .display_toggled_owner(!plugin_manifest.binary_name_has_same_owner(&binary_name)),
                             version,
                             command_names
                                 .into_iter()
-                                .map(|c| format!("'{}'", c.display()))
+                                .map(|c| format!("'{}'", c))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         ));
@@ -258,13 +258,13 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                     .map(|r| &r.owner)
                     .collect::<HashSet<_>>()
                     .into_iter()
-                    .map(|o| format!("{}/{}", o, name.selector.name.display()))
+                    .map(|o| format!("{}/{}", o, name.selector.name))
                     .collect::<Vec<String>>();
                 if binary_names.len() > 1 {
                     binary_names.sort();
                     return err!(
                         "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
-                        name.selector.name.display(),
+                        name.selector.name,
                         binary_names.join("\n  ")
                     );
                 }
@@ -282,13 +282,9 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                     Ok(selected_url)
                 } else {
                     if let Some(version) = &name.version {
-                        err!(
-                            "Could not find binary {} {} in any registry.",
-                            name.selector.display(),
-                            version
-                        )
+                        err!("Could not find binary {} {} in any registry.", name.selector, version)
                     } else {
-                        return err!("Could not find binary {} in any registry.", name.selector.display(),);
+                        return err!("Could not find binary {} in any registry.", name.selector);
                     }
                 }
             }
@@ -436,37 +432,60 @@ fn handle_use_binary_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     use_command: UseBinaryCommand,
 ) -> Result<(), ErrBox> {
-    // todo: select version based on version selector
     let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let command_names = match &use_command.version {
         PathOrVersionSelector::Path => {
-            let global_location = plugin_manifest.get_global_binary_location(&use_command.selector.name);
-            let identifier = match global_location {
-                Some(plugins::GlobalBinaryLocation::Bvm(identifier)) => identifier,
-                None | Some(plugins::GlobalBinaryLocation::Path) => return Ok(()), // already done
-            };
-            plugin_manifest.get_global_command_names(&identifier)
+            // get the current binaries for the selector
+            let binaries = plugin_manifest.get_binaries_matching(&use_command.selector);
+            let have_same_owner = get_have_same_owner(&binaries);
+            if !have_same_owner {
+                let mut binary_names = binaries
+                    .iter()
+                    .map(|b| format!("{}", b.name))
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<String>>();
+                binary_names.sort();
+                return err!(
+                    "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
+                    use_command.selector.name,
+                    binary_names.join("\n  ")
+                );
+            }
+
+            let mut pre_release_binaries = binaries
+                .iter()
+                .filter(|b| b.version.is_prerelease())
+                .collect::<Vec<_>>();
+            let mut binaries = binaries
+                .iter()
+                .filter(|b| !b.version.is_prerelease())
+                .collect::<Vec<_>>();
+            if let Some(latest_binary) = binaries.pop().or(pre_release_binaries.pop()) {
+                latest_binary.get_command_names()
+            } else {
+                return err!(
+                    "Could not find any installed binaries named '{}'.",
+                    use_command.selector
+                );
+            }
         }
         PathOrVersionSelector::Version(version) => {
+            // todo: select version based on version selector
             let binary =
                 get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.to_version()?)?;
             binary.get_command_names()
         }
     };
+
     for command_name in command_names {
         let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
         match &use_command.version {
             PathOrVersionSelector::Path => {
-                if !plugin_manifest.has_binary_with_selector(&use_command.selector) {
-                    return err!(
-                        "Could not find any installed binaries named '{}'.",
-                        use_command.selector.display()
-                    );
-                }
                 if utils::get_path_executable_path(environment, &command_name)?.is_none() {
                     return err!(
                         "Could not find any installed binaries on the path that matched '{}'.",
-                        command_name.display()
+                        command_name
                     );
                 }
                 plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path);
@@ -508,7 +527,7 @@ fn display_command_in_config_file_error(environment: &impl Environment, command_
             "in the current working directory's config file. If you wish to change the local version, ",
             "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
         ),
-        command_name.display()
+        command_name
     );
     environment.log_error(&message);
 }
@@ -520,7 +539,7 @@ fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) ->
         binaries.sort();
         let lines = binaries
             .into_iter()
-            .map(|b| format!("{} {}", b.name.display(), b.version))
+            .map(|b| format!("{} {}", b.name, b.version))
             .collect::<Vec<_>>();
 
         environment.log(&lines.join("\n"));
@@ -601,6 +620,7 @@ fn handle_util_command<TEnvironment: Environment>(
 ) -> Result<(), ErrBox> {
     match sub_command {
         UtilSubCommand::EnsurePath(command) => handle_util_ensure_path_command(environment, command),
+        UtilSubCommand::CommandExists(command) => handle_util_command_exists_command(environment, command),
     }
 }
 
@@ -617,6 +637,21 @@ fn handle_util_ensure_path_command<TEnvironment: Environment>(
         environment.log_error(&format!("The path '{}' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect.", command.path));
     }
     Ok(())
+}
+
+fn handle_util_command_exists_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: UtilCommandExistsCommand,
+) -> Result<(), ErrBox> {
+    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    if plugin_manifest.has_binary_with_name_and_command(&command.binary_name, &command.command_name) {
+        environment.exit(0)?;
+    }
+    if utils::get_path_executable_path(environment, &command.command_name)?.is_some() {
+        environment.exit(0)?;
+    }
+
+    environment.exit(1)
 }
 
 enum UrlInstallAction {
@@ -687,7 +722,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
             if let Some(identifier) = plugin_manifest.get_identifier_from_url(&url) {
                 if let Some(cache_item) = plugin_manifest.get_binary(&identifier) {
                     for command in cache_item.commands.iter() {
-                        if command.name == command_name.as_str() {
+                        if &command.name == command_name {
                             let plugin_cache_dir =
                                 plugins::get_plugin_dir(environment, &cache_item.name, &cache_item.version)?;
                             executable_path = Some(plugin_cache_dir.join(&command.path));
@@ -720,11 +755,11 @@ fn get_binary_with_name_and_version<'a>(
     if binaries.len() == 0 {
         let binaries = plugin_manifest.get_binaries_matching(selector);
         if binaries.is_empty() {
-            err!("Could not find any installed binaries named '{}'", selector.display())
+            err!("Could not find any installed binaries named '{}'", selector)
         } else {
             err!(
                 "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
-                selector.display(),
+                selector,
                 version,
                 display_binaries_versions(binaries).join("\n "),
             )
@@ -732,7 +767,7 @@ fn get_binary_with_name_and_version<'a>(
     } else if binaries.len() > 1 {
         return err!(
             "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
-            selector.display(),
+            selector,
             version,
             display_binaries_versions(binaries).join("\n  "),
         );
@@ -755,14 +790,18 @@ fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> Vec
             if have_same_owner {
                 b.version.to_string()
             } else {
-                format!("{} {}", b.name.display(), b.version)
+                format!("{} {}", b.name, b.version)
             }
         })
         .collect::<Vec<_>>();
 
     return lines;
+}
 
-    fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
+fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
+    if binaries.is_empty() {
+        true
+    } else {
         let first_owner = &binaries[0].name.owner;
         binaries.iter().all(|b| &b.name.owner == first_owner)
     }
@@ -779,7 +818,7 @@ fn get_global_binary_file_name(
                 if let Some(path_executable_path) = utils::get_path_executable_path(environment, command_name)? {
                     Ok(path_executable_path)
                 } else {
-                    err!("Binary '{}' is configured to use the executable on the path, but only the bvm version exists on the path. Run `bvm use {0} <some other version>` to select a version to run.", command_name.display())
+                    err!("Binary '{}' is configured to use the executable on the path, but only the bvm version exists on the path. Run `bvm use {0} <some other version>` to select a version to run.", command_name)
                 }
             }
             plugins::GlobalBinaryLocation::Bvm(identifier) => {
@@ -788,12 +827,12 @@ fn get_global_binary_file_name(
                     let command = item
                         .commands
                         .iter()
-                        .filter(|c| c.name == command_name.as_str())
+                        .filter(|c| &c.name == command_name)
                         .next()
                         .expect("Expected to have command.");
                     Ok(plugin_cache_dir.join(&command.path))
                 } else {
-                    err!("Should have found executable path for global binary. Report this as a bug and update the version used by running `bvm use {} <some other version>`", command_name.display())
+                    err!("Should have found executable path for global binary. Report this as a bug and update the version used by running `bvm use {} <some other version>`", command_name)
                 }
             }
         },
@@ -804,14 +843,11 @@ fn get_global_binary_file_name(
             } else {
                 let binaries = plugin_manifest.get_binaries_with_command(command_name);
                 if binaries.is_empty() {
-                    err!(
-                        "Could not find binary on the path for command '{}'",
-                        command_name.display()
-                    )
+                    err!("Could not find binary on the path for command '{}'", command_name)
                 } else {
                     err!(
                         "No binary is set on the path for command '{}'. Run `bvm use {0} <version>` to set a global version.\n\nInstalled versions:\n  {}",
-                        command_name.display(),
+                        command_name,
                         display_binaries_versions(binaries).join("\n "),
                     )
                 }
@@ -1438,6 +1474,56 @@ mod test {
     }
 
     #[tokio::test]
+    async fn use_command_different_owners_path() {
+        let environment = TestEnvironment::new();
+
+        let path_binary_path = add_binary_to_path(&environment, "name");
+        let path_second_binary_path = add_binary_to_path(&environment, "name-second");
+
+        let second_binary_path = get_binary_path("owner2", "name", "1.0.0");
+        let second_binary_path_second = get_binary_path_second("owner2", "name", "1.0.0");
+
+        create_remote_zip_multiple_commands_package(
+            &environment,
+            "http://localhost/package.json",
+            "owner",
+            "name",
+            "1.0.0",
+        );
+        create_remote_zip_multiple_commands_package(
+            &environment,
+            "http://localhost/package2.json",
+            "owner2",
+            "name",
+            "1.0.0",
+        );
+
+        // install the packages
+        install_url!(environment, "http://localhost/package.json");
+        install_url!(environment, "http://localhost/package2.json");
+        environment.clear_logs();
+
+        assert_resolves!(&environment, path_binary_path);
+        assert_resolves_name!(&environment, "name-second", path_second_binary_path);
+
+        run_cli(vec!["use", "owner2/name", "1.0.0"], &environment)
+            .await
+            .unwrap();
+
+        assert_resolves!(&environment, second_binary_path);
+        assert_resolves_name!(&environment, "name-second", second_binary_path_second);
+
+        // error when not specifying the owner and there are multiple on the path
+        let err_message = run_cli(vec!["use", "name", "path"], &environment).await.err().unwrap();
+        assert_eq!(err_message.to_string(), "There were multiple binaries with the name 'name'. Please include the owner in the name:\n  owner/name\n  owner2/name");
+
+        // should be ok when specifying other one
+        run_cli(vec!["use", "owner/name", "path"], &environment).await.unwrap();
+        assert_resolves!(&environment, path_binary_path);
+        assert_resolves_name!(&environment, "name-second", path_second_binary_path);
+    }
+
+    #[tokio::test]
     async fn clear_url_cache_command_path() {
         let environment = TestEnvironment::new();
         create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
@@ -1809,6 +1895,40 @@ mod test {
         );
     }
 
+    #[tokio::test]
+    async fn util_command_exists_no_command() {
+        let environment = TestEnvironment::new();
+        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(err.to_string(), "Exited with code 1");
+    }
+
+    #[tokio::test]
+    async fn util_command_exists_bvm_command() {
+        let environment = TestEnvironment::new();
+        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        install_url!(environment, "http://localhost/package.json");
+        environment.clear_logs();
+        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(err.to_string(), "Exited with code 0");
+    }
+
+    #[tokio::test]
+    async fn util_command_exists_path() {
+        let environment = TestEnvironment::new();
+        add_binary_to_path(&environment, "name");
+        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(err.to_string(), "Exited with code 0");
+    }
+
     fn add_binary_to_path(environment: &TestEnvironment, name: &str) -> String {
         let path_dir = PathBuf::from("/path-dir");
         if !environment.get_system_path_dirs().contains(&path_dir) {
@@ -1895,6 +2015,7 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
+    "description": "Some description.",
     "windows-x86_64": {{
         "path": "{}",
         "type": "zip",
@@ -1968,6 +2089,7 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
+    "description": "Some description.",
     "windows-x86_64": {{
         "path": "{}",
         "type": "zip",
@@ -2062,6 +2184,7 @@ mod test {
     "owner": "{}",
     "name": "{}",
     "version": "{}",
+    "description": "Some description.",
     "windows-x86_64": {{
         "path": "{}",
         "type": "tar.gz",
@@ -2140,6 +2263,7 @@ mod test {
     "schemaVersion": 1,
     "owner": "{}",
     "name": "{}",
+    "description": "Some description.",
     "versions": [{}]
 }}"#,
             owner,

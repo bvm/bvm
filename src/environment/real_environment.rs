@@ -190,6 +190,10 @@ impl Environment for RealEnvironment {
         }
     }
 
+    fn exit(&self, code: i32) -> Result<(), ErrBox> {
+        std::process::exit(code)
+    }
+
     fn is_verbose(&self) -> bool {
         self.is_verbose
     }

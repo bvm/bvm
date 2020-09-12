@@ -243,6 +243,10 @@ impl Environment for TestEnvironment {
         123456
     }
 
+    fn exit(&self, code: i32) -> Result<(), ErrBox> {
+        err!("Exited with code {}", code)
+    }
+
     fn is_verbose(&self) -> bool {
         *self.is_verbose.lock().unwrap()
     }

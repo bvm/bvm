@@ -20,7 +20,7 @@ pub struct RegistryItem {
 
 impl RegistryItem {
     pub fn compare(&self, other: &RegistryItem) -> Ordering {
-        let ordering = self.name.compare(&other.name);
+        let ordering = self.name.cmp(&other.name);
         match ordering {
             Ordering::Equal => self.url.partial_cmp(&other.url).unwrap(),
             _ => ordering,
@@ -28,7 +28,7 @@ impl RegistryItem {
     }
 
     pub fn display(&self) -> String {
-        format!("{} - {}", self.name.display(), self.url)
+        format!("{} - {}", self.name, self.url)
     }
 }
 

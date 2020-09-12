@@ -4,17 +4,17 @@ use semver_parser;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BinarySelector {
     pub owner: Option<String>,
-    pub name: CommandName,
+    pub name: String,
 }
 
 impl BinarySelector {
     pub fn is_match(&self, name: &BinaryName) -> bool {
-        if name.name == self.name {
+        if name.name.as_str() == self.name {
             if let Some(owner_name) = &self.owner {
                 owner_name == &name.owner
             } else {
@@ -24,12 +24,14 @@ impl BinarySelector {
             false
         }
     }
+}
 
-    pub fn display(&self) -> String {
+impl fmt::Display for BinarySelector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(owner) = &self.owner {
-            format!("{}/{}", owner, self.name.display())
+            write!(f, "{}/{}", owner, self.name)
         } else {
-            self.name.display().to_string()
+            write!(f, "{}", self.name)
         }
     }
 }
@@ -195,25 +197,10 @@ impl fmt::Display for VersionSelector {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BinaryName {
-    serialized_value: String,
     pub owner: String,
-    pub name: CommandName,
-}
-
-impl PartialEq for BinaryName {
-    fn eq(&self, other: &Self) -> bool {
-        self.serialized_value == other.serialized_value
-    }
-}
-
-impl Eq for BinaryName {}
-
-impl Hash for BinaryName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.serialized_value.hash(state);
-    }
+    pub name: String,
 }
 
 impl Serialize for BinaryName {
@@ -221,7 +208,7 @@ impl Serialize for BinaryName {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.serialized_value)
+        serializer.serialize_str(&format!("{}/{}", self.owner, self.name))
     }
 }
 
@@ -254,40 +241,46 @@ impl<'de> Deserialize<'de> for BinaryName {
 
 impl BinaryName {
     pub fn new(owner: String, name: String) -> BinaryName {
-        BinaryName {
-            serialized_value: format!("{}/{}", owner, name),
-            owner,
-            name: CommandName::from_string(name),
-        }
-    }
-
-    pub fn compare(&self, other: &BinaryName) -> Ordering {
-        self.serialized_value.partial_cmp(&other.serialized_value).unwrap()
-    }
-
-    pub fn display(&self) -> String {
-        format!("{}/{}", self.owner, self.name.display())
+        BinaryName { owner, name }
     }
 
     pub fn display_toggled_owner(&self, display_owner: bool) -> String {
         if display_owner {
-            self.display()
+            format!("{}", self)
         } else {
-            self.name.display().to_string()
+            self.name.clone()
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl fmt::Display for BinaryName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
+    }
+}
+
+impl PartialOrd for BinaryName {
+    fn partial_cmp(&self, other: &BinaryName) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BinaryName {
+    fn cmp(&self, other: &BinaryName) -> Ordering {
+        let ordering = self.owner.cmp(&other.owner);
+        match ordering {
+            Ordering::Equal => self.name.cmp(&other.name),
+            _ => ordering,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub struct CommandName(String);
 
 impl CommandName {
     pub fn from_string(value: String) -> CommandName {
         CommandName(value)
-    }
-
-    pub fn display(&self) -> &str {
-        self.as_str()
     }
 
     pub fn as_str(&self) -> &str {
@@ -296,5 +289,46 @@ impl CommandName {
 
     pub fn into_string(self) -> String {
         self.0
+    }
+}
+
+impl fmt::Display for CommandName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl Serialize for CommandName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+struct CommandNameVisitor;
+
+impl<'de> Visitor<'de> for CommandNameVisitor {
+    type Value = CommandName;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a command name")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(CommandName::from_string(v.to_string()))
+    }
+}
+
+impl<'de> Deserialize<'de> for CommandName {
+    fn deserialize<D>(deserializer: D) -> Result<CommandName, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(CommandNameVisitor)
     }
 }

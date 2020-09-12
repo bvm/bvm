@@ -50,7 +50,8 @@ impl BinaryManifestItem {
     }
 
     pub fn get_command_names(&self) -> Vec<CommandName> {
-        self.commands.iter().map(|c| c.get_command_name()).collect()
+        // todo: return iterator somehow?
+        self.commands.iter().map(|c| c.name.clone()).collect()
     }
 }
 
@@ -62,7 +63,7 @@ impl PartialOrd for BinaryManifestItem {
 
 impl Ord for BinaryManifestItem {
     fn cmp(&self, other: &BinaryManifestItem) -> Ordering {
-        let name_ordering = self.name.compare(&other.name);
+        let name_ordering = self.name.cmp(&other.name);
         match name_ordering {
             Ordering::Equal => self.version.partial_cmp(&other.version).unwrap(),
             _ => name_ordering,
@@ -73,15 +74,9 @@ impl Ord for BinaryManifestItem {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItemCommand {
-    pub name: String,
+    pub name: CommandName,
     /// The relative path to the file name.
     pub path: String,
-}
-
-impl BinaryManifestItemCommand {
-    pub fn get_command_name(&self) -> CommandName {
-        CommandName::from_string(self.name.clone())
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
@@ -149,6 +144,10 @@ impl PluginsManifest {
     }
 
     pub fn load(environment: &impl Environment) -> Result<PluginsManifest, ErrBox> {
+        // If a system wide lock is ever added here, remember that some
+        // people might run "bvm util is-installed owner/name" while this may
+        // have a lock. In that case, only have a lock on writing, but not
+        // on reading.
         let file_path = get_manifest_file_path(environment)?;
         match environment.read_file_text(&file_path) {
             Ok(text) => match serde_json::from_str(&text) {
@@ -232,18 +231,19 @@ impl PluginsManifest {
         self.binaries.values()
     }
 
-    pub fn has_binary_with_selector(&self, selector: &BinarySelector) -> bool {
-        self.binaries().any(|b| b.matches(selector))
-    }
-
     pub fn has_binary_with_command(&self, name: &CommandName) -> bool {
-        self.binaries().any(|b| &b.name.name == name)
+        self.binaries().any(|b| b.commands.iter().any(|c| &c.name == name))
     }
 
-    pub fn command_name_has_same_owner(&self, command_name: &CommandName) -> bool {
+    pub fn has_binary_with_name_and_command(&self, name: &BinaryName, command_name: &CommandName) -> bool {
+        self.binaries()
+            .any(|b| &b.name == name && b.commands.iter().any(|c| &c.name == command_name))
+    }
+
+    pub fn binary_name_has_same_owner(&self, binary_name: &BinaryName) -> bool {
         let binaries = self
             .binaries()
-            .filter(|b| &b.name.name == command_name)
+            .filter(|b| b.name.name == binary_name.name)
             .collect::<Vec<_>>();
         if let Some(first_binary) = binaries.get(0) {
             let first_owner = &first_binary.name.owner;
@@ -258,7 +258,9 @@ impl PluginsManifest {
     }
 
     pub fn get_binaries_with_command(&self, name: &CommandName) -> Vec<&BinaryManifestItem> {
-        self.binaries().filter(|b| &b.name.name == name).collect()
+        self.binaries()
+            .filter(|b| b.commands.iter().any(|c| &c.name == name))
+            .collect()
     }
 
     pub fn get_latest_binary_with_name(&self, name: &BinaryName) -> Option<&BinaryManifestItem> {

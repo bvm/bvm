@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{BinarySelector, CommandName, PathOrVersionSelector, Version, VersionSelector};
+use super::types::{BinaryName, BinarySelector, CommandName, PathOrVersionSelector, Version, VersionSelector};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -76,10 +76,16 @@ pub struct RegistryRemoveCommand {
 
 pub enum UtilSubCommand {
     EnsurePath(UtilEnsurePathCommand),
+    CommandExists(UtilCommandExistsCommand),
 }
 
 pub struct UtilEnsurePathCommand {
     pub path: String,
+}
+
+pub struct UtilCommandExistsCommand {
+    pub binary_name: BinaryName,
+    pub command_name: CommandName,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -175,6 +181,21 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             SubCommand::Util(UtilSubCommand::EnsurePath(UtilEnsurePathCommand {
                 path: path.trim_matches('"').trim_matches('\'').to_string(),
             }))
+        } else if util_matches.is_present("command-exists") {
+            let matches = util_matches.subcommand_matches("command-exists").unwrap();
+            let command_name = CommandName::from_string(matches.value_of("command").map(String::from).unwrap());
+            let full_binary_name = matches.value_of("full-binary-name").map(String::from).unwrap();
+            let binary_selector = parse_binary_selector(full_binary_name);
+            let name = binary_selector.name;
+            let owner = binary_selector
+                .owner
+                .ok_or_else(|| err_obj!("Please provide a full binary name (ex. binary/name)."))?;
+            let binary_name = BinaryName::new(owner, name);
+
+            SubCommand::Util(UtilSubCommand::CommandExists(UtilCommandExistsCommand {
+                binary_name,
+                command_name,
+            }))
         } else {
             unreachable!();
         }
@@ -196,12 +217,12 @@ fn parse_binary_selector(text: String) -> BinarySelector {
         let name = text[index + 1..].to_string();
         BinarySelector {
             owner: Some(owner_name),
-            name: CommandName::from_string(name),
+            name,
         }
     } else {
         BinarySelector {
             owner: None,
-            name: CommandName::from_string(text),
+            name: text,
         }
     }
 }
@@ -347,6 +368,22 @@ ARGS:
                         .arg(
                             Arg::with_name("path")
                                 .help("The directory path.")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("command-exists")
+                        .about("Exits with code 0 when the provided command is on the path or locally installed in bvm and 1 when not.")
+                        .arg(
+                            Arg::with_name("full-binary-name")
+                                .help("The full binary name (owner/name).")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("command")
+                                .help("The name of the command.")
                                 .takes_value(true)
                                 .required(true)
                         )
