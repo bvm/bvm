@@ -171,8 +171,9 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let util_matches = matches.subcommand_matches("util").unwrap();
         if util_matches.is_present("ensure-path") {
             let ensure_path_matches = util_matches.subcommand_matches("ensure-path").unwrap();
+            let path = ensure_path_matches.value_of("path").map(String::from).unwrap();
             SubCommand::Util(UtilSubCommand::EnsurePath(UtilEnsurePathCommand {
-                path: ensure_path_matches.value_of("path").map(String::from).unwrap(),
+                path: path.trim_matches('"').trim_matches('\'').to_string(),
             }))
         } else {
             unreachable!();

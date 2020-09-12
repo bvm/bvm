@@ -11,7 +11,7 @@ pub fn ensure_system_path(directory_path: &Path) -> Result<bool, ErrBox> {
 
     // add to the path if it doesn't have this entry
     if !path.split(";").any(|p| p == directory_path) {
-        if !path.is_empty() {
+        if !path.is_empty() && !path.ends_with(';') {
             path.push_str(";")
         }
         path.push_str(&directory_path);

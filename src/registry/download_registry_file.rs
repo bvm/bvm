@@ -11,6 +11,7 @@ pub struct RegistryFile {
     pub schema_version: u32,
     name: String,
     owner: String,
+    description: String,
     pub versions: Vec<RegistryVersionInfo>,
 }
 

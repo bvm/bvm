@@ -1797,6 +1797,12 @@ mod test {
         run_cli(vec!["util", "ensure-path", "test"], &environment)
             .await
             .unwrap();
+        run_cli(vec!["util", "ensure-path", "\"test\""], &environment)
+            .await
+            .unwrap();
+        run_cli(vec!["util", "ensure-path", "'test'"], &environment)
+            .await
+            .unwrap();
         assert_eq!(
             environment.get_system_path_dirs(),
             vec![PathBuf::from("/local-data/shims"), PathBuf::from("test")]

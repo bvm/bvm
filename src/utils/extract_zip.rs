@@ -4,7 +4,7 @@ use std::path::Path;
 
 use crate::environment::Environment;
 
-// todo: consolidate with code in dprint (maybe move to crate?)
+// todo: consolidate with code in dprint
 
 pub async fn extract_zip(
     message: &str,
