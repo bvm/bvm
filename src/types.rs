@@ -1,7 +1,9 @@
 use dprint_cli_core::types::ErrBox;
+use semver::Version as SemVersion;
 use semver_parser;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::Ordering;
+use std::cmp::{Ord, Ordering, PartialOrd};
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -47,20 +49,89 @@ impl PathOrVersionSelector {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Version {
     full_text: String,
-    pub major: u64,
-    pub minor: u64,
-    pub patch: u64,
+    sem_ver: SemVersion,
 }
 
 impl Version {
     pub fn parse(text: &str) -> Result<Version, ErrBox> {
-        VersionSelector::parse(text)?.as_version()
+        let sem_ver = SemVersion::parse(text)?;
+        Ok(Version {
+            full_text: text.to_string(),
+            sem_ver,
+        })
     }
 
     pub fn as_str(&self) -> &str {
         &self.full_text
+    }
+
+    pub fn is_prerelease(&self) -> bool {
+        self.sem_ver.is_prerelease()
+    }
+}
+
+/// For testing purposes.
+#[cfg(test)]
+impl From<&str> for Version {
+    fn from(value: &str) -> Self {
+        Version::parse(value).unwrap()
+    }
+}
+
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl PartialOrd for Version {
+    fn partial_cmp(&self, other: &Version) -> Option<Ordering> {
+        self.sem_ver.partial_cmp(&other.sem_ver)
+    }
+}
+
+impl Ord for Version {
+    fn cmp(&self, other: &Version) -> Ordering {
+        self.sem_ver.cmp(&other.sem_ver)
+    }
+}
+
+// todo: there must be a shorter way to do this serialization and deserialization?
+impl Serialize for Version {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.full_text)
+    }
+}
+
+struct VersionVisitor;
+
+impl<'de> Visitor<'de> for VersionVisitor {
+    type Value = Version;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a valid semantic version")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Version::parse(v).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for Version {
+    fn deserialize<D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(VersionVisitor)
     }
 }
 
@@ -107,21 +178,20 @@ impl VersionSelector {
         &self.full_text
     }
 
-    pub fn as_version(&self) -> Result<Version, ErrBox> {
-        if let Some(minor) = self.minor {
-            if let Some(patch) = self.patch {
-                return Ok(Version {
-                    full_text: self.as_str().to_string(),
-                    major: self.major,
-                    minor,
-                    patch,
-                });
-            }
+    pub fn to_version(&self) -> Result<Version, ErrBox> {
+        if self.minor.is_some() && self.patch.is_some() {
+            return Version::parse(self.as_str());
         }
         return err!(
             "Could not parse '{}' as semantic version with three parts (ex. 1.0.0).",
             self.as_str()
         );
+    }
+}
+
+impl fmt::Display for VersionSelector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

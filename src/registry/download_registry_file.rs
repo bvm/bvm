@@ -3,7 +3,7 @@ use dprint_cli_core::types::ErrBox;
 use serde::{self, Deserialize, Serialize};
 
 use crate::environment::Environment;
-use crate::types::BinaryName;
+use crate::types::{BinaryName, Version};
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -23,7 +23,7 @@ impl RegistryFile {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryVersionInfo {
-    pub version: String, // todo: deserialize to semver::Version
+    pub version: Version,
     pub path: String,
     pub checksum: String,
 }

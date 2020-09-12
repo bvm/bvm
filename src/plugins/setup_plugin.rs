@@ -4,20 +4,20 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::environment::Environment;
-use crate::types::BinaryName;
+use crate::types::{BinaryName, Version};
 use crate::utils;
 
 pub fn get_plugin_dir(
     environment: &impl Environment,
     binary_name: &BinaryName,
-    version: &str,
+    version: &Version,
 ) -> Result<PathBuf, ErrBox> {
     let local_data_dir = environment.get_local_user_data_dir()?; // do not sure across domains
     Ok(local_data_dir
         .join("binaries")
         .join(&binary_name.owner)
         .join(binary_name.name.as_str())
-        .join(version))
+        .join(version.as_str()))
 }
 
 pub struct PluginFile {
@@ -43,7 +43,7 @@ impl PluginFile {
         BinaryName::new(self.file.owner.clone(), self.file.name.clone())
     }
 
-    pub fn version(&self) -> &str {
+    pub fn version(&self) -> &Version {
         &self.file.version
     }
 
@@ -118,14 +118,6 @@ pub async fn get_and_associate_plugin_file<'a, TEnvironment: Environment>(
     };
 
     let serialized_plugin_file = read_plugin_file(&plugin_file_bytes)?;
-
-    // ensure the plugin version can parse to a semver
-    if let Err(err) = semver::Version::parse(&serialized_plugin_file.version) {
-        return err!(
-            "The version found in the binary manifest file was invalid. {}",
-            err.to_string()
-        );
-    }
 
     // associate the url to the binary identifier
     let plugin_file = PluginFile {
@@ -204,7 +196,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     // add the plugin information to the manifest
     let item = BinaryManifestItem {
         name: plugin_file.get_binary_name(),
-        version: plugin_file.version().to_string(),
+        version: plugin_file.version().clone(),
         created_time: environment.get_time_secs(),
         commands: commands
             .iter()

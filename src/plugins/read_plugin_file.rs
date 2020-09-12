@@ -1,6 +1,7 @@
 use dprint_cli_core::types::ErrBox;
 use serde::{self, Deserialize, Serialize};
 
+use crate::types::Version;
 use crate::CommandName;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -9,7 +10,7 @@ pub struct SerializedPluginFile {
     pub schema_version: u32,
     pub name: String,
     pub owner: String,
-    pub version: String,
+    pub version: Version,
     #[serde(rename = "linux-x86_64")]
     pub linux: Option<PlatformInfo>,
     #[serde(rename = "darwin-x86_64")]

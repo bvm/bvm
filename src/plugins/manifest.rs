@@ -1,8 +1,7 @@
-use core::cmp::Ordering;
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
-use semver::Version as SemVersion;
 use serde::{Deserialize, Serialize};
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,18 +21,18 @@ pub struct PluginsManifest {
     binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItemSource {
     pub path: String,
     pub checksum: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
     pub name: BinaryName,
-    pub version: String,
+    pub version: Version,
     /// Created time in *seconds* since epoch.
     pub created_time: u64,
     pub commands: Vec<BinaryManifestItemCommand>,
@@ -46,11 +45,6 @@ impl BinaryManifestItem {
         BinaryIdentifier::new(&self.name, &self.version)
     }
 
-    pub fn get_sem_ver(&self) -> SemVersion {
-        // at this point, expect this to be ok since we validated it on setup
-        SemVersion::parse(&self.version).unwrap()
-    }
-
     pub fn matches(&self, selector: &BinarySelector) -> bool {
         selector.is_match(&self.name)
     }
@@ -58,17 +52,25 @@ impl BinaryManifestItem {
     pub fn get_command_names(&self) -> Vec<CommandName> {
         self.commands.iter().map(|c| c.get_command_name()).collect()
     }
+}
 
-    pub fn compare(&self, other: &BinaryManifestItem) -> Ordering {
+impl PartialOrd for BinaryManifestItem {
+    fn partial_cmp(&self, other: &BinaryManifestItem) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BinaryManifestItem {
+    fn cmp(&self, other: &BinaryManifestItem) -> Ordering {
         let name_ordering = self.name.compare(&other.name);
         match name_ordering {
-            Ordering::Equal => self.get_sem_ver().partial_cmp(&other.get_sem_ver()).unwrap(),
+            Ordering::Equal => self.version.partial_cmp(&other.version).unwrap(),
             _ => name_ordering,
         }
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItemCommand {
     pub name: String,
@@ -87,7 +89,7 @@ impl BinaryManifestItemCommand {
 pub struct BinaryIdentifier(String);
 
 impl BinaryIdentifier {
-    pub fn new(name: &BinaryName, version: &str) -> Self {
+    pub fn new(name: &BinaryName, version: &Version) -> Self {
         BinaryIdentifier(format!("{}||{}||{}", name.owner, name.name.as_str(), version))
     }
 }
@@ -222,7 +224,7 @@ impl PluginsManifest {
         version: &Version,
     ) -> Vec<&BinaryManifestItem> {
         self.binaries()
-            .filter(|b| b.matches(selector) && b.version == version.as_str())
+            .filter(|b| b.matches(selector) && &b.version == version)
             .collect()
     }
 
@@ -261,13 +263,13 @@ impl PluginsManifest {
 
     pub fn get_latest_binary_with_name(&self, name: &BinaryName) -> Option<&BinaryManifestItem> {
         let mut binaries = self.binaries().filter(|b| &b.name == name).collect::<Vec<_>>();
-        binaries.sort_by(|a, b| a.compare(b));
+        binaries.sort();
         binaries.pop()
     }
 
     pub fn get_latest_binary_with_command(&self, name: &CommandName) -> Option<&BinaryManifestItem> {
         let mut binaries = self.get_binaries_with_command(name);
-        binaries.sort_by(|a, b| a.compare(b));
+        binaries.sort();
         binaries.pop()
     }
 

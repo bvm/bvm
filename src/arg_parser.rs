@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
+use super::types::{BinarySelector, CommandName, PathOrVersionSelector, Version, VersionSelector};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -52,7 +52,7 @@ pub enum UrlOrName {
 
 pub struct InstallName {
     pub selector: BinarySelector,
-    pub version: Option<String>,
+    pub version: Option<VersionSelector>,
 }
 
 pub struct UninstallCommand {
@@ -105,7 +105,14 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             if version.is_some() || Url::parse(&url_or_name).is_err() {
                 let selector = parse_binary_selector(url_or_name);
                 SubCommand::InstallUrl(InstallUrlCommand {
-                    url_or_name: UrlOrName::Name(InstallName { selector, version }),
+                    url_or_name: UrlOrName::Name(InstallName {
+                        selector,
+                        version: if let Some(v) = &version {
+                            Some(VersionSelector::parse(v)?)
+                        } else {
+                            None
+                        },
+                    }),
                     use_command,
                     force,
                 })

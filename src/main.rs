@@ -11,7 +11,6 @@ mod plugins;
 mod registry;
 mod utils;
 
-use semver::Version as SemVersion;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -273,7 +272,9 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                 // now get the url
                 let urls = url_results.into_iter().map(|r| r.url).collect();
                 let selected_url = if let Some(version) = &name.version {
-                    find_url(environment, &urls, |item| &item.version == version).await?
+                    // todo: properly use version selector
+                    let version = version.to_version()?;
+                    find_url(environment, &urls, |item| &item.version == &version).await?
                 } else {
                     find_latest_url(environment, &urls).await?
                 };
@@ -319,15 +320,13 @@ async fn handle_install_url_command<TEnvironment: Environment>(
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
             for item in registry_file.versions {
-                let item_version = SemVersion::parse(&item.version).unwrap();
-                let latest = if item_version.is_prerelease() {
+                let latest = if item.version.is_prerelease() {
                     &mut latest_pre_release
                 } else {
                     &mut latest_release
                 };
                 if let Some(latest) = latest.as_mut() {
-                    let latest_version = SemVersion::parse(&latest.version).unwrap();
-                    if item_version.gt(&latest_version) {
+                    if item.version.gt(&latest.version) {
                         *latest = item;
                     }
                 } else {
@@ -450,7 +449,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
         }
         PathOrVersionSelector::Version(version) => {
             let binary =
-                get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.as_version()?)?;
+                get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.to_version()?)?;
             binary.get_command_names()
         }
     };
@@ -474,7 +473,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             }
             PathOrVersionSelector::Version(version) => {
                 let binary =
-                    get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.as_version()?)?;
+                    get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.to_version()?)?;
                 let identifier = binary.get_identifier();
                 plugin_manifest
                     .use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
@@ -518,7 +517,7 @@ fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) ->
     let plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let mut binaries = plugin_manifest.binaries().collect::<Vec<_>>();
     if !binaries.is_empty() {
-        binaries.sort_by(|a, b| a.compare(b));
+        binaries.sort();
         let lines = binaries
             .into_iter()
             .map(|b| format!("{} {}", b.name.display(), b.version))
@@ -726,7 +725,7 @@ fn get_binary_with_name_and_version<'a>(
             err!(
                 "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
                 selector.display(),
-                version.as_str(),
+                version,
                 display_binaries_versions(binaries).join("\n "),
             )
         }
@@ -734,7 +733,7 @@ fn get_binary_with_name_and_version<'a>(
         return err!(
             "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
             selector.display(),
-            version.as_str(),
+            version,
             display_binaries_versions(binaries).join("\n  "),
         );
     } else {
@@ -748,13 +747,13 @@ fn display_binaries_versions(binaries: Vec<&plugins::BinaryManifestItem>) -> Vec
     }
 
     let mut binaries = binaries;
-    binaries.sort_by(|a, b| a.compare(b));
+    binaries.sort();
     let have_same_owner = get_have_same_owner(&binaries);
     let lines = binaries
         .into_iter()
         .map(|b| {
             if have_same_owner {
-                b.version.clone()
+                b.version.to_string()
             } else {
                 format!("{} {}", b.name.display(), b.version)
             }
@@ -1478,7 +1477,7 @@ mod test {
             "owner",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum: "".to_string(),
                 path: "https://localhost/test.json".to_string(),
             }],
@@ -1489,7 +1488,7 @@ mod test {
             "owner",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "2.0.0".to_string(),
+                version: "2.0.0".into(),
                 checksum: "".to_string(),
                 path: "https://localhost/test.json".to_string(),
             }],
@@ -1500,7 +1499,7 @@ mod test {
             "owner2",
             "name2",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum: "".to_string(),
                 path: "https://localhost/test.json".to_string(),
             }],
@@ -1570,7 +1569,7 @@ mod test {
             "owner",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum,
                 path: "http://localhost/package.json".to_string(),
             }],
@@ -1608,22 +1607,22 @@ mod test {
             "name",
             vec![
                 registry::RegistryVersionInfo {
-                    version: "1.0.0".to_string(),
+                    version: "1.0.0".into(),
                     checksum: checksum1,
                     path: "http://localhost/package.json".to_string(),
                 },
                 registry::RegistryVersionInfo {
-                    version: "2.0.1".to_string(),
+                    version: "2.0.1".into(),
                     checksum: checksum3,
                     path: "http://localhost/package3.json".to_string(),
                 },
                 registry::RegistryVersionInfo {
-                    version: "2.0.0".to_string(),
+                    version: "2.0.0".into(),
                     checksum: checksum2,
                     path: "http://localhost/package2.json".to_string(),
                 },
                 registry::RegistryVersionInfo {
-                    version: "3.0.0-alpha".to_string(),
+                    version: "3.0.0-alpha".into(),
                     checksum: checksum4,
                     path: "http://localhost/package4.json".to_string(),
                 },
@@ -1663,12 +1662,12 @@ mod test {
             "name",
             vec![
                 registry::RegistryVersionInfo {
-                    version: "1.0.0-beta".to_string(),
+                    version: "1.0.0-beta".into(),
                     checksum: checksum2,
                     path: "http://localhost/package2.json".to_string(),
                 },
                 registry::RegistryVersionInfo {
-                    version: "1.0.0-alpha".to_string(),
+                    version: "1.0.0-alpha".into(),
                     checksum: checksum1,
                     path: "http://localhost/package.json".to_string(),
                 },
@@ -1695,7 +1694,7 @@ mod test {
             "owner",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum: "wrong-checksum".to_string(),
                 path: "http://localhost/package.json".to_string(),
             }],
@@ -1742,7 +1741,7 @@ mod test {
             "owner",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum,
                 path: "http://localhost/package.json".to_string(),
             }],
@@ -1761,7 +1760,7 @@ mod test {
             "owner2",
             "name",
             vec![registry::RegistryVersionInfo {
-                version: "1.0.0".to_string(),
+                version: "1.0.0".into(),
                 checksum,
                 path: "http://localhost/package2.json".to_string(),
             }],
@@ -1789,7 +1788,7 @@ mod test {
             .unwrap();
         assert_eq!(
             environment.get_system_path_dirs(),
-            vec![PathBuf::from("/data/shims"), PathBuf::from("test")]
+            vec![PathBuf::from("/local-data/shims"), PathBuf::from("test")]
         );
         let logged_errors = environment.take_logged_errors();
         assert_eq!(logged_errors, vec!["The path 'test' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect."]);
@@ -1800,7 +1799,7 @@ mod test {
             .unwrap();
         assert_eq!(
             environment.get_system_path_dirs(),
-            vec![PathBuf::from("/data/shims"), PathBuf::from("test")]
+            vec![PathBuf::from("/local-data/shims"), PathBuf::from("test")]
         );
     }
 
