@@ -282,7 +282,7 @@ Low effort:
 6. Output the binary owner/name, description (add), and recent versions after adding a registry.
 7. Urls should be `url::Url`. Versions should be `semver::Version`.
 8. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
-9. `bvm install` should ensure all binaries in the manifest file are installed (this is useful for when a user goes on a different computer since the binaries are stored locally).
+9. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally).
 
 Medium effort:
 
