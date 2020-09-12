@@ -129,6 +129,6 @@ impl Registry {
 }
 
 fn get_registry_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_bvm_home_dir()?;
+    let user_data_dir = environment.get_user_data_dir()?; // share across domains
     Ok(user_data_dir.join("registry.json"))
 }

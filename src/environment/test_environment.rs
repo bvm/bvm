@@ -31,7 +31,7 @@ impl TestEnvironment {
             run_shell_commands: Arc::new(Mutex::new(Vec::new())),
             remote_files: Arc::new(Mutex::new(HashMap::new())),
             deleted_directories: Arc::new(Mutex::new(Vec::new())),
-            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims")])),
+            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/local-data/shims")])),
         }
     }
 
@@ -231,7 +231,11 @@ impl Environment for TestEnvironment {
         Ok(action(Box::new(|_| {})))
     }
 
-    fn get_bvm_home_dir(&self) -> Result<PathBuf, ErrBox> {
+    fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+        Ok(PathBuf::from("/local-data"))
+    }
+
+    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         Ok(PathBuf::from("/data"))
     }
 

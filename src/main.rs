@@ -1,3 +1,4 @@
+#[macro_use(err_obj)]
 #[macro_use(err)]
 extern crate dprint_cli_core;
 mod types;
@@ -1827,17 +1828,20 @@ mod test {
 
     fn get_binary_path(owner: &str, name: &str, version: &str) -> String {
         if cfg!(target_os = "windows") {
-            format!("/data\\binaries\\{}\\{}\\{}\\binary.exe", owner, name, version)
+            format!("/local-data\\binaries\\{}\\{}\\{}\\binary.exe", owner, name, version)
         } else {
-            format!("/data/binaries/{}/{}/{}/binary", owner, name, version)
+            format!("/local-data/binaries/{}/{}/{}/binary", owner, name, version)
         }
     }
 
     fn get_binary_path_second(owner: &str, name: &str, version: &str) -> String {
         if cfg!(target_os = "windows") {
-            format!("/data\\binaries\\{}\\{}\\{}\\second-binary.exe", owner, name, version)
+            format!(
+                "/local-data\\binaries\\{}\\{}\\{}\\second-binary.exe",
+                owner, name, version
+            )
         } else {
-            format!("/data/binaries/{}/{}/{}/second-binary", owner, name, version)
+            format!("/local-data/binaries/{}/{}/{}/second-binary", owner, name, version)
         }
     }
 

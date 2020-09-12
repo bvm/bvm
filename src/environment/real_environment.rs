@@ -116,16 +116,29 @@ impl Environment for RealEnvironment {
         log_action_with_progress(&self.progress_bars, message, action, total_size).await
     }
 
-    fn get_bvm_home_dir(&self) -> Result<PathBuf, ErrBox> {
-        log_verbose!(self, "Getting home directory.");
-        match dirs::home_dir() {
-            Some(path) => {
-                let bvm_dir = path.join(".bvm");
-                self.create_dir_all(&bvm_dir)?;
-                Ok(bvm_dir)
-            }
-            None => err!("Could not get home directory."),
-        }
+    fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+        log_verbose!(self, "Getting local user data directory.");
+        let bvm_dir = if cfg!(target_os = "windows") {
+            // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
+            let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get local data dir"))?;
+            dir.join("bvm")
+        } else {
+            get_home_dir()?
+        };
+        self.create_dir_all(&bvm_dir)?;
+        Ok(bvm_dir)
+    }
+
+    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+        log_verbose!(self, "Getting user data directory.");
+        let bvm_dir = if cfg!(target_os = "windows") {
+            let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get data dir"))?;
+            dir.join("bvm")
+        } else {
+            get_home_dir()?
+        };
+        self.create_dir_all(&bvm_dir)?;
+        Ok(bvm_dir)
     }
 
     fn get_system_path_dirs(&self) -> Vec<PathBuf> {
@@ -180,4 +193,9 @@ impl Environment for RealEnvironment {
     fn is_verbose(&self) -> bool {
         self.is_verbose
     }
+}
+
+fn get_home_dir() -> Result<PathBuf, ErrBox> {
+    let dir = dirs::home_dir().ok_or_else(|| err_obj!("Could not get home data dir"))?;
+    Ok(dir.join(".bvm"))
 }

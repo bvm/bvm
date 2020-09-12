@@ -22,7 +22,7 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 
 1. For now, install `bvm` via cargo—`cargo install bvm`.
 2. Manually add the shims folder as the first item on the path:
-   - Windows: `C:\Users\<user-name>\.bvm\shims`
+   - Windows: `%LOCALAPPDATA%\bvm\shims`
    - Mac/Linux: `$HOME/.bvm/shims`
 3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
    ```jsonc
@@ -282,6 +282,7 @@ Low effort:
 6. Output the binary owner/name, description (add), and recent versions after adding a registry.
 7. Urls should be `url::Url`. Versions should be `semver::Version`.
 8. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
+9. `bvm install` should ensure all binaries in the manifest file are installed (this is useful for when a user goes on a different computer since the binaries are stored locally).
 
 Medium effort:
 

@@ -24,12 +24,21 @@ pub struct PluginsManifest {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct BinaryManifestItemSource {
+    pub path: String,
+    pub checksum: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct BinaryManifestItem {
     pub name: BinaryName,
     pub version: String,
     /// Created time in *seconds* since epoch.
     pub created_time: u64,
     pub commands: Vec<BinaryManifestItemCommand>,
+    // Source for reinstalling.
+    pub source: BinaryManifestItemSource,
 }
 
 impl BinaryManifestItem {
@@ -318,6 +327,6 @@ impl PluginsManifest {
 }
 
 fn get_manifest_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_bvm_home_dir()?;
+    let user_data_dir = environment.get_user_data_dir()?; // share across domains
     Ok(user_data_dir.join("binaries-manifest.json"))
 }
