@@ -191,10 +191,22 @@ impl Environment for TestEnvironment {
         self.path_dirs.lock().unwrap().clone()
     }
 
-    fn ensure_system_path(&self, directory_path: &Path) -> Result<(), ErrBox> {
+    #[cfg(windows)]
+    fn ensure_system_path(&self, directory_path: &str) -> Result<(), ErrBox> {
         let mut path_dirs = self.path_dirs.lock().unwrap();
-        if !path_dirs.contains(&directory_path.to_path_buf()) {
-            path_dirs.push(directory_path.to_path_buf());
+        let directory_path = PathBuf::from(directory_path);
+        if !path_dirs.contains(&directory_path) {
+            path_dirs.push(directory_path);
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn remove_system_path(&self, directory_path: &str) -> Result<(), ErrBox> {
+        let mut path_dirs = self.path_dirs.lock().unwrap();
+        let directory_path = PathBuf::from(directory_path);
+        if let Some(pos) = path_dirs.iter().position(|p| p == &directory_path) {
+            path_dirs.remove(pos);
         }
         Ok(())
     }

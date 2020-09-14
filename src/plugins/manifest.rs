@@ -3,10 +3,11 @@ use dprint_cli_core::types::ErrBox;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::hash_map::Values;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::environment::Environment;
+use super::BinaryEnvironment;
+use crate::environment::{get_local_data_dir_var_name, Environment, PATH_SEPARATOR};
 use crate::types::{BinaryName, BinarySelector, CommandName, Version};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
@@ -19,6 +20,26 @@ pub struct PluginsManifest {
     urls_to_identifier: HashMap<String, BinaryIdentifier>,
     global_versions: GlobalVersionsMap,
     binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
+    /// Changes to the environment that need to be made.
+    pending_env_changes: PendingEnvironmentChanges,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PendingEnvironmentChanges {
+    added: HashSet<BinaryIdentifier>,
+    removed: HashSet<BinaryIdentifier>,
+}
+
+impl PendingEnvironmentChanges {
+    fn any(&self) -> bool {
+        !self.added.is_empty() || !self.removed.is_empty()
+    }
+
+    fn clear(&mut self) {
+        self.added.clear();
+        self.removed.clear();
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -38,6 +59,8 @@ pub struct BinaryManifestItem {
     pub commands: Vec<BinaryManifestItemCommand>,
     // Source for reinstalling.
     pub source: BinaryManifestItemSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<BinaryEnvironment>,
 }
 
 impl BinaryManifestItem {
@@ -52,6 +75,14 @@ impl BinaryManifestItem {
     pub fn get_command_names(&self) -> Vec<CommandName> {
         // todo: return iterator somehow?
         self.commands.iter().map(|c| c.name.clone()).collect()
+    }
+
+    pub fn get_env_paths(&self) -> Vec<String> {
+        self.environment
+            .as_ref()
+            .and_then(|e| e.paths.as_ref())
+            .map(|p| p.clone())
+            .unwrap_or(Vec::new())
     }
 }
 
@@ -94,6 +125,16 @@ pub enum GlobalBinaryLocation {
     Bvm(BinaryIdentifier),
     /// Use the binary on the path.
     Path,
+}
+
+impl GlobalBinaryLocation {
+    pub fn to_identifier_option(&self) -> Option<BinaryIdentifier> {
+        if let GlobalBinaryLocation::Bvm(identifier) = self {
+            Some(identifier.clone())
+        } else {
+            None
+        }
+    }
 }
 
 impl From<BinaryIdentifier> for GlobalBinaryLocation {
@@ -140,6 +181,10 @@ impl PluginsManifest {
             global_versions: GlobalVersionsMap(HashMap::new()),
             binaries: HashMap::new(),
             urls_to_identifier: HashMap::new(),
+            pending_env_changes: PendingEnvironmentChanges {
+                added: HashSet::new(),
+                removed: HashSet::new(),
+            },
         }
     }
 
@@ -162,9 +207,32 @@ impl PluginsManifest {
     }
 
     pub fn save(&self, environment: &impl Environment) -> Result<(), ErrBox> {
+        // handle any pending changes
+        if self.pending_env_changes.any() {
+            // update the environment variables on windows (the environment manifest will be be set on the path on linux shell startup)
+            #[cfg(target_os = "windows")]
+            {
+                for path in self.get_pending_added_paths() {
+                    environment.ensure_system_path(&path)?;
+                }
+                for path in self.get_pending_removed_paths() {
+                    environment.remove_system_path(&path)?;
+                }
+            }
+
+            // update environment manifest
+            let mut environment_manifest = super::EnvironmentManifest::load(environment)?;
+            environment_manifest.add_paths(self.get_pending_added_paths());
+            environment_manifest.remove_paths(&self.get_pending_removed_paths());
+
+            environment_manifest.save(environment)?;
+        }
+
+        // save plugin file
         let file_path = get_manifest_file_path(environment)?;
         let serialized_manifest = serde_json::to_string(&self)?;
         environment.write_file_text(&file_path, &serialized_manifest)?;
+
         Ok(())
     }
 
@@ -180,6 +248,40 @@ impl PluginsManifest {
 
     pub fn clear_cached_urls(&mut self) {
         self.urls_to_identifier.clear();
+    }
+
+    // pending environment changes
+
+    pub fn get_pending_added_paths(&self) -> Vec<String> {
+        self.get_change_paths(&self.pending_env_changes.added)
+    }
+
+    pub fn get_pending_removed_paths(&self) -> Vec<String> {
+        self.get_change_paths(&self.pending_env_changes.removed)
+    }
+
+    fn get_change_paths(&self, changes: &HashSet<BinaryIdentifier>) -> Vec<String> {
+        let mut result = Vec::new();
+        for identifier in changes.iter() {
+            if let Some(binary) = self.get_binary(&identifier) {
+                let bin_dir = super::get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
+                for path in binary.get_env_paths() {
+                    result.push(format!(
+                        "{}{}{}{}{}",
+                        get_local_data_dir_var_name(),
+                        PATH_SEPARATOR,
+                        bin_dir.to_string_lossy(),
+                        PATH_SEPARATOR,
+                        path
+                    ));
+                }
+            }
+        }
+        result
+    }
+
+    pub fn clear_pending_env_changes(&mut self) {
+        self.pending_env_changes.clear();
     }
 
     // binary
@@ -280,7 +382,31 @@ impl PluginsManifest {
     }
 
     pub fn use_global_version(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
-        self.global_versions.replace(command_name, location)
+        let past_location = self.get_global_binary_location(&command_name);
+        let past_identifier = past_location.map(|l| l.to_identifier_option()).flatten();
+        let new_identifier = location.to_identifier_option();
+
+        if let Some(new_identifier) = new_identifier {
+            if !self.has_any_global_command(&new_identifier) && self.has_environment_paths(&new_identifier) {
+                if self.pending_env_changes.removed.contains(&new_identifier) {
+                    self.pending_env_changes.removed.remove(&new_identifier);
+                } else {
+                    self.pending_env_changes.added.insert(new_identifier.clone());
+                }
+            }
+        }
+
+        self.global_versions.replace(command_name, location);
+
+        if let Some(past_identifier) = past_identifier {
+            if !self.has_any_global_command(&past_identifier) && self.has_environment_paths(&past_identifier) {
+                if self.pending_env_changes.added.contains(&past_identifier) {
+                    self.pending_env_changes.added.remove(&past_identifier);
+                } else {
+                    self.pending_env_changes.removed.insert(past_identifier.clone());
+                }
+            }
+        }
     }
 
     fn remove_if_global_binary(
@@ -315,6 +441,28 @@ impl PluginsManifest {
         } else {
             false
         }
+    }
+
+    pub fn has_any_global_command(&self, identifier: &BinaryIdentifier) -> bool {
+        if let Some(binary) = self.get_binary(&identifier) {
+            for command in binary.commands.iter() {
+                if self.is_global_version(identifier, &command.name) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    pub fn get_environment_paths(&self, identifier: &BinaryIdentifier) -> Vec<String> {
+        self.get_binary(identifier)
+            .map(|b| b.get_env_paths())
+            .unwrap_or(Vec::new())
+    }
+
+    pub fn has_environment_paths(&self, identifier: &BinaryIdentifier) -> bool {
+        !self.get_environment_paths(identifier).is_empty()
     }
 
     pub fn get_global_command_names(&self, identifier: &BinaryIdentifier) -> Vec<CommandName> {

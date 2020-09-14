@@ -5,6 +5,9 @@ mod types;
 #[macro_use]
 mod environment;
 
+#[cfg(test)]
+mod test_builders;
+
 mod arg_parser;
 mod configuration;
 mod plugins;
@@ -17,7 +20,7 @@ use std::path::PathBuf;
 use arg_parser::*;
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
-use environment::Environment;
+use environment::{Environment, SYS_PATH_DELIMITER};
 use types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
 
 #[tokio::main]
@@ -52,6 +55,7 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
         SubCommand::Util(command) => handle_util_command(environment, command)?,
+        SubCommand::Shell(command) => handle_shell_command(environment, command)?,
     }
 
     Ok(())
@@ -619,24 +623,8 @@ fn handle_util_command<TEnvironment: Environment>(
     sub_command: UtilSubCommand,
 ) -> Result<(), ErrBox> {
     match sub_command {
-        UtilSubCommand::EnsurePath(command) => handle_util_ensure_path_command(environment, command),
         UtilSubCommand::CommandExists(command) => handle_util_command_exists_command(environment, command),
     }
-}
-
-fn handle_util_ensure_path_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    command: UtilEnsurePathCommand,
-) -> Result<(), ErrBox> {
-    let system_path_dirs = environment.get_system_path_dirs();
-    let dir_path = PathBuf::from(&command.path);
-    environment.ensure_system_path(&dir_path)?;
-    if !system_path_dirs.contains(&dir_path) {
-        // It is unfortunately not possible for a process to modify the current shell's environment
-        // variables. For this reason, we need to ask the user to restart their application.
-        environment.log_error(&format!("The path '{}' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect.", command.path));
-    }
-    Ok(())
 }
 
 fn handle_util_command_exists_command<TEnvironment: Environment>(
@@ -652,6 +640,74 @@ fn handle_util_command_exists_command<TEnvironment: Environment>(
     }
 
     environment.exit(1)
+}
+
+fn handle_shell_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellSubCommand,
+) -> Result<(), ErrBox> {
+    match command {
+        ShellSubCommand::GetNewPath(command) => handle_shell_get_new_path_command(environment, command),
+        ShellSubCommand::ClearPendingChanges => handle_shell_clear_pending_env_changes_command(environment),
+        ShellSubCommand::GetPaths => handle_shell_get_paths_command(environment),
+    }
+}
+
+fn handle_shell_get_new_path_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellGetNewPathCommand,
+) -> Result<(), ErrBox> {
+    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut paths = command
+        .current_sys_path
+        .split(&SYS_PATH_DELIMITER)
+        .map(String::from)
+        .collect::<Vec<_>>();
+
+    for path in plugin_manifest.get_pending_added_paths() {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    for path in plugin_manifest.get_pending_removed_paths() {
+        if let Some(pos) = paths.iter().position(|x| x == &path) {
+            paths.remove(pos);
+        }
+    }
+
+    environment.log(
+        &paths
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join(SYS_PATH_DELIMITER),
+    );
+
+    Ok(())
+}
+
+fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+) -> Result<(), ErrBox> {
+    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    plugin_manifest.clear_pending_env_changes();
+    plugin_manifest.save(environment)?;
+
+    Ok(())
+}
+
+fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+    let environment_manifest = plugins::EnvironmentManifest::load(environment)?;
+    let path_text = environment_manifest
+        .get_paths()
+        .iter()
+        .map(String::from)
+        .collect::<Vec<_>>()
+        .join(SYS_PATH_DELIMITER);
+
+    environment.log(&path_text);
+
+    Ok(())
 }
 
 enum UrlInstallAction {
@@ -875,12 +931,12 @@ fn get_config_file(environment: &impl Environment) -> Result<Option<configuratio
 #[cfg(test)]
 mod test {
     use pretty_assertions::assert_eq;
-    use std::io::Write;
     use std::path::PathBuf;
 
     use super::registry;
     use super::run;
-    use crate::environment::{Environment, TestEnvironment};
+    use crate::environment::{Environment, TestEnvironment, PATH_SEPARATOR, SYS_PATH_DELIMITER};
+    use crate::test_builders::{EnvironmentBuilder, PluginDownloadType};
     use dprint_cli_core::types::ErrBox;
 
     macro_rules! assert_has_path {
@@ -920,7 +976,7 @@ mod test {
         let environment = TestEnvironment::new();
         run_cli(vec!["--version"], &environment).await.unwrap();
         let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, vec![format!("bvm {}", env!("CARGO_PKG_VERSION"))]);
+        assert_eq!(logged_messages, [format!("bvm {}", env!("CARGO_PKG_VERSION"))]);
     }
 
     #[tokio::test]
@@ -928,7 +984,7 @@ mod test {
         let environment = TestEnvironment::new();
         run_cli(vec!["init"], &environment).await.unwrap();
         let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, vec!["Created .bvmrc.json"]);
+        assert_eq!(logged_messages, ["Created .bvmrc.json"]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from(".bvmrc.json")).unwrap(),
             "{\n  \"binaries\": [\n  ]\n}\n"
@@ -948,13 +1004,14 @@ mod test {
 
     #[tokio::test]
     async fn install_url_command_no_path() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
 
         // install the package
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
 
         // check setup was correct
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -974,16 +1031,17 @@ mod test {
 
     #[tokio::test]
     async fn install_url_command_path() {
-        let environment = TestEnvironment::new();
-        let path_exe_path = add_binary_to_path(&environment, "name");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let path_exe_path = builder.add_binary_to_path("name");
+        let environment = builder.build();
 
         // install the package
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
         assert_eq!(
             logged_errors,
-            vec![
+            [
                 "Extracting archive for owner/name 1.0.0...",
                 "Installed. Run `bvm use name 1.0.0` to use it on the path as 'name'."
             ]
@@ -1004,35 +1062,30 @@ mod test {
 
     #[tokio::test]
     async fn install_url_command_previous_install() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
         let third_binary_path = get_binary_path("owner", "name", "3.0.0");
         let fourth_binary_path = get_binary_path("owner", "name", "4.0.0");
         let fourth_binary_path_second = get_binary_path_second("owner", "name", "4.0.0");
 
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package3.json", "owner", "name", "3.0.0");
-        create_remote_zip_multiple_commands_package(
-            &environment,
-            "http://localhost/package4.json",
-            "owner",
-            "name",
-            "4.0.0",
-        );
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "3.0.0");
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package4.json", "owner", "name", "4.0.0");
+        let environment = builder.build();
 
         // install the first package
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0...",]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0...",]);
 
         // now install the second
         install_url!(environment, "http://localhost/package2.json");
         let logged_errors = environment.take_logged_errors();
         assert_eq!(
             logged_errors,
-            vec![
+            [
                 "Extracting archive for owner/name 2.0.0...",
                 "Installed. Run `bvm use name 2.0.0` to use it on the path as 'name'."
             ]
@@ -1048,7 +1101,7 @@ mod test {
             .await
             .unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 3.0.0...",]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 3.0.0...",]);
         assert_resolves!(&environment, third_binary_path);
 
         // install the fourth package
@@ -1056,7 +1109,7 @@ mod test {
         let logged_errors = environment.take_logged_errors();
         assert_eq!(
             logged_errors,
-            vec![
+            [
                 "Extracting archive for owner/name 4.0.0...",
                 "Installed. Run `bvm use name 4.0.0` to use it on the path as 'name', 'name-second'."
             ]
@@ -1070,7 +1123,7 @@ mod test {
         let logged_errors = environment.take_logged_errors();
         assert_eq!(
             logged_errors,
-            vec!["Already installed. Provide the `--force` flag to reinstall."]
+            ["Already installed. Provide the `--force` flag to reinstall."]
         );
         assert_resolves!(&environment, fourth_binary_path);
         assert_resolves_name!(&environment, "name-second", fourth_binary_path_second);
@@ -1083,44 +1136,43 @@ mod test {
         .await
         .unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 4.0.0...",]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 4.0.0...",]);
         assert_resolves!(&environment, fourth_binary_path);
         assert_resolves_name!(&environment, "name-second", fourth_binary_path_second);
     }
 
     #[tokio::test]
     async fn install_url_command_tar_gz() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let binary_path = get_binary_path("owner", "name", "1.0.0");
 
-        create_remote_tar_gz_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_tar_gz_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
 
         // install and check setup
         install_url!(environment, "http://localhost/package.json");
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0...",]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0...",]);
         assert_has_path!(environment, &binary_path);
         assert_has_path!(environment, &get_shim_path("name"));
 
         // yeah, this isn't realistic, but it's just some dummy data to ensure the file was extracted correctly
-        assert_eq!(
-            environment.read_file_text(&PathBuf::from(binary_path)).unwrap(),
-            "test-https://github.com/dsherret/bvm/releases/download/1.0.0/name-windows.tar.gz"
-        );
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                environment.read_file_text(&PathBuf::from(binary_path)).unwrap(),
+                "test-name-https://github.com/dsherret/bvm/releases/download/1.0.0/name-windows.tar.gz"
+            );
+        }
     }
+
     #[tokio::test]
     async fn install_url_command_use_with_config_file_same_command() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(
-            &environment,
-            "http://localhost/package2.json",
-            "owner2",
-            "name",
-            "2.0.0",
-        );
-        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner2", "name", "2.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package.json"]);
+        let environment = builder.build();
 
         // install the package
         environment.set_cwd("/project");
@@ -1133,7 +1185,7 @@ mod test {
             .unwrap();
         assert_eq!(
             environment.take_logged_errors(),
-            vec![
+            [
                 "Extracting archive for owner2/name 2.0.0...",
                 concat!(
                     "Updated globally used version of 'name', but local version remains using version specified ",
@@ -1149,10 +1201,11 @@ mod test {
 
     #[tokio::test]
     async fn install_command_no_existing_binary() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
-        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package.json"]);
+        let environment = builder.build();
 
         // attempt to install in directory that doesn't have the config file
         let error_text = run_cli(vec!["install"], &environment).await.err().unwrap().to_string();
@@ -1165,7 +1218,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1178,12 +1231,13 @@ mod test {
 
     #[tokio::test]
     async fn install_command_previous_install_binary() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
-        create_bvmrc(&environment, vec!["http://localhost/package2.json"]);
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package2.json"]);
+        let environment = builder.build();
 
         // install a package globally
         run_cli(vec!["install", "http://localhost/package.json"], &environment)
@@ -1195,7 +1249,7 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
 
         // now try to resolve the binary
         assert_resolves!(environment, second_binary_path);
@@ -1208,7 +1262,7 @@ mod test {
         // try reinstalling, but provide --force
         run_cli(vec!["install", "--force"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
 
         // go up a directory and it should resolve to the previously set global
         environment.set_cwd("/");
@@ -1227,16 +1281,17 @@ mod test {
 
     #[tokio::test]
     async fn install_command_binary_on_path() {
-        let environment = TestEnvironment::new();
-        let path_exe_path = add_binary_to_path(&environment, "name");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+        let builder = EnvironmentBuilder::new();
+        let path_exe_path = builder.add_binary_to_path("name");
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package.json"]);
+        let environment = builder.build();
 
         // run the install command in the correct directory
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1249,8 +1304,9 @@ mod test {
 
     #[tokio::test]
     async fn install_command_pre_post_install() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
         environment
             .write_file_text(
                 &PathBuf::from("/project/.bvmrc.json"),
@@ -1262,11 +1318,11 @@ mod test {
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
         let logged_shell_commands = environment.take_run_shell_commands();
         assert_eq!(
             logged_shell_commands,
-            vec![
+            [
                 ("/project".to_string(), "echo \"Test\"".to_string()),
                 ("/project".to_string(), "echo \"Hello world!\"".to_string())
             ]
@@ -1289,9 +1345,10 @@ mod test {
 
     #[tokio::test]
     async fn uninstall_command_binary_on_path() {
-        let environment = TestEnvironment::new();
-        let path_exe_path = add_binary_to_path(&environment, "name");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let path_exe_path = builder.add_binary_to_path("name");
+        let environment = builder.build();
 
         // install and use the package
         run_cli(vec!["install", "--use", "http://localhost/package.json"], &environment)
@@ -1309,18 +1366,13 @@ mod test {
 
     #[tokio::test]
     async fn uninstall_command_multiple_binaries() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
-        create_remote_zip_multiple_commands_package(
-            &environment,
-            "http://localhost/package3.json",
-            "owner",
-            "name",
-            "3.0.0",
-        );
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package3.json", "owner", "name", "3.0.0");
+        let environment = builder.build();
 
         // install and the first package
         install_url!(environment, "http://localhost/package.json");
@@ -1376,12 +1428,13 @@ mod test {
 
     #[tokio::test]
     async fn list_command_with_installs() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "b", "2.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package3.json", "owner", "name", "2.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package4.json", "owner", "name", "2.0.0"); // same version as above
-        create_remote_zip_package(&environment, "http://localhost/package5.json", "david", "c", "2.1.1");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "b", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/package4.json", "owner", "name", "2.0.0"); // same version as above
+        builder.create_remote_zip_package("http://localhost/package5.json", "david", "c", "2.1.1");
+        let environment = builder.build();
 
         // install the packages
         install_url!(environment, "http://localhost/package.json");
@@ -1395,32 +1448,21 @@ mod test {
         run_cli(vec!["list"], &environment).await.unwrap();
         assert_eq!(
             environment.take_logged_messages(),
-            vec!["david/c 2.1.1\nowner/b 2.0.0\nowner/name 1.0.0\nowner/name 2.0.0"]
+            ["david/c 2.1.1\nowner/b 2.0.0\nowner/name 1.0.0\nowner/name 2.0.0"]
         );
     }
 
     #[tokio::test]
     async fn use_command_multiple_command_binaries() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let first_binary_path_second = get_binary_path_second("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
         let second_binary_path_second = get_binary_path_second("owner", "name", "2.0.0");
 
-        create_remote_zip_multiple_commands_package(
-            &environment,
-            "http://localhost/package.json",
-            "owner",
-            "name",
-            "1.0.0",
-        );
-        create_remote_zip_multiple_commands_package(
-            &environment,
-            "http://localhost/package2.json",
-            "owner",
-            "name",
-            "2.0.0",
-        );
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        let environment = builder.build();
 
         // install the packages
         install_url!(environment, "http://localhost/package.json");
@@ -1438,17 +1480,12 @@ mod test {
 
     #[tokio::test]
     async fn use_command_config_file_same_command() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_zip_package(
-            &environment,
-            "http://localhost/package2.json",
-            "owner2",
-            "name",
-            "2.0.0",
-        );
-        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner2", "name", "2.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package.json"]);
+        let environment = builder.build();
 
         // install the package
         environment.set_cwd("/project");
@@ -1462,7 +1499,7 @@ mod test {
         run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
         assert_eq!(
             environment.take_logged_errors(),
-            vec![concat!(
+            [concat!(
                 "Updated globally used version of 'name', but local version remains using version specified ",
                 "in the current working directory's config file. If you wish to change the local version, ",
                 "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
@@ -1475,28 +1512,22 @@ mod test {
 
     #[tokio::test]
     async fn use_command_different_owners_path() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
 
-        let path_binary_path = add_binary_to_path(&environment, "name");
-        let path_second_binary_path = add_binary_to_path(&environment, "name-second");
+        let path_binary_path = builder.add_binary_to_path("name");
+        let path_second_binary_path = builder.add_binary_to_path("name-second");
 
         let second_binary_path = get_binary_path("owner2", "name", "1.0.0");
         let second_binary_path_second = get_binary_path_second("owner2", "name", "1.0.0");
 
-        create_remote_zip_multiple_commands_package(
-            &environment,
-            "http://localhost/package.json",
-            "owner",
-            "name",
-            "1.0.0",
-        );
-        create_remote_zip_multiple_commands_package(
-            &environment,
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_multiple_commands_package(
             "http://localhost/package2.json",
             "owner2",
             "name",
             "1.0.0",
         );
+        let environment = builder.build();
 
         // install the packages
         install_url!(environment, "http://localhost/package.json");
@@ -1525,15 +1556,16 @@ mod test {
 
     #[tokio::test]
     async fn clear_url_cache_command_path() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_bvmrc(&environment, vec!["http://localhost/package.json"]);
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_bvmrc(vec!["http://localhost/package.json"]);
+        let environment = builder.build();
         environment.set_cwd("/project");
 
         // install
         run_cli(vec!["install"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
 
         // clear the url cache
         run_cli(vec!["clear-url-cache"], &environment).await.unwrap();
@@ -1542,7 +1574,7 @@ mod test {
         let binary_path = get_binary_path("owner", "name", "1.0.0");
         assert_resolves!(environment, binary_path);
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global 'name'."]);
+        assert_eq!(logged_errors, ["[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global 'name'."]);
 
         // install again, but it shouldn't install because already installed
         run_cli(vec!["install"], &environment).await.unwrap();
@@ -1556,9 +1588,8 @@ mod test {
 
     #[tokio::test]
     async fn registry_add_remove_list_command_path() {
-        let environment = TestEnvironment::new();
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1568,8 +1599,7 @@ mod test {
                 path: "https://localhost/test.json".to_string(),
             }],
         );
-        create_remote_registry_file(
-            &environment,
+        builder.create_remote_registry_file(
             "http://localhost/registry2.json",
             "owner",
             "name",
@@ -1579,8 +1609,7 @@ mod test {
                 path: "https://localhost/test.json".to_string(),
             }],
         );
-        create_remote_registry_file(
-            &environment,
+        builder.create_remote_registry_file(
             "http://localhost/registry3.json",
             "owner2",
             "name2",
@@ -1590,6 +1619,7 @@ mod test {
                 path: "https://localhost/test.json".to_string(),
             }],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1605,7 +1635,7 @@ mod test {
             .unwrap();
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
         let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, vec!["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
+        assert_eq!(logged_messages, ["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
         run_cli(
             vec!["registry", "remove", "http://localhost/registry.json"],
             &environment,
@@ -1622,7 +1652,7 @@ mod test {
         let logged_messages = environment.take_logged_messages();
         assert_eq!(
             logged_messages,
-            vec!["owner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]
+            ["owner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]
         );
         run_cli(
             vec!["registry", "remove", "http://localhost/registry2.json"],
@@ -1646,11 +1676,9 @@ mod test {
 
     #[tokio::test]
     async fn registry_install_command() {
-        let environment = TestEnvironment::new();
-        let checksum =
-            create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1660,6 +1688,7 @@ mod test {
                 path: "http://localhost/package.json".to_string(),
             }],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1667,27 +1696,18 @@ mod test {
 
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
     }
 
     #[tokio::test]
     async fn registry_install_command_latest() {
-        let environment = TestEnvironment::new();
-        let checksum1 =
-            create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        let checksum2 =
-            create_remote_zip_package(&environment, "http://localhost/package2.json", "owner", "name", "2.0.0");
-        let checksum3 =
-            create_remote_zip_package(&environment, "http://localhost/package3.json", "owner", "name", "2.0.1");
-        let checksum4 = create_remote_zip_package(
-            &environment,
-            "http://localhost/package4.json",
-            "owner",
-            "name",
-            "3.0.0-alpha",
-        );
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        let checksum1 = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let checksum2 = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        let checksum3 = builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "2.0.1");
+        let checksum4 =
+            builder.create_remote_zip_package("http://localhost/package4.json", "owner", "name", "3.0.0-alpha");
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1714,6 +1734,7 @@ mod test {
                 },
             ],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1721,28 +1742,17 @@ mod test {
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 2.0.1..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.1..."]);
     }
 
     #[tokio::test]
     async fn registry_install_command_latest_all_pre_releases() {
-        let environment = TestEnvironment::new();
-        let checksum1 = create_remote_zip_package(
-            &environment,
-            "http://localhost/package.json",
-            "owner",
-            "name",
-            "1.0.0-alpha",
-        );
-        let checksum2 = create_remote_zip_package(
-            &environment,
-            "http://localhost/package2.json",
-            "owner",
-            "name",
-            "1.0.0-beta",
-        );
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        let checksum1 =
+            builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0-alpha");
+        let checksum2 =
+            builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.0.0-beta");
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1759,6 +1769,7 @@ mod test {
                 },
             ],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1766,16 +1777,14 @@ mod test {
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["Extracting archive for owner/name 1.0.0-beta..."]);
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0-beta..."]);
     }
 
     #[tokio::test]
     async fn registry_install_command_incorrect_checksum() {
-        let environment = TestEnvironment::new();
-        let checksum =
-            create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1785,6 +1794,7 @@ mod test {
                 path: "http://localhost/package.json".to_string(),
             }],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1818,11 +1828,9 @@ mod test {
 
     #[tokio::test]
     async fn registry_install_command_multiple_owners() {
-        let environment = TestEnvironment::new();
-        let checksum =
-            create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
-        create_remote_registry_file(
-            &environment,
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
@@ -1833,15 +1841,8 @@ mod test {
             }],
         );
 
-        let checksum = create_remote_zip_package(
-            &environment,
-            "http://localhost/package2.json",
-            "owner2",
-            "name",
-            "1.0.0",
-        );
-        create_remote_registry_file(
-            &environment,
+        let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner2", "name", "1.0.0");
+        builder.create_remote_registry_file(
             "http://localhost/registry2.json",
             "owner2",
             "name",
@@ -1851,6 +1852,7 @@ mod test {
                 path: "http://localhost/package2.json".to_string(),
             }],
         );
+        let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
@@ -1867,35 +1869,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn util_ensure_path_works() {
-        let environment = TestEnvironment::new();
-        run_cli(vec!["util", "ensure-path", "test"], &environment)
-            .await
-            .unwrap();
-        assert_eq!(
-            environment.get_system_path_dirs(),
-            vec![PathBuf::from("/local-data/shims"), PathBuf::from("test")]
-        );
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, vec!["The path 'test' was added to the system path. Please restart this terminal and any dependent applications for the changes to take effect."]);
-
-        // should make no changes and not log
-        run_cli(vec!["util", "ensure-path", "test"], &environment)
-            .await
-            .unwrap();
-        run_cli(vec!["util", "ensure-path", "\"test\""], &environment)
-            .await
-            .unwrap();
-        run_cli(vec!["util", "ensure-path", "'test'"], &environment)
-            .await
-            .unwrap();
-        assert_eq!(
-            environment.get_system_path_dirs(),
-            vec![PathBuf::from("/local-data/shims"), PathBuf::from("test")]
-        );
-    }
-
-    #[tokio::test]
     async fn util_command_exists_no_command() {
         let environment = TestEnvironment::new();
         let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
@@ -1907,8 +1880,9 @@ mod test {
 
     #[tokio::test]
     async fn util_command_exists_bvm_command() {
-        let environment = TestEnvironment::new();
-        create_remote_zip_package(&environment, "http://localhost/package.json", "owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
         install_url!(environment, "http://localhost/package.json");
         environment.clear_logs();
         let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
@@ -1920,8 +1894,9 @@ mod test {
 
     #[tokio::test]
     async fn util_command_exists_path() {
-        let environment = TestEnvironment::new();
-        add_binary_to_path(&environment, "name");
+        let builder = EnvironmentBuilder::new();
+        builder.add_binary_to_path("name");
+        let environment = builder.build();
         let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
             .await
             .err()
@@ -1929,18 +1904,186 @@ mod test {
         assert_eq!(err.to_string(), "Exited with code 0");
     }
 
-    fn add_binary_to_path(environment: &TestEnvironment, name: &str) -> String {
-        let path_dir = PathBuf::from("/path-dir");
-        if !environment.get_system_path_dirs().contains(&path_dir) {
-            environment.add_path_dir(path_dir);
-        }
-        let path_exe_path = if cfg!(target_os = "windows") {
-            format!("/path-dir\\{}.bat", name)
+    #[tokio::test]
+    async fn binary_has_environment_variable() {
+        let builder = EnvironmentBuilder::new();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
+        plugin_builder.add_env_path("dir");
+        plugin_builder.download_type(PluginDownloadType::Zip);
+        plugin_builder.build();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
+        plugin_builder.add_env_path("dir2");
+        plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
+        plugin_builder.download_type(PluginDownloadType::TarGz);
+        plugin_builder.build();
+        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "3.0.0");
+        let environment = builder.build();
+
+        install_url!(environment, "http://localhost/package.json");
+        install_url!(environment, "http://localhost/package2.json");
+        install_url!(environment, "http://localhost/package3.json");
+        environment.clear_logs();
+
+        let first_path_str = if cfg!(target_os = "windows") {
+            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\1.0.0\\dir"
         } else {
-            format!("/path-dir/{}", name)
+            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/1.0.0/dir"
         };
-        environment.write_file_text(&PathBuf::from(&path_exe_path), "").unwrap();
-        path_exe_path
+        let second_path_str1 = if cfg!(target_os = "windows") {
+            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\2.0.0\\dir2"
+        } else {
+            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/2.0.0/dir2"
+        };
+        let second_path_str2 = if cfg!(target_os = "windows") {
+            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\2.0.0\\other\\path"
+        } else {
+            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/2.0.0/other/path"
+        };
+
+        // should have updated the environment with the new path
+        run_cli(
+            vec![
+                "hidden-shell",
+                "get-new-path",
+                &format!("exiting/path{0}other/path", SYS_PATH_DELIMITER),
+            ],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!(
+                "exiting/path{0}other/path{0}{1}",
+                SYS_PATH_DELIMITER, first_path_str
+            )]
+        );
+
+        // only windows will have updated the system path
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                environment.get_system_path_dirs(),
+                [PathBuf::from("/local-data/shims"), PathBuf::from(&first_path_str)]
+            );
+        }
+
+        // should output correctly when ends with delimiter
+        run_cli(
+            vec!["hidden-shell", "get-new-path", &format!("test{}", SYS_PATH_DELIMITER)],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!("test{0}{1}", SYS_PATH_DELIMITER, first_path_str)]
+        );
+
+        // clear the pending changes
+        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
+            .await
+            .unwrap();
+
+        // now the path should return as-is
+        run_cli(vec!["hidden-shell", "get-new-path", "test"], &environment)
+            .await
+            .unwrap();
+        assert_eq!(environment.take_logged_messages(), ["test"]);
+
+        // ensure this exists in get-paths
+        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
+        assert_eq!(environment.take_logged_messages(), [first_path_str]);
+
+        // now switch
+        run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
+
+        // get the new path based on the old one
+        run_cli(
+            vec![
+                "hidden-shell",
+                "get-new-path",
+                &format!("exiting/path{0}other/path{0}{1}", SYS_PATH_DELIMITER, first_path_str),
+            ],
+            &environment,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!(
+                "exiting/path{0}other/path{0}{1}{0}{2}",
+                SYS_PATH_DELIMITER, second_path_str1, second_path_str2
+            )]
+        );
+
+        // clear the pending changes
+        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
+            .await
+            .unwrap();
+
+        // ensure the paths exist in get-paths now
+        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
+
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!(
+                "{}{}{}",
+                second_path_str1, SYS_PATH_DELIMITER, second_path_str2
+            )]
+        );
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                environment.get_system_path_dirs(),
+                [
+                    PathBuf::from("/local-data/shims"),
+                    PathBuf::from(&second_path_str1),
+                    PathBuf::from(&second_path_str2)
+                ]
+            );
+        }
+
+        // now switch
+        run_cli(vec!["use", "name", "3.0.0"], &environment).await.unwrap();
+
+        // get the new path based on the old one
+        run_cli(
+            vec![
+                "hidden-shell",
+                "get-new-path",
+                &format!(
+                    "exiting/path{0}other/path{0}{1}{0}{2}",
+                    SYS_PATH_DELIMITER, second_path_str1, second_path_str2
+                ),
+            ],
+            &environment,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!("exiting/path{0}other/path", SYS_PATH_DELIMITER)]
+        );
+
+        // clear the pending changes
+        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
+            .await
+            .unwrap();
+
+        // ensure the paths is empty
+        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
+        assert_eq!(environment.take_logged_messages(), [""]);
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                environment.get_system_path_dirs(),
+                [PathBuf::from("/local-data/shims"),]
+            );
+        }
     }
 
     fn get_shim_path(name: &str) -> String {
@@ -1953,331 +2096,21 @@ mod test {
 
     fn get_binary_path(owner: &str, name: &str, version: &str) -> String {
         if cfg!(target_os = "windows") {
-            format!("/local-data\\binaries\\{}\\{}\\{}\\binary.exe", owner, name, version)
+            format!("/local-data\\binaries\\{}\\{}\\{}\\{1}.exe", owner, name, version)
         } else {
-            format!("/local-data/binaries/{}/{}/{}/binary", owner, name, version)
+            format!("/local-data/binaries/{}/{}/{}/{1}", owner, name, version)
         }
     }
 
     fn get_binary_path_second(owner: &str, name: &str, version: &str) -> String {
         if cfg!(target_os = "windows") {
             format!(
-                "/local-data\\binaries\\{}\\{}\\{}\\second-binary.exe",
+                "/local-data\\binaries\\{}\\{}\\{}\\{1}-second.exe",
                 owner, name, version
             )
         } else {
-            format!("/local-data/binaries/{}/{}/{}/second-binary", owner, name, version)
+            format!("/local-data/binaries/{}/{}/{}/{1}-second", owner, name, version)
         }
-    }
-
-    fn create_bvmrc(environment: &TestEnvironment, binaries: Vec<&str>) {
-        let mut text = String::new();
-        for (i, binary) in binaries.into_iter().enumerate() {
-            if i > 0 {
-                text.push_str(",");
-            }
-            text.push_str(&format!("\"{}\"", binary));
-        }
-        environment
-            .write_file_text(
-                &PathBuf::from("/project/.bvmrc.json"),
-                &format!(r#"{{"binaries": [{}]}}"#, text),
-            )
-            .unwrap();
-    }
-
-    fn create_remote_zip_package(
-        environment: &TestEnvironment,
-        url: &str,
-        owner: &str,
-        name: &str,
-        version: &str,
-    ) -> String {
-        let windows_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-windows.zip",
-            version, name
-        );
-        let windows_checksum = create_remote_zip(environment, &windows_zip_url, true);
-        let mac_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-mac.zip",
-            version, name
-        );
-        let mac_checksum = create_remote_zip(environment, &mac_zip_url, false);
-        let linux_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-linux.zip",
-            version, name
-        );
-        let linux_checksum = create_remote_zip(environment, &linux_zip_url, false);
-
-        let file_text = format!(
-            r#"{{
-    "schemaVersion": 1,
-    "owner": "{}",
-    "name": "{}",
-    "version": "{}",
-    "description": "Some description.",
-    "windows-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary.exe"
-        }}]
-    }},
-    "linux-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}]
-    }},
-    "darwin-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}]
-    }}
-}}"#,
-            owner,
-            name,
-            version,
-            windows_zip_url,
-            windows_checksum,
-            linux_zip_url,
-            linux_checksum,
-            mac_zip_url,
-            mac_checksum
-        );
-        let checksum = dprint_cli_core::checksums::get_sha256_checksum(file_text.as_bytes());
-        environment.add_remote_file(url, file_text.into_bytes());
-
-        checksum
-    }
-
-    fn create_remote_zip_multiple_commands_package(
-        environment: &TestEnvironment,
-        url: &str,
-        owner: &str,
-        name: &str,
-        version: &str,
-    ) {
-        let windows_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-windows.zip",
-            version, name
-        );
-        let windows_checksum = create_remote_zip(environment, &windows_zip_url, true);
-        let mac_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-mac.zip",
-            version, name
-        );
-        let mac_checksum = create_remote_zip(environment, &mac_zip_url, false);
-        let linux_zip_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-linux.zip",
-            version, name
-        );
-        let linux_checksum = create_remote_zip(environment, &linux_zip_url, false);
-
-        let file_text = format!(
-            r#"{{
-    "schemaVersion": 1,
-    "owner": "{}",
-    "name": "{}",
-    "version": "{}",
-    "description": "Some description.",
-    "windows-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary.exe"
-        }}, {{
-            "name": "{1}-second",
-            "path": "second-binary.exe"
-        }}]
-    }},
-    "linux-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}, {{
-            "name": "{1}-second",
-            "path": "second-binary"
-        }}]
-    }},
-    "darwin-x86_64": {{
-        "path": "{}",
-        "type": "zip",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}, {{
-            "name": "{1}-second",
-            "path": "second-binary"
-        }}]
-    }}
-}}"#,
-            owner,
-            name,
-            version,
-            windows_zip_url,
-            windows_checksum,
-            linux_zip_url,
-            linux_checksum,
-            mac_zip_url,
-            mac_checksum
-        );
-        environment.add_remote_file(url, file_text.into_bytes());
-    }
-
-    fn create_remote_zip(environment: &TestEnvironment, url: &str, is_windows: bool) -> String {
-        let buf: Vec<u8> = Vec::new();
-        let w = std::io::Cursor::new(buf);
-        let mut zip = zip::ZipWriter::new(w);
-        let options = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let file_name = if is_windows { "binary.exe" } else { "binary" };
-        zip.start_file(file_name, options).unwrap();
-        zip.write(format!("test-{}", url).as_bytes()).unwrap();
-        let file_name = if is_windows {
-            "second-binary.exe"
-        } else {
-            "second-binary"
-        };
-        zip.start_file(file_name, options).unwrap();
-        zip.write(format!("test-{}2", url).as_bytes()).unwrap();
-        let result = zip.finish().unwrap().into_inner();
-        let zip_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
-        environment.add_remote_file(url, result);
-        zip_file_checksum
-    }
-
-    fn create_remote_tar_gz_package(environment: &TestEnvironment, url: &str, owner: &str, name: &str, version: &str) {
-        let windows_tar_gz_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-windows.tar.gz",
-            version, name
-        );
-        let windows_checksum = create_remote_tar_gz(environment, &windows_tar_gz_url, true);
-        let mac_tar_gz_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-mac.tar.gz",
-            version, name
-        );
-        let mac_checksum = create_remote_tar_gz(environment, &mac_tar_gz_url, false);
-        let linux_tar_gz_url = format!(
-            "https://github.com/dsherret/bvm/releases/download/{}/{}-linux.tar.gz",
-            version, name
-        );
-        let linux_checksum = create_remote_tar_gz(environment, &linux_tar_gz_url, false);
-
-        let file_text = format!(
-            r#"{{
-    "schemaVersion": 1,
-    "owner": "{}",
-    "name": "{}",
-    "version": "{}",
-    "description": "Some description.",
-    "windows-x86_64": {{
-        "path": "{}",
-        "type": "tar.gz",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary.exe"
-        }}]
-    }},
-    "linux-x86_64": {{
-        "path": "{}",
-        "type": "tar.gz",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}]
-    }},
-    "darwin-x86_64": {{
-        "path": "{}",
-        "type": "tar.gz",
-        "checksum": "{}",
-        "commands": [{{
-            "name": "{1}",
-            "path": "binary"
-        }}]
-    }}
-}}"#,
-            owner,
-            name,
-            version,
-            windows_tar_gz_url,
-            windows_checksum,
-            linux_tar_gz_url,
-            linux_checksum,
-            mac_tar_gz_url,
-            mac_checksum
-        );
-        environment.add_remote_file(url, file_text.into_bytes());
-    }
-
-    fn create_remote_tar_gz(environment: &TestEnvironment, url: &str, is_windows: bool) -> String {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-
-        let buf: Vec<u8> = Vec::new();
-        let w = std::io::Cursor::new(buf);
-        let mut archive = tar::Builder::new(w);
-        let file_name = if is_windows { "binary.exe" } else { "binary" };
-        let data = format!("test-{}", url);
-        let mut header = tar::Header::new_gnu();
-        header.set_path(file_name).unwrap();
-        header.set_size(data.len() as u64);
-        header.set_cksum();
-        archive.append(&header, data.as_bytes()).unwrap();
-        archive.finish().unwrap();
-
-        let mut e = GzEncoder::new(Vec::new(), Compression::default());
-        e.write_all(&archive.into_inner().unwrap().into_inner()).unwrap();
-        let result = e.finish().unwrap();
-
-        let tar_gz_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
-        environment.add_remote_file(url, result);
-        tar_gz_file_checksum
-    }
-
-    fn create_remote_registry_file(
-        environment: &TestEnvironment,
-        url: &str,
-        owner: &str,
-        name: &str,
-        items: Vec<registry::RegistryVersionInfo>,
-    ) {
-        let file_text = format!(
-            r#"{{
-    "schemaVersion": 1,
-    "owner": "{}",
-    "name": "{}",
-    "description": "Some description.",
-    "versions": [{}]
-}}"#,
-            owner,
-            name,
-            items
-                .into_iter()
-                .map(|item| format!(
-                    r#"{{"version": "{}", "path": "{}", "checksum": "{}"}}"#,
-                    item.version, item.path, item.checksum
-                ))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        environment.add_remote_file(url, file_text.into_bytes());
     }
 
     async fn run_cli(args: Vec<&str>, environment: &TestEnvironment) -> Result<(), ErrBox> {

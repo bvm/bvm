@@ -30,6 +30,14 @@ pub struct PlatformInfo {
     pub commands: Vec<PlatformInfoCommand>,
     pub pre_install: Option<String>,
     pub post_install: Option<String>,
+    pub environment: Option<BinaryEnvironment>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryEnvironment {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<String>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]

@@ -1,0 +1,196 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: ${{ matrix.config.kind }} ${{ matrix.config.os }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - os: macOS-latest
+            kind: test_release
+          - os: windows-2019
+            kind: test_release
+          - os: ubuntu-16.04
+            kind: test_release
+          - os: ubuntu-16.04
+            kind: test_debug
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: full
+
+    outputs:
+      LINUX_ZIP_CHECKSUM: ${{steps.linux_pre_release.outputs.ZIP_CHECKSUM}}
+      MAC_ZIP_CHECKSUM: ${{steps.mac_pre_release.outputs.ZIP_CHECKSUM}}
+      WINDOWS_ZIP_CHECKSUM: ${{steps.windows_pre_release.outputs.ZIP_CHECKSUM}}
+      WINDOWS_INSTALLER_CHECKSUM: ${{steps.windows_pre_release.outputs.INSTALLER_CHECKSUM}}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: 1.46.0
+        override: true
+
+    # CACHE SETUP
+    - name: Cache cargo
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ matrix.config.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build debug
+      if: matrix.config.kind == 'test_debug'
+      run: cargo build --verbose
+    - name: Build release
+      if: matrix.config.kind == 'test_release'
+      run: cargo build --release --locked --all-targets --verbose
+
+    # TEST
+    - name: Test debug
+      if: matrix.config.kind == 'test_debug'
+      run: cargo test --verbose
+    - name: Test release
+      if: matrix.config.kind == 'test_release'
+      run: cargo test --release --locked --all-targets --verbose
+
+    # INSTALLER
+    - name: Setup NSIS (Windows)
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        mkdir NSIS_Plugins
+        cd NSIS_Plugins
+        iwr https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip -OutFile envar_plugin.zip
+        powershell -command "if ((CertUtil -hashfile envar_plugin.zip SHA1)[1] -replace ' ','' -ne '586c52fd2f44dcf1b5b0556bbd5dd3442f9301cd') { exit 1 }"
+        tar -xf envar_plugin.zip
+        rm envar_plugin.zip
+    - name: Create installer (Windows)
+      uses: joncloud/makensis-action@v2.0
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      with:
+        additional-plugin-paths: ${{ github.workspace }}/NSIS_Plugins/Plugins/
+        script-file: ${{ github.workspace }}/scripts/bvm-installer.nsi
+    # TODO: Add this
+    # - name: Sign installer (Windows)
+    #  if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+    #  run: |
+    #    "${{ secrets.SELF_SIGNED_CERT_PFX }}" | Out-File -FilePath cert.txt
+    #    CertUtil -decode cert.txt cert.pfx
+    #    & 'C:\Program Files (x86)\Windows Kits\10\bin\x86\signtool' sign /f "cert.pfx" /p ${{ secrets.SELF_SIGNED_CERT_PFX_PASSWORD }} /td sha256 /fd sha256 scripts/bvm-x86_64-pc-windows-msvc-installer.exe
+
+    # PRE-RELEASE
+    - name: Pre-release (Linux)
+      id: linux_pre_release
+      if: startsWith(matrix.config.os, 'ubuntu') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        cp bvm.sh target/release/bvm.sh
+        cp bvm-init.sh target/release/bvm-init.sh
+        cd target/release
+        zip -r bvm-x86_64-unknown-linux-gnu.zip bvm-bin bvm.sh bvm-init.sh
+        echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-unknown-linux-gnu.zip | awk '{print $1}')"
+    - name: Pre-release (Mac)
+      id: mac_pre_release
+      if: startsWith(matrix.config.os, 'macOS') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        cp bvm.sh target/release/bvm.sh
+        cd target/release
+        zip -r bvm-x86_64-apple-darwin.zip bvm-bin bvm.sh
+        echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-apple-darwin.zip | awk '{print $1}')"
+    - name: Pre-release (Windows)
+      id: windows_pre_release
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        cp bvm.cmd target/release/bvm.cmd
+        Compress-Archive -CompressionLevel Optimal -Force -Path target/release/bvm-bin.exe, target/release/bvm.cmd -DestinationPath target/release/bvm-x86_64-pc-windows-msvc.zip
+        mv scripts/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
+        echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc.zip | awk '{print $1}')"
+        echo "::set-output name=INSTALLER_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc-installer.exe | awk '{print $1}')"
+
+    # UPLOAD ARTIFACTS
+    - name: Upload Artifacts (Linux)
+      uses: actions/upload-artifact@v2
+      if: startsWith(matrix.config.os, 'ubuntu') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      with:
+        name: linux-artifacts
+        path: target/release/bvm-x86_64-unknown-linux-gnu.zip
+    - name: Upload Artifacts (Mac)
+      uses: actions/upload-artifact@v2
+      if: startsWith(matrix.config.os, 'macOS') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      with:
+        name: mac-artifacts
+        path: target/release/bvm-x86_64-apple-darwin.zip
+    - name: Upload Artifacts (Windows)
+      uses: actions/upload-artifact@v2
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      with:
+        name: windows-artifacts
+        path: |
+          target/release/bvm-x86_64-pc-windows-msvc.zip
+          target/release/bvm-x86_64-pc-windows-msvc-installer.exe
+
+  draft_release:
+    name: draft_release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v2
+
+    - name: Get tag version
+      id: get_tag_version
+      run: echo ::set-output name=TAG_VERSION::${GITHUB_REF/refs\/tags\//}
+
+    - name: Output checksums
+      run: |
+        echo "Linux Zip: ${{needs.build.outputs.LINUX_ZIP_CHECKSUM}}"
+        echo "Mac Zip: ${{needs.build.outputs.MAC_ZIP_CHECKSUM}}"
+        echo "Windows Zip: ${{needs.build.outputs.WINDOWS_ZIP_CHECKSUM}}"
+        echo "Windows Installer: ${{needs.build.outputs.WINDOWS_INSTALLER_CHECKSUM}}"
+
+    - name: Draft release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: |
+          windows-artifacts/bvm-x86_64-pc-windows-msvc.zip
+          windows-artifacts/bvm-x86_64-pc-windows-msvc-installer.exe
+          linux-artifacts/bvm-x86_64-unknown-linux-gnu.zip
+          mac-artifacts/bvm-x86_64-apple-darwin.zip
+        body: |
+          ## Changes
+
+          * TODO
+
+          ## Install
+
+          Linux/Mac/WSL:
+
+          ```bash
+          curl -fsSL https://bvm.land/install.sh | sh
+          ```
+
+          Windows (use Powershell or installer below):
+
+          ```powershell
+          iwr https://bvm.land/install.ps1 -useb | iex
+          ```
+
+          ## Checksums
+
+          |Artifact|SHA-256 Checksum|
+          |:--|:--|
+          |Linux Zip|${{needs.build.outputs.LINUX_ZIP_CHECKSUM}}|
+          |Mac Zip|${{needs.build.outputs.MAC_ZIP_CHECKSUM}}|
+          |Windows Zip|${{needs.build.outputs.WINDOWS_ZIP_CHECKSUM}}|
+          |Windows Installer|${{needs.build.outputs.WINDOWS_INSTALLER_CHECKSUM}}|
+        draft: true

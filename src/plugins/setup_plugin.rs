@@ -7,19 +7,6 @@ use crate::environment::Environment;
 use crate::types::{BinaryName, Version};
 use crate::utils;
 
-pub fn get_plugin_dir(
-    environment: &impl Environment,
-    binary_name: &BinaryName,
-    version: &Version,
-) -> Result<PathBuf, ErrBox> {
-    let local_data_dir = environment.get_local_user_data_dir()?; // do not sure across domains
-    Ok(local_data_dir
-        .join("binaries")
-        .join(&binary_name.owner)
-        .join(binary_name.name.as_str())
-        .join(version.as_str()))
-}
-
 pub struct PluginFile {
     // todo: move these two properties down into PluginFile
     pub url: String,
@@ -57,6 +44,10 @@ impl PluginFile {
 
     pub fn get_commands(&self) -> Result<&Vec<PlatformInfoCommand>, ErrBox> {
         Ok(&self.get_platform_info()?.commands)
+    }
+
+    pub fn get_environment(&self) -> Result<&Option<BinaryEnvironment>, ErrBox> {
+        Ok(&self.get_platform_info()?.environment)
     }
 
     pub fn get_download_type(&self) -> Result<DownloadType, ErrBox> {
@@ -209,6 +200,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
             path: plugin_file.url.clone(),
             checksum: plugin_file.checksum.clone(),
         },
+        environment: plugin_file.get_environment()?.clone(),
     };
     let identifier = item.get_identifier();
     plugin_manifest.add_binary(item);

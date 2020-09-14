@@ -21,6 +21,7 @@ pub enum SubCommand {
     Version,
     Init,
     ClearUrlCache,
+    Shell(ShellSubCommand),
     Help(String),
     Util(UtilSubCommand),
 }
@@ -75,17 +76,22 @@ pub struct RegistryRemoveCommand {
 }
 
 pub enum UtilSubCommand {
-    EnsurePath(UtilEnsurePathCommand),
     CommandExists(UtilCommandExistsCommand),
-}
-
-pub struct UtilEnsurePathCommand {
-    pub path: String,
 }
 
 pub struct UtilCommandExistsCommand {
     pub binary_name: BinaryName,
     pub command_name: CommandName,
+}
+
+pub enum ShellSubCommand {
+    GetNewPath(ShellGetNewPathCommand),
+    ClearPendingChanges,
+    GetPaths,
+}
+
+pub struct ShellGetNewPathCommand {
+    pub current_sys_path: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -95,6 +101,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         Err(err) => return err!("{}", err.to_string()),
     };
 
+    // todo: use a match statement
     let sub_command = if matches.is_present("resolve") {
         let resolve_matches = matches.subcommand_matches("resolve").unwrap();
         SubCommand::Resolve(ResolveCommand {
@@ -157,31 +164,20 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     } else if matches.is_present("clear-url-cache") {
         SubCommand::ClearUrlCache
     } else if matches.is_present("registry") {
-        let registry_matches = matches.subcommand_matches("registry").unwrap();
-        if registry_matches.is_present("add") {
-            let add_matches = registry_matches.subcommand_matches("add").unwrap();
-            SubCommand::Registry(RegistrySubCommand::Add(RegistryAddCommand {
-                url: add_matches.value_of("url").map(String::from).unwrap(),
-            }))
-        } else if registry_matches.is_present("remove") {
-            let remove_matches = registry_matches.subcommand_matches("remove").unwrap();
-            SubCommand::Registry(RegistrySubCommand::Remove(RegistryRemoveCommand {
-                url: remove_matches.value_of("url").map(String::from).unwrap(),
-            }))
-        } else if registry_matches.is_present("list") {
-            SubCommand::Registry(RegistrySubCommand::List)
-        } else {
-            unreachable!();
+        let registry_sub_command = matches.subcommand_matches("registry").unwrap();
+        match registry_sub_command.subcommand() {
+            ("add", Some(matches)) => SubCommand::Registry(RegistrySubCommand::Add(RegistryAddCommand {
+                url: matches.value_of("url").map(String::from).unwrap(),
+            })),
+            ("remove", Some(matches)) => SubCommand::Registry(RegistrySubCommand::Remove(RegistryRemoveCommand {
+                url: matches.value_of("url").map(String::from).unwrap(),
+            })),
+            ("list", _) => SubCommand::Registry(RegistrySubCommand::List),
+            _ => unreachable!(),
         }
     } else if matches.is_present("util") {
         let util_matches = matches.subcommand_matches("util").unwrap();
-        if util_matches.is_present("ensure-path") {
-            let ensure_path_matches = util_matches.subcommand_matches("ensure-path").unwrap();
-            let path = ensure_path_matches.value_of("path").map(String::from).unwrap();
-            SubCommand::Util(UtilSubCommand::EnsurePath(UtilEnsurePathCommand {
-                path: path.trim_matches('"').trim_matches('\'').to_string(),
-            }))
-        } else if util_matches.is_present("command-exists") {
+        if util_matches.is_present("command-exists") {
             let matches = util_matches.subcommand_matches("command-exists").unwrap();
             let command_name = CommandName::from_string(matches.value_of("command").map(String::from).unwrap());
             let full_binary_name = matches.value_of("full-binary-name").map(String::from).unwrap();
@@ -196,6 +192,20 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
                 binary_name,
                 command_name,
             }))
+        } else {
+            unreachable!();
+        }
+    } else if matches.is_present("hidden-shell") {
+        let matches = matches.subcommand_matches("hidden-shell").unwrap();
+        if matches.is_present("get-new-path") {
+            let matches = matches.subcommand_matches("get-new-path").unwrap();
+            SubCommand::Shell(ShellSubCommand::GetNewPath(ShellGetNewPathCommand {
+                current_sys_path: matches.value_of("current-sys-path").map(String::from).unwrap(),
+            }))
+        } else if matches.is_present("clear-pending-changes") {
+            SubCommand::Shell(ShellSubCommand::ClearPendingChanges)
+        } else if matches.is_present("get-paths") {
+            SubCommand::Shell(ShellSubCommand::GetPaths)
         } else {
             unreachable!();
         }
@@ -363,16 +373,6 @@ ARGS:
                 .about("Commands that can be used for setting up the system.")
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(
-                    SubCommand::with_name("ensure-path")
-                        .about("Ensures the provided directory path is on the system PATH.")
-                        .arg(
-                            Arg::with_name("path")
-                                .help("The directory path.")
-                                .takes_value(true)
-                                .required(true)
-                        )
-                )
-                .subcommand(
                     SubCommand::with_name("command-exists")
                         .about("Exits with code 0 when the provided command is on the path or locally installed in bvm and 1 when not.")
                         .arg(
@@ -387,6 +387,24 @@ ARGS:
                                 .takes_value(true)
                                 .required(true)
                         )
+                )
+        )
+        .subcommand(
+            SubCommand::with_name("hidden-shell")
+                .setting(AppSettings::Hidden)
+                .subcommand(
+                    SubCommand::with_name("get-new-path")
+                        .arg(
+                            Arg::with_name("current-sys-path")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("clear-pending-changes")
+                )
+                .subcommand(
+                    SubCommand::with_name("get-paths")
                 )
         )
         .arg(

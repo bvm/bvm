@@ -1,18 +1,14 @@
 use async_trait::async_trait;
 use dprint_cli_core::types::ErrBox;
 use dprint_cli_core::{download_url, log_action_with_progress, ProgressBars};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use super::Environment;
-
-#[cfg(unix)]
-use super::unix as sys_impl;
-#[cfg(target_os = "windows")]
-use super::windows as sys_impl;
+use super::{get_data_dir_var_name, get_local_data_dir_var_name, Environment};
 
 #[derive(Clone)]
 pub struct RealEnvironment {
@@ -91,7 +87,7 @@ impl Environment for RealEnvironment {
     }
 
     fn cwd(&self) -> Result<PathBuf, ErrBox> {
-        Ok(std::env::current_dir()?)
+        Ok(env::current_dir()?)
     }
 
     fn log(&self, text: &str) {
@@ -118,7 +114,9 @@ impl Environment for RealEnvironment {
 
     fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting local user data directory.");
-        let bvm_dir = if cfg!(target_os = "windows") {
+        let bvm_dir = if let Some(dir) = get_env_var_dir(&get_local_data_dir_var_name()) {
+            dir
+        } else if cfg!(target_os = "windows") {
             // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
             let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get local data dir"))?;
             dir.join("bvm")
@@ -131,7 +129,9 @@ impl Environment for RealEnvironment {
 
     fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user data directory.");
-        let bvm_dir = if cfg!(target_os = "windows") {
+        let bvm_dir = if let Some(dir) = get_env_var_dir(&get_data_dir_var_name()) {
+            dir
+        } else if cfg!(target_os = "windows") {
             let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get data dir"))?;
             dir.join("bvm")
         } else {
@@ -146,9 +146,43 @@ impl Environment for RealEnvironment {
         super::common::get_system_path_dirs()
     }
 
-    fn ensure_system_path(&self, directory_path: &Path) -> Result<(), ErrBox> {
-        log_verbose!(self, "Ensuring '{}' is on the path.", directory_path.display());
-        sys_impl::ensure_system_path(&directory_path)?;
+    #[cfg(windows)]
+    fn ensure_system_path(&self, directory_path: &str) -> Result<(), ErrBox> {
+        use winreg::{enums::*, RegKey};
+        log_verbose!(self, "Ensuring '{}' is on the path.", directory_path);
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (env, _) = hkcu.create_subkey("Environment")?;
+        let mut path: String = env.get_value("Path")?;
+
+        // add to the path if it doesn't have this entry
+        if !path.split(";").any(|p| p == directory_path) {
+            if !path.is_empty() && !path.ends_with(';') {
+                path.push_str(";")
+            }
+            path.push_str(&directory_path);
+            env.set_value("Path", &path)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn remove_system_path(&self, directory_path: &str) -> Result<(), ErrBox> {
+        use winreg::{enums::*, RegKey};
+        log_verbose!(self, "Ensuring '{}' is on the path.", directory_path);
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (env, _) = hkcu.create_subkey("Environment")?;
+        let path: String = env.get_value("Path")?;
+        let mut paths = path.split(";").collect::<Vec<_>>();
+        let original_len = paths.len();
+
+        paths.retain(|p| p != &directory_path);
+
+        let was_removed = original_len != paths.len();
+        if was_removed {
+            env.set_value("Path", &paths.join(";"))?;
+        }
         Ok(())
     }
 
@@ -202,4 +236,14 @@ impl Environment for RealEnvironment {
 fn get_home_dir() -> Result<PathBuf, ErrBox> {
     let dir = dirs::home_dir().ok_or_else(|| err_obj!("Could not get home data dir"))?;
     Ok(dir.join(".bvm"))
+}
+
+fn get_env_var_dir(env_var_name: &str) -> Option<PathBuf> {
+    let env_var = match env::var(env_var_name) {
+        Ok(env_var) => env_var,
+        Err(_) => return None, // return none
+    };
+
+    // todo: expand out environment variable to full path? is that necessary?
+    Some(PathBuf::from(env_var))
 }

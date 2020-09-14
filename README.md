@@ -18,13 +18,23 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 6. **Works on Windows without needing WSL.**
 7. Allows working with binaries already on the path (ex. `bvm use deno path`).
 
-## Setup
+## Install
 
-1. For now, install `bvm` via cargo—`cargo install bvm`.
-2. Manually add the shims folder as the first item on the path:
-   - Windows: `%LOCALAPPDATA%\bvm\shims`
-   - Mac/Linux: `$HOME/.bvm/shims`
-3. Add a _.bvmrc.json_ file to your project and specify the paths to the binary manifest files.
+NOTICE: Don't bother trying this yet as it likely won't work.
+
+Install by running a script based on your environment:
+
+- Shell (Mac, Linux, WSL): `curl -fsSL https://bvm.land/install.sh | sh`
+- Windows
+  - [Installer]()
+  - Or install via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
+
+## Project Setup
+
+For creating directory specific binaries, follow
+
+1. Run `bvm init` in the project's root directory.
+2. Open up the created _.bvmrc.json_ file and specify the paths to the binary manifest files.
    ```jsonc
    {
      // optional commands to run on pre and post install
@@ -47,7 +57,7 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
      ]
    }
    ```
-4. Run `bvm install`
+3. Run `bvm install`
 
 ## Commands
 
@@ -202,18 +212,7 @@ bvm install --use node 14.9.0
 
 ## Utility Commands
 
-THESE ARE PROBABLY GOING AWAY. I HAVE THOUGHT OF A BETTER IDEA.
-
 The `bvm` binary provides some utility commands that can be used in pre and post install scripts.
-
-### `bvm util ensure-path <dir-path>`
-
-This utility will ensure the provided directory is on the system path and output to the user to restart their terminal when necessary to do so.
-
-```
-# Example
-bvm util ensure-path %APPDATA%\npm
-```
 
 ### `bvm util command-exists <owner-name/binary-name> <command-name>`
 
@@ -237,7 +236,7 @@ Example: `https://bvm.land/dprint/0.9.1.json`
 
 At the moment, it looks like this:
 
-```json
+```jsonc
 {
   "schemaVersion": 1,
   "name": "deno",
@@ -284,13 +283,6 @@ Other examples:
 
 ## Future improvements
 
-High priority:
-
-1. Better support for scenario where commands install other commands globally. (For example, with nvm if you switch versions then you also switch the globally installed npm packages.)
-   - I was thinking the utils above could maybe be used to solve this, but this is an annoying solution because processes cannot modify the parent environment. What might be better instead is to have `bvm` instead be a shell and cmd script that uses the `bvm.exe` process.
-     - After any `install` or `use` command it should change the current environment based on any removed and added paths.
-     - Probably in each binary manifest file it can do: `"environmentPaths": ["npm/bin"]`
-
 Low effort:
 
 1. Ability to list versions of a binary in the registries.
@@ -334,6 +326,10 @@ Medium effort:
 Large effort:
 
 1. Support downstream binary dependencies (should also support a range of dependencies).
+
+Future:
+
+1. Investigate whether it would be worth it to create a separate super small binary for resolving (I'm thinking not).
 
 Far future:
 
