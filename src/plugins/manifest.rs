@@ -32,6 +32,17 @@ struct PendingEnvironmentChanges {
 }
 
 impl PendingEnvironmentChanges {
+    fn mark_for_adding(&mut self, identifier: BinaryIdentifier) {
+        // always remove and always insert so its more reliable
+        self.removed.remove(&identifier);
+        self.added.insert(identifier.clone());
+    }
+
+    fn mark_for_removal(&mut self, identifier: BinaryIdentifier) {
+        self.added.remove(&identifier);
+        self.removed.insert(identifier);
+    }
+
     fn any(&self) -> bool {
         !self.added.is_empty() || !self.removed.is_empty()
     }
@@ -147,7 +158,7 @@ impl From<BinaryIdentifier> for GlobalBinaryLocation {
 struct GlobalVersionsMap(HashMap<String, String>);
 
 impl GlobalVersionsMap {
-    fn replace(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
+    fn set(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
         self.0.insert(
             command_name.into_string(),
             match location {
@@ -382,31 +393,16 @@ impl PluginsManifest {
     }
 
     pub fn use_global_version(&mut self, command_name: CommandName, location: GlobalBinaryLocation) {
-        let past_location = self.get_global_binary_location(&command_name);
-        let past_identifier = past_location.map(|l| l.to_identifier_option()).flatten();
         let new_identifier = location.to_identifier_option();
 
-        if let Some(new_identifier) = new_identifier {
+        if let Some(new_identifier) = &new_identifier {
             if !self.has_any_global_command(&new_identifier) && self.has_environment_paths(&new_identifier) {
-                if self.pending_env_changes.removed.contains(&new_identifier) {
-                    self.pending_env_changes.removed.remove(&new_identifier);
-                } else {
-                    self.pending_env_changes.added.insert(new_identifier.clone());
-                }
+                self.pending_env_changes.mark_for_adding(new_identifier.clone());
             }
         }
 
-        self.global_versions.replace(command_name, location);
-
-        if let Some(past_identifier) = past_identifier {
-            if !self.has_any_global_command(&past_identifier) && self.has_environment_paths(&past_identifier) {
-                if self.pending_env_changes.added.contains(&past_identifier) {
-                    self.pending_env_changes.added.remove(&past_identifier);
-                } else {
-                    self.pending_env_changes.removed.insert(past_identifier.clone());
-                }
-            }
-        }
+        self.remove_global_binary(&command_name);
+        self.global_versions.set(command_name, location);
     }
 
     fn remove_if_global_binary(
@@ -432,7 +428,15 @@ impl PluginsManifest {
     }
 
     fn remove_global_binary(&mut self, command_name: &CommandName) {
+        let past_location = self.get_global_binary_location(&command_name);
+        let past_identifier = past_location.map(|l| l.to_identifier_option()).flatten();
         self.global_versions.remove(command_name);
+
+        if let Some(past_identifier) = past_identifier {
+            if !self.has_any_global_command(&past_identifier) && self.has_environment_paths(&past_identifier) {
+                self.pending_env_changes.mark_for_removal(past_identifier.clone());
+            }
+        }
     }
 
     pub fn is_global_version(&self, identifier: &BinaryIdentifier, command_name: &CommandName) -> bool {
