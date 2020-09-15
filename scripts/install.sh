@@ -34,8 +34,8 @@ pkill -9 "bvm" || true
 curl --fail --location --progress-bar --output "$exe.zip" "$bvm_uri"
 cd "$bin_dir"
 unzip -o "$exe.zip"
-chmod +x "$exe"
-chmod +x "$exe-bin.sh"
+chmod +x "$exe.sh"
+chmod +x "$exe-bin"
 chmod +x "$exe-init.sh"
 rm "$exe.zip"
 
