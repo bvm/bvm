@@ -1907,6 +1907,7 @@ mod test {
     #[tokio::test]
     async fn binary_has_environment_variable() {
         let builder = EnvironmentBuilder::new();
+        builder.add_binary_to_path("name");
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
         plugin_builder.add_env_path("dir");
@@ -1925,6 +1926,8 @@ mod test {
         install_url!(environment, "http://localhost/package2.json");
         install_url!(environment, "http://localhost/package3.json");
         environment.clear_logs();
+
+        run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
 
         let first_path_str = if cfg!(target_os = "windows") {
             "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\1.0.0\\dir"
@@ -1965,7 +1968,11 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/local-data/shims"), PathBuf::from(&first_path_str)]
+                [
+                    PathBuf::from("/local-data/shims"),
+                    PathBuf::from("/path-dir"),
+                    PathBuf::from(&first_path_str)
+                ]
             );
         }
 
@@ -2040,6 +2047,7 @@ mod test {
                 environment.get_system_path_dirs(),
                 [
                     PathBuf::from("/local-data/shims"),
+                    PathBuf::from("/path-dir"),
                     PathBuf::from(&second_path_str1),
                     PathBuf::from(&second_path_str2)
                 ]
@@ -2081,9 +2089,31 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/local-data/shims"),]
+                [PathBuf::from("/local-data/shims"), PathBuf::from("/path-dir")]
             );
         }
+
+        // use the path version then go back to the first
+        run_cli(vec!["use", "name", "path"], &environment).await.unwrap();
+        run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
+
+        run_cli(
+            vec![
+                "hidden-shell",
+                "get-new-path",
+                &format!("exiting/path{0}other/path", SYS_PATH_DELIMITER),
+            ],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            [format!(
+                "exiting/path{0}other/path{0}{1}",
+                SYS_PATH_DELIMITER, first_path_str
+            )]
+        );
     }
 
     fn get_shim_path(name: &str) -> String {
