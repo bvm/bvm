@@ -658,18 +658,21 @@ fn handle_shell_get_new_path_command<TEnvironment: Environment>(
     command: ShellGetNewPathCommand,
 ) -> Result<(), ErrBox> {
     let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let local_data_dir = environment.get_local_user_data_dir()?;
     let mut paths = command
         .current_sys_path
         .split(&SYS_PATH_DELIMITER)
         .map(String::from)
         .collect::<Vec<_>>();
 
-    for path in plugin_manifest.get_pending_added_paths() {
+    for path in plugin_manifest.get_relative_pending_added_paths() {
+        let path = local_data_dir.join(path).to_string_lossy().to_string();
         if !paths.contains(&path) {
             paths.push(path);
         }
     }
-    for path in plugin_manifest.get_pending_removed_paths() {
+    for path in plugin_manifest.get_relative_pending_removed_paths() {
+        let path = local_data_dir.join(path).to_string_lossy().to_string();
         if let Some(pos) = paths.iter().position(|x| x == &path) {
             paths.remove(pos);
         }
@@ -698,10 +701,11 @@ fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
 
 fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let environment_manifest = plugins::EnvironmentManifest::load(environment)?;
+    let local_data_dir = environment.get_local_user_data_dir()?;
     let path_text = environment_manifest
         .get_paths()
         .iter()
-        .map(String::from)
+        .map(|path| local_data_dir.join(path).to_string_lossy().to_string())
         .collect::<Vec<_>>()
         .join(SYS_PATH_DELIMITER);
 
@@ -1930,19 +1934,19 @@ mod test {
         run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
 
         let first_path_str = if cfg!(target_os = "windows") {
-            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\1.0.0\\dir"
+            "/local-data\\binaries\\owner\\name\\1.0.0\\dir"
         } else {
-            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/1.0.0/dir"
+            "/local-data/binaries/owner/name/1.0.0/dir"
         };
         let second_path_str1 = if cfg!(target_os = "windows") {
-            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\2.0.0\\dir2"
+            "/local-data\\binaries\\owner\\name\\2.0.0\\dir2"
         } else {
-            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/2.0.0/dir2"
+            "/local-data/binaries/owner/name/2.0.0/dir2"
         };
         let second_path_str2 = if cfg!(target_os = "windows") {
-            "%BVM_LOCAL_DATA_DIR%\\binaries\\owner\\name\\2.0.0\\other\\path"
+            "/local-data\\binaries\\owner\\name\\2.0.0\\other\\path"
         } else {
-            "$BVM_LOCAL_DATA_DIR/binaries/owner/name/2.0.0/other/path"
+            "/local-data/binaries/owner/name/2.0.0/other/path"
         };
 
         // should have updated the environment with the new path

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use super::BinaryEnvironment;
-use crate::environment::{get_local_data_dir_var_name, Environment, PATH_SEPARATOR};
+use crate::environment::{Environment, PATH_SEPARATOR};
 use crate::types::{BinaryName, BinarySelector, CommandName, Version};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
@@ -169,14 +169,14 @@ impl GlobalVersionsMap {
     }
 
     fn get(&self, command_name: &CommandName) -> Option<GlobalBinaryLocation> {
-        self.0.get(command_name.as_str()).map(|key| {
-            if key == PATH_GLOBAL_VERSION_VALUE {
+        self.0.get(command_name.as_str()).map(|value| {
+            if value == PATH_GLOBAL_VERSION_VALUE {
                 GlobalBinaryLocation::Path
-            } else if key.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
-                GlobalBinaryLocation::Bvm(BinaryIdentifier(key[IDENTIFIER_GLOBAL_PREFIX.len()..].to_string()))
+            } else if value.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
+                GlobalBinaryLocation::Bvm(BinaryIdentifier(value[IDENTIFIER_GLOBAL_PREFIX.len()..].to_string()))
             } else {
                 // todo: don't panic and improve this
-                panic!("Unknown key: {}", key);
+                panic!("Unknown value: {}", value);
             }
         })
     }
@@ -223,18 +223,19 @@ impl PluginsManifest {
             // update the environment variables on windows (the environment manifest will be be set on the path on linux shell startup)
             #[cfg(target_os = "windows")]
             {
-                for path in self.get_pending_added_paths() {
-                    environment.ensure_system_path(&path)?;
+                let local_data_dir = environment.get_local_user_data_dir()?;
+                for path in self.get_relative_pending_added_paths() {
+                    environment.ensure_system_path(&local_data_dir.join(path).to_string_lossy())?;
                 }
-                for path in self.get_pending_removed_paths() {
-                    environment.remove_system_path(&path)?;
+                for path in self.get_relative_pending_removed_paths() {
+                    environment.remove_system_path(&local_data_dir.join(path).to_string_lossy())?;
                 }
             }
 
             // update environment manifest
             let mut environment_manifest = super::EnvironmentManifest::load(environment)?;
-            environment_manifest.add_paths(self.get_pending_added_paths());
-            environment_manifest.remove_paths(&self.get_pending_removed_paths());
+            environment_manifest.add_paths(self.get_relative_pending_added_paths());
+            environment_manifest.remove_paths(&self.get_relative_pending_removed_paths());
 
             environment_manifest.save(environment)?;
         }
@@ -263,11 +264,11 @@ impl PluginsManifest {
 
     // pending environment changes
 
-    pub fn get_pending_added_paths(&self) -> Vec<String> {
+    pub fn get_relative_pending_added_paths(&self) -> Vec<String> {
         self.get_change_paths(&self.pending_env_changes.added)
     }
 
-    pub fn get_pending_removed_paths(&self) -> Vec<String> {
+    pub fn get_relative_pending_removed_paths(&self) -> Vec<String> {
         self.get_change_paths(&self.pending_env_changes.removed)
     }
 
@@ -277,14 +278,7 @@ impl PluginsManifest {
             if let Some(binary) = self.get_binary(&identifier) {
                 let bin_dir = super::get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
                 for path in binary.get_env_paths() {
-                    result.push(format!(
-                        "{}{}{}{}{}",
-                        get_local_data_dir_var_name(),
-                        PATH_SEPARATOR,
-                        bin_dir.to_string_lossy(),
-                        PATH_SEPARATOR,
-                        path
-                    ));
+                    result.push(format!("{}{}{}", bin_dir.to_string_lossy(), PATH_SEPARATOR, path));
                 }
             }
         }
