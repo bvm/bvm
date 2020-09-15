@@ -1,0 +1,8 @@
+[package]
+name = "bvm-setup-app"
+version = "0.1.0"
+authors = ["David Sherret <dsherret@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+winreg = "0.7.0"

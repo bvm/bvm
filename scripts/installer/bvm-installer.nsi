@@ -19,14 +19,14 @@ Section
 
     !insertmacro KillBvmProcess
 
+    # Create the executable files
     CreateDirectory $INSTDIR\bin
     SetOutPath $INSTDIR\bin
-    File ..\target\release\bvm-bin.exe
-    File ..\bvm.cmd
+    File ..\..\target\release\bvm-bin.exe
+    File ..\..\bvm.cmd
+    SetOutPath $INSTDIR
 
-    EnVar::AddValue "PATH" "$INSTDIR\bin"
-    Pop $0
-
+    # Setup the environment variables
     EnVar::Check "BVM_DATA_DIR" "NULL"
     Pop $0
     IntCmp $0 EnVar::ERR_NOVARIABLE 0 +2
@@ -39,7 +39,18 @@ Section
     EnVar::AddValue "BVM_LOCAL_DATA_DIR" "$LOCALAPPDATA\bvm"
     Pop $0
 
-    SetOutPath $INSTDIR
+    # delete these if they exist
+    EnVar::DeleteValue "PATH" "$INSTDIR\bin"
+    Pop $0
+    EnVar::DeleteValue "PATH" "$APPDATA\bvm\shims"
+    Pop $0
+
+    # now add them to the front (couldn't do this with EnVar, so created this custom app)
+    File setup-app\target\release\bvm-setup-app.exe
+    nsExec::Exec '$INSTDIR\bvm-setup-app.exe "$INSTDIR"'
+    Pop $0
+    Delete $INSTDIR\bvm-setup-app.exe
+
     WriteUninstaller $INSTDIR\uninstall.exe
 
     # Note: Don't bother adding to registry keys in order to do "Add/remove programs"
@@ -54,7 +65,11 @@ SectionEnd
 Section "Uninstall"
 
     EnVar::DeleteValue "PATH" "$INSTDIR\bin"
+    Pop $0
+    EnVar::DeleteValue "PATH" "$APPDATA\bvm\shims"
+    Pop $0
     EnVar::DeleteValue "BVM_DATA_DIR"
+    Pop $0
     EnVar::DeleteValue "BVM_LOCAL_DATA_DIR"
     Pop $0
 

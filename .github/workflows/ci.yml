@@ -63,6 +63,11 @@ jobs:
       run: cargo test --release --locked --all-targets --verbose
 
     # INSTALLER
+    - name: Setup installer setup app (Windows)
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        cd scripts/installer/setup-app
+        cargo build --release --locked --verbose
     - name: Setup NSIS (Windows)
       if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
@@ -77,7 +82,7 @@ jobs:
       if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       with:
         additional-plugin-paths: ${{ github.workspace }}/NSIS_Plugins/Plugins/
-        script-file: ${{ github.workspace }}/scripts/bvm-installer.nsi
+        script-file: ${{ github.workspace }}/scripts/installer/bvm-installer.nsi
     # TODO: Add this
     # - name: Sign installer (Windows)
     #  if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
@@ -91,18 +96,19 @@ jobs:
       id: linux_pre_release
       if: startsWith(matrix.config.os, 'ubuntu') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
-        cp bvm.sh target/release/bvm.sh
-        cp bvm-init.sh target/release/bvm-init.sh
+        cp bvm.sh target/release/bvm
+        cp bvm-init.sh target/release/bvm-init
         cd target/release
-        zip -r bvm-x86_64-unknown-linux-gnu.zip bvm-bin bvm.sh bvm-init.sh
+        zip -r bvm-x86_64-unknown-linux-gnu.zip bvm-bin bvm bvm-init
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-unknown-linux-gnu.zip | awk '{print $1}')"
     - name: Pre-release (Mac)
       id: mac_pre_release
       if: startsWith(matrix.config.os, 'macOS') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
-        cp bvm.sh target/release/bvm.sh
+        cp bvm.sh target/release/bvm
+        cp bvm-init.sh target/release/bvm-init
         cd target/release
-        zip -r bvm-x86_64-apple-darwin.zip bvm-bin bvm.sh
+        zip -r bvm-x86_64-apple-darwin.zip bvm-bin bvm bvm-init
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-apple-darwin.zip | awk '{print $1}')"
     - name: Pre-release (Windows)
       id: windows_pre_release
@@ -110,7 +116,7 @@ jobs:
       run: |
         cp bvm.cmd target/release/bvm.cmd
         Compress-Archive -CompressionLevel Optimal -Force -Path target/release/bvm-bin.exe, target/release/bvm.cmd -DestinationPath target/release/bvm-x86_64-pc-windows-msvc.zip
-        mv scripts/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
+        cp scripts/installer/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc.zip | awk '{print $1}')"
         echo "::set-output name=INSTALLER_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc-installer.exe | awk '{print $1}')"
 

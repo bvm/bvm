@@ -79,7 +79,7 @@ if (!$env:BVM_LOCAL_DATA_DIR) {
   [Environment]::SetEnvironmentVariable('BVM_LOCAL_DATA_DIR', $env:BVM_DATA_DIR, [EnvironmentVariableTarget]::User)
 }
 
-Add-To-Path-If-Not "%BVM_DATA_DIR%\shims"
+Add-To-Path-If-Not $env:APPDATA + "\bvm\shims"
 Add-To-Path-If-Not $BinDir
 
 Write-Output "bvm was installed successfully to $BinDir"

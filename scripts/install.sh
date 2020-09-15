@@ -34,9 +34,9 @@ pkill -9 "bvm" || true
 curl --fail --location --progress-bar --output "$exe.zip" "$bvm_uri"
 cd "$bin_dir"
 unzip -o "$exe.zip"
-chmod +x "$exe.sh"
+chmod +x "$exe"
 chmod +x "$exe-bin"
-chmod +x "$exe-init.sh"
+chmod +x "$exe-init"
 rm "$exe.zip"
 
 echo "bvm was installed successfully to $exe"
@@ -49,6 +49,6 @@ else
 	esac
 	echo "Manually add the following to your \$HOME/$shell_profile (or similar)"
 	echo "  export BVM_INSTALL_DIR=\"$bvm_install\""
-	echo "  source \"\$BVM_INSTALL_DIR/bin/bvm-init.sh\""
+	echo "  source \"\$BVM_INSTALL_DIR/bin/bvm-init\""
 	echo "Run '$exe --help' to get started"
 fi
