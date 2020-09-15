@@ -700,10 +700,10 @@ fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
 }
 
 fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let environment_manifest = plugins::EnvironmentManifest::load(environment)?;
+    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
     let local_data_dir = environment.get_local_user_data_dir()?;
-    let path_text = environment_manifest
-        .get_paths()
+    let path_text = plugin_manifest
+        .get_bin_env_paths()
         .iter()
         .map(|path| local_data_dir.join(path).to_string_lossy().to_string())
         .collect::<Vec<_>>()

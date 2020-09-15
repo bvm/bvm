@@ -22,6 +22,8 @@ pub struct PluginsManifest {
     binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
     /// Changes to the environment that need to be made.
     pending_env_changes: PendingEnvironmentChanges,
+    /// Current binary paths.
+    binary_paths: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -196,6 +198,7 @@ impl PluginsManifest {
                 added: HashSet::new(),
                 removed: HashSet::new(),
             },
+            binary_paths: Vec::new(),
         }
     }
 
@@ -217,7 +220,7 @@ impl PluginsManifest {
         }
     }
 
-    pub fn save(&self, environment: &impl Environment) -> Result<(), ErrBox> {
+    pub fn save(&mut self, environment: &impl Environment) -> Result<(), ErrBox> {
         // handle any pending changes
         if self.pending_env_changes.any() {
             // update the environment variables on windows (the environment manifest will be be set on the path on linux shell startup)
@@ -232,12 +235,9 @@ impl PluginsManifest {
                 }
             }
 
-            // update environment manifest
-            let mut environment_manifest = super::EnvironmentManifest::load(environment)?;
-            environment_manifest.add_paths(self.get_relative_pending_added_paths());
-            environment_manifest.remove_paths(&self.get_relative_pending_removed_paths());
-
-            environment_manifest.save(environment)?;
+            // update binary environment paths
+            self.add_bin_env_paths(self.get_relative_pending_added_paths());
+            self.remove_bin_env_paths(&self.get_relative_pending_removed_paths());
         }
 
         // save plugin file
@@ -287,6 +287,28 @@ impl PluginsManifest {
 
     pub fn clear_pending_env_changes(&mut self) {
         self.pending_env_changes.clear();
+    }
+
+    // binary environment paths
+
+    pub fn get_bin_env_paths(&self) -> &Vec<String> {
+        &self.binary_paths
+    }
+
+    fn add_bin_env_paths(&mut self, paths: Vec<String>) {
+        for path in paths {
+            if !self.binary_paths.contains(&path) {
+                self.binary_paths.push(path);
+            }
+        }
+    }
+
+    fn remove_bin_env_paths(&mut self, paths: &Vec<String>) {
+        for path in paths.iter() {
+            if let Some(pos) = self.binary_paths.iter().position(|p| p == path) {
+                self.binary_paths.remove(pos);
+            }
+        }
     }
 
     // binary
