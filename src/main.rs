@@ -650,6 +650,10 @@ fn handle_shell_command<TEnvironment: Environment>(
         ShellSubCommand::GetNewPath(command) => handle_shell_get_new_path_command(environment, command),
         ShellSubCommand::ClearPendingChanges => handle_shell_clear_pending_env_changes_command(environment),
         ShellSubCommand::GetPaths => handle_shell_get_paths_command(environment),
+        #[cfg(target_os = "windows")]
+        ShellSubCommand::WindowsInstall(command) => handle_shell_windows_install_command(environment, command),
+        #[cfg(target_os = "windows")]
+        ShellSubCommand::WindowsUninstall(command) => handle_shell_windows_uninstall_command(environment, command),
     }
 }
 
@@ -711,6 +715,28 @@ fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvi
 
     environment.log(&path_text);
 
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn handle_shell_windows_install_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellWindowsInstallCommand,
+) -> Result<(), ErrBox> {
+    let data_dir = environment.get_user_data_dir()?;
+    environment.ensure_system_path_pre(&PathBuf::from(&command.install_path).to_string_lossy())?;
+    environment.ensure_system_path_pre(&PathBuf::from(data_dir).join("shims").to_string_lossy())?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn handle_shell_windows_uninstall_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellWindowsUninstallCommand,
+) -> Result<(), ErrBox> {
+    let data_dir = environment.get_user_data_dir()?;
+    environment.remove_system_path(&PathBuf::from(&command.install_path).to_string_lossy())?;
+    environment.remove_system_path(&PathBuf::from(data_dir).join("shims").to_string_lossy())?;
     Ok(())
 }
 
@@ -1973,7 +1999,7 @@ mod test {
             assert_eq!(
                 environment.get_system_path_dirs(),
                 [
-                    PathBuf::from("/local-data/shims"),
+                    PathBuf::from("/data/shims"),
                     PathBuf::from("/path-dir"),
                     PathBuf::from(&first_path_str)
                 ]
@@ -2050,7 +2076,7 @@ mod test {
             assert_eq!(
                 environment.get_system_path_dirs(),
                 [
-                    PathBuf::from("/local-data/shims"),
+                    PathBuf::from("/data/shims"),
                     PathBuf::from("/path-dir"),
                     PathBuf::from(&second_path_str1),
                     PathBuf::from(&second_path_str2)
@@ -2093,7 +2119,7 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/local-data/shims"), PathBuf::from("/path-dir")]
+                [PathBuf::from("/data/shims"), PathBuf::from("/path-dir")]
             );
         }
 
@@ -2118,6 +2144,68 @@ mod test {
                 SYS_PATH_DELIMITER, first_path_str
             )]
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn windows_install_command_installs() {
+        let environment = TestEnvironment::new();
+        environment.remove_system_path("/data/shims").unwrap();
+        run_cli(
+            vec!["hidden-shell", "windows-install", "C:\\test\\install\\dir\\bin"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            environment.get_system_path_dirs(),
+            [
+                PathBuf::from("/data\\shims"),
+                PathBuf::from("C:\\test\\install\\dir\\bin"),
+            ]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn windows_install_command_existing_paths_installs() {
+        let environment = TestEnvironment::new();
+        environment.remove_system_path("/data/shims").unwrap();
+        environment.ensure_system_path_pre("/data\\shims").unwrap();
+        environment.ensure_system_path_pre("/other-dir").unwrap();
+        run_cli(
+            vec!["hidden-shell", "windows-install", "C:\\test\\install\\dir\\bin"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            environment.get_system_path_dirs(),
+            [
+                PathBuf::from("/data\\shims"),
+                PathBuf::from("C:\\test\\install\\dir\\bin"),
+                PathBuf::from("/other-dir"),
+            ]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn windows_uninstall_command_uninstalls() {
+        let environment = TestEnvironment::new();
+        environment.remove_system_path("/data/shims").unwrap();
+        environment.ensure_system_path_pre("/other-dir").unwrap();
+        environment.ensure_system_path_pre("/data\\shims").unwrap();
+        environment
+            .ensure_system_path_pre("C:\\test\\install\\dir\\bin")
+            .unwrap();
+        run_cli(
+            vec!["hidden-shell", "windows-uninstall", "C:\\test\\install\\dir\\bin"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_eq!(environment.get_system_path_dirs(), [PathBuf::from("/other-dir")]);
     }
 
     fn get_shim_path(name: &str) -> String {

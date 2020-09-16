@@ -290,11 +290,14 @@ Low effort:
 3. Ability to get url of version from registry.
 4. Perhaps rename "registry" to something else since it's a binary per registry.
 5. Document why there won't be support for multiple binaries per registry (open an issue and write it in there).
-6. Output the binary owner/name, description (add), and recent versions after adding a registry.
-7. Urls should be `url::Url`. Versions should be `semver::Version`.
-8. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
-9. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally).
-10. Add "postUninstall" script (ex. removing environment variables)
+6. Output the binary owner/name, description, and recent versions after adding a registry.
+7. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
+8. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally). It should also "use" any binaries as specified in the configuration.
+9. Scripts to add:
+   1. Add an "on" prefix so these are grouped together and use underscore separators.
+   2. Add "on_uninstall_post" script
+   3. Add "on_use" script.
+   4. Add opposite of "on_use" for when the user stops using it.
 
 Medium effort:
 
@@ -322,6 +325,7 @@ Medium effort:
 5. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
 6. Add `bvm lock` to update the configuration file urls with checksums.
 7. Multiple sub binary download locations (ex. say `npm` were installed from a different zip for `node`).
+8. Add key/value setting storage. Example: `bvm setting nodejs/node <key> <value>` and `bvm setting nodejs/node <key>` to get. Use this instead of environment variables.
 
 Large effort:
 
@@ -330,6 +334,7 @@ Large effort:
 Future:
 
 1. Investigate whether it would be worth it to create a separate super small binary for resolving (I'm thinking not).
+2. Provide a setting in the app for changing the local data directory (where binaries are installed). This should not be an environment variable because it should also update all the system paths appropriately and move everything over.
 
 Far future:
 

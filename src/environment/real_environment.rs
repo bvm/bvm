@@ -8,7 +8,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use super::{get_data_dir_var_name, get_local_data_dir_var_name, Environment};
+use super::Environment;
 
 #[derive(Clone)]
 pub struct RealEnvironment {
@@ -114,9 +114,7 @@ impl Environment for RealEnvironment {
 
     fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting local user data directory.");
-        let bvm_dir = if let Some(dir) = get_env_var_dir(&get_local_data_dir_var_name()) {
-            dir
-        } else if cfg!(target_os = "windows") {
+        let bvm_dir = if cfg!(target_os = "windows") {
             // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
             let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get local data dir"))?;
             dir.join("bvm")
@@ -129,9 +127,7 @@ impl Environment for RealEnvironment {
 
     fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user data directory.");
-        let bvm_dir = if let Some(dir) = get_env_var_dir(&get_data_dir_var_name()) {
-            dir
-        } else if cfg!(target_os = "windows") {
+        let bvm_dir = if cfg!(target_os = "windows") {
             let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get data dir"))?;
             dir.join("bvm")
         } else {
@@ -163,6 +159,22 @@ impl Environment for RealEnvironment {
             path.push_str(&directory_path);
             env.set_value("Path", &path)?;
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn ensure_system_path_pre(&self, directory_path: &str) -> Result<(), ErrBox> {
+        use winreg::{enums::*, RegKey};
+
+        // always puts the provided directory at the start of the path
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (env, _) = hkcu.create_subkey("Environment")?;
+        let path: String = env.get_value("Path")?;
+        let mut paths = path.split(";").collect::<Vec<_>>();
+        paths.retain(|p| p != &directory_path && !p.is_empty());
+        paths.insert(0, directory_path);
+        env.set_value("Path", &paths.join(";"))?;
+
         Ok(())
     }
 
@@ -236,14 +248,4 @@ impl Environment for RealEnvironment {
 fn get_home_dir() -> Result<PathBuf, ErrBox> {
     let dir = dirs::home_dir().ok_or_else(|| err_obj!("Could not get home data dir"))?;
     Ok(dir.join(".bvm"))
-}
-
-fn get_env_var_dir(env_var_name: &str) -> Option<PathBuf> {
-    let env_var = match env::var(env_var_name) {
-        Ok(env_var) => env_var,
-        Err(_) => return None, // return none
-    };
-
-    // todo: expand out environment variable to full path? is that necessary?
-    Some(PathBuf::from(env_var))
 }

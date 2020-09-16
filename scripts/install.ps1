@@ -13,7 +13,7 @@ if ($PSVersionTable.PSEdition -ne 'Core') {
 }
 
 $BinDir = if ($env:BVM_INSTALL_DIR) {
-  "%BVM_INSTALL_DIR%\bin"
+  "$env:BVM_INSTALL_DIR\bin"
 } elseif ($IsWindows) {
   "$Home\.bvm\bin"
 }
@@ -59,28 +59,10 @@ if (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
 
 Remove-Item $BvmZip
 
-function Add-To-Path-If-Not($DirToAdd) {
-  $User = [EnvironmentVariableTarget]::User
-  $Path = [Environment]::GetEnvironmentVariable('Path', $User)
+Start-Process -FilePath "$BinDir\bvm-bin" -ArgumentList "hidden-shell","windows-install","`"$BinDir`""
 
-  if (!(";$Path;".ToLower() -like "*;$DirToAdd;*".ToLower())) {
-    [Environment]::SetEnvironmentVariable('Path', "$DirToAdd;$Path", $User)
-    $Env:Path = "$DirToAdd;" + $Env:Path
-  }
-}
-
-if (!$env:BVM_DATA_DIR) {
-  $env:BVM_DATA_DIR = $env:APPDATA + "\bvm"
-  [Environment]::SetEnvironmentVariable('BVM_DATA_DIR', $env:BVM_DATA_DIR, [EnvironmentVariableTarget]::User)
-}
-
-if (!$env:BVM_LOCAL_DATA_DIR) {
-  $env:BVM_LOCAL_DATA_DIR = $env:LOCALAPPDATA + "\bvm"
-  [Environment]::SetEnvironmentVariable('BVM_LOCAL_DATA_DIR', $env:BVM_DATA_DIR, [EnvironmentVariableTarget]::User)
-}
-
-Add-To-Path-If-Not $env:APPDATA + "\bvm\shims"
-Add-To-Path-If-Not $BinDir
+$Env:Path = "$env:APPDATA\bvm\shims;" + $Env:Path
+$Env:Path = "$BinDir;" + $Env:Path
 
 Write-Output "bvm was installed successfully to $BinDir"
 Write-Output "Run 'bvm --help' to get started"

@@ -37,6 +37,9 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     /// Ensures the provided directory to be on the system path environment variable.
     #[cfg(windows)]
     fn ensure_system_path(&self, directory_path: &str) -> Result<(), ErrBox>;
+    /// Ensures the provided directory is at the start of the system path environment variable.
+    #[cfg(windows)]
+    fn ensure_system_path_pre(&self, directory_path: &str) -> Result<(), ErrBox>;
     #[cfg(windows)]
     fn remove_system_path(&self, directory_path: &str) -> Result<(), ErrBox>;
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox>;

@@ -11,14 +11,5 @@ else
     export PATH="$bvm_binary_paths:$PATH"
   fi
 
-  if [ -z "$BVM_LOCAL_DATA_DIR" ]
-  then
-    export BVM_LOCAL_DATA_DIR="$BVM_INSTALL_DIR"
-  fi
-  if [ -z "$BVM_DATA_DIR" ]
-  then
-    export BVM_DATA_DIR="$BVM_INSTALL_DIR"
-  fi
-
   export PATH="$BVM_INSTALL_DIR/bin:$BVM_DATA_DIR/shims:$PATH"
 fi

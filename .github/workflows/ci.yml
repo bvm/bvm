@@ -63,26 +63,11 @@ jobs:
       run: cargo test --release --locked --all-targets --verbose
 
     # INSTALLER
-    - name: Setup installer setup app (Windows)
-      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
-      run: |
-        cd scripts/installer/setup-app
-        cargo build --release --locked --verbose
-    - name: Setup NSIS (Windows)
-      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
-      run: |
-        mkdir NSIS_Plugins
-        cd NSIS_Plugins
-        iwr https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip -OutFile envar_plugin.zip
-        powershell -command "if ((CertUtil -hashfile envar_plugin.zip SHA1)[1] -replace ' ','' -ne '586c52fd2f44dcf1b5b0556bbd5dd3442f9301cd') { exit 1 }"
-        tar -xf envar_plugin.zip
-        rm envar_plugin.zip
     - name: Create installer (Windows)
       uses: joncloud/makensis-action@v2.0
       if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       with:
-        additional-plugin-paths: ${{ github.workspace }}/NSIS_Plugins/Plugins/
-        script-file: ${{ github.workspace }}/scripts/installer/bvm-installer.nsi
+        script-file: ${{ github.workspace }}/scripts/bvm-installer.nsi
     # TODO: Add this
     # - name: Sign installer (Windows)
     #  if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
@@ -116,7 +101,7 @@ jobs:
       run: |
         cp bvm.cmd target/release/bvm.cmd
         Compress-Archive -CompressionLevel Optimal -Force -Path target/release/bvm-bin.exe, target/release/bvm.cmd -DestinationPath target/release/bvm-x86_64-pc-windows-msvc.zip
-        cp scripts/installer/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
+        cp scripts/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc.zip | awk '{print $1}')"
         echo "::set-output name=INSTALLER_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc-installer.exe | awk '{print $1}')"
 

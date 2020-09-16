@@ -31,7 +31,7 @@ impl TestEnvironment {
             run_shell_commands: Arc::new(Mutex::new(Vec::new())),
             remote_files: Arc::new(Mutex::new(HashMap::new())),
             deleted_directories: Arc::new(Mutex::new(Vec::new())),
-            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/local-data/shims")])),
+            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims")])),
         }
     }
 
@@ -198,6 +198,17 @@ impl Environment for TestEnvironment {
         if !path_dirs.contains(&directory_path) {
             path_dirs.push(directory_path);
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn ensure_system_path_pre(&self, directory_path: &str) -> Result<(), ErrBox> {
+        let mut path_dirs = self.path_dirs.lock().unwrap();
+        let directory_path = PathBuf::from(directory_path);
+        if let Some(pos) = path_dirs.iter().position(|p| p == &directory_path) {
+            path_dirs.remove(pos);
+        }
+        path_dirs.insert(0, directory_path);
         Ok(())
     }
 

@@ -22,34 +22,12 @@ Section
     # Create the executable files
     CreateDirectory $INSTDIR\bin
     SetOutPath $INSTDIR\bin
-    File ..\..\target\release\bvm-bin.exe
-    File ..\..\bvm.cmd
+    File ..\target\release\bvm-bin.exe
+    File ..\bvm.cmd
     SetOutPath $INSTDIR
 
-    # Setup the environment variables
-    EnVar::Check "BVM_DATA_DIR" "NULL"
+    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden-shell windows-install "$INSTDIR\bin"'
     Pop $0
-    IntCmp $0 EnVar::ERR_NOVARIABLE 0 +2
-    EnVar::AddValue "BVM_DATA_DIR" "$APPDATA\bvm"
-    Pop $0
-
-    EnVar::Check "BVM_LOCAL_DATA_DIR" "NULL"
-    Pop $0
-    IntCmp $0 EnVar::ERR_NOVARIABLE 0 +2
-    EnVar::AddValue "BVM_LOCAL_DATA_DIR" "$LOCALAPPDATA\bvm"
-    Pop $0
-
-    # delete these if they exist
-    EnVar::DeleteValue "PATH" "$INSTDIR\bin"
-    Pop $0
-    EnVar::DeleteValue "PATH" "$APPDATA\bvm\shims"
-    Pop $0
-
-    # now add them to the front (couldn't do this with EnVar, so created this custom app)
-    File setup-app\target\release\bvm-setup-app.exe
-    nsExec::Exec '$INSTDIR\bvm-setup-app.exe "$INSTDIR"'
-    Pop $0
-    Delete $INSTDIR\bvm-setup-app.exe
 
     WriteUninstaller $INSTDIR\uninstall.exe
 
@@ -64,16 +42,9 @@ SectionEnd
 
 Section "Uninstall"
 
-    EnVar::DeleteValue "PATH" "$INSTDIR\bin"
-    Pop $0
-    EnVar::DeleteValue "PATH" "$APPDATA\bvm\shims"
-    Pop $0
-    EnVar::DeleteValue "BVM_DATA_DIR"
-    Pop $0
-    EnVar::DeleteValue "BVM_LOCAL_DATA_DIR"
-    Pop $0
-
     !insertmacro KillBvmProcess
+
+    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden-shell windows-uninstall "$INSTDIR\bin"'
 
     Delete $INSTDIR\uninstall.exe
     Delete $INSTDIR\bin\bvm-bin.exe
@@ -83,5 +54,4 @@ Section "Uninstall"
 
     # delete the plugin local cache folder
     RMDir /r $LOCALAPPDATA\bvm
-
 SectionEnd

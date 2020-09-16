@@ -88,10 +88,24 @@ pub enum ShellSubCommand {
     GetNewPath(ShellGetNewPathCommand),
     ClearPendingChanges,
     GetPaths,
+    #[cfg(target_os = "windows")]
+    WindowsInstall(ShellWindowsInstallCommand),
+    #[cfg(target_os = "windows")]
+    WindowsUninstall(ShellWindowsUninstallCommand),
 }
 
 pub struct ShellGetNewPathCommand {
     pub current_sys_path: String,
+}
+
+#[cfg(target_os = "windows")]
+pub struct ShellWindowsInstallCommand {
+    pub install_path: String,
+}
+
+#[cfg(target_os = "windows")]
+pub struct ShellWindowsUninstallCommand {
+    pub install_path: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
@@ -207,6 +221,21 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         } else if matches.is_present("get-paths") {
             SubCommand::Shell(ShellSubCommand::GetPaths)
         } else {
+            #[cfg(target_os = "windows")]
+            if matches.is_present("windows-install") {
+                let matches = matches.subcommand_matches("windows-install").unwrap();
+                SubCommand::Shell(ShellSubCommand::WindowsInstall(ShellWindowsInstallCommand {
+                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
+                }))
+            } else if matches.is_present("windows-uninstall") {
+                let matches = matches.subcommand_matches("windows-uninstall").unwrap();
+                SubCommand::Shell(ShellSubCommand::WindowsUninstall(ShellWindowsUninstallCommand {
+                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
+                }))
+            } else {
+                unreachable!();
+            }
+            #[cfg(unix)]
             unreachable!();
         }
     } else {
@@ -405,6 +434,22 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("get-paths")
+                )
+                .subcommand(
+                    SubCommand::with_name("windows-install")
+                        .arg(
+                            Arg::with_name("install-dir")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("windows-uninstall")
+                        .arg(
+                            Arg::with_name("install-dir")
+                                .takes_value(true)
+                                .required(true)
+                        )
                 )
         )
         .arg(
