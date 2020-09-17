@@ -275,16 +275,14 @@ Other examples:
 Low effort:
 
 1. Ability to list versions of a binary in the registries.
-2. List 10 most similar versions found when calling `bvm install <binary-name> <version>`
+2. List 10 most similar versions found when calling `bvm install <binary-name> <version>` and there are no matches.
 3. Ability to get url of version from registry.
 4. Perhaps rename "registry" to something else since it's a binary per registry.
 5. Document why there won't be support for multiple binaries per registry (open an issue and write it in there).
 6. Output the binary owner/name, description, and recent versions after adding a registry.
-7. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
+7. Support `bvm use <binary-name> x.x` or with one version or highest matching a range, or even `bvm use <binary-name>` to use the latest.
 8. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally). It should also "use" any binaries as specified in the configuration.
-9. Scripts to add:
-   1. Add "onPostUninstall" script
-   2. Add opposite of "onUse" for when the user stops using it (`onStopUse`?)
+9. Add "onPostUninstall" script
 10. Add an `--isolate` flag for `bvm exec`.
 11. Validate group and binary names. Probably use the same rules https://www.npmjs.com/package/validate-npm-package-name#naming-rules and add no `bvm` binary name allowed.
 
