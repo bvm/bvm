@@ -38,8 +38,8 @@ For creating directory specific binaries, follow
    ```jsonc
    {
      // optional commands to run on pre and post install
-     "preInstall": "",
-     "postInstall": "",
+     "onPreInstall": "",
+     "onPostInstall": "",
      // list of binaries to use
      "binaries": [
        "https://bvm.land/deno/1.3.2.json",
@@ -116,9 +116,9 @@ Use all the binaries in the current configuration files globally on the path.
 
 Generally it's not necessary to ever use this command as this happens automatically being in the current directory.
 
-### `bvm resolve [binary name]`
+### `bvm resolve [command-name]`
 
-Resolves the executable path of the specified binary based on the current working directory.
+Resolves the executable path of the specified command name based on the current working directory.
 
 This command is used by the created shell/batch files (shims) to tell how to resolve the file.
 
@@ -210,19 +210,6 @@ bvm install deno 1.3.3
 bvm install --use node 14.9.0
 ```
 
-## Utility Commands
-
-The `bvm` binary provides some utility commands that can be used in pre and post install scripts.
-
-### `bvm util command-exists <owner-name/binary-name> <command-name>`
-
-Checks if the provided command is on the path or exists in bvm. If it exists, exits with code 0 and if not returns 1.
-
-```
-# Example
-bvm util command-exists nodejs/node npm || (...do something here... high likelihood this is the first time installing)
-```
-
 ## Redirect Service
 
 The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
@@ -251,8 +238,10 @@ At the moment, it looks like this:
       "name": "deno",
       "path": "deno.exe"
     }],
-    "preInstall": "# run any command pre installation (ex. kill process)",
-    "postInstall": "# this is where you can run some commands if necessary to cause additional setup"
+    "onPreInstall": "# run any command pre installation (ex. kill process)",
+    "onPostInstall": "# this is where you can run some commands if necessary to cause additional setup",
+    "onUse": "# command to execute when using this",
+    "onStopUse": "# command to execute when stopping use of this"
   },
   "linux-x86_64": {
     "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
@@ -294,10 +283,10 @@ Low effort:
 7. Support `bvm use <binary-name> x.x` or with one version, or even `bvm use <binary-name>` to use the latest.
 8. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally). It should also "use" any binaries as specified in the configuration.
 9. Scripts to add:
-   1. Add an "on" prefix so these are grouped together and use underscore separators.
-   2. Add "on_uninstall_post" script
-   3. Add "on_use" script.
-   4. Add opposite of "on_use" for when the user stops using it.
+   1. Add "onPostUninstall" script
+   2. Add opposite of "onUse" for when the user stops using it (`onStopUse`?)
+10. Add an `--isolate` flag for `bvm exec`.
+11. Validate group and binary names. Probably use the same rules https://www.npmjs.com/package/validate-npm-package-name#naming-rules and add no `bvm` binary name allowed.
 
 Medium effort:
 
@@ -333,12 +322,13 @@ Large effort:
 
 Future:
 
-1. Investigate whether it would be worth it to create a separate super small binary for resolving (I'm thinking not).
-2. Provide a setting in the app for changing the local data directory (where binaries are installed). This should not be an environment variable because it should also update all the system paths appropriately and move everything over.
+1. Provide a setting in the app for changing the local data directory (where binaries are installed). This should not be an environment variable because it should also update all the system paths appropriately and move everything over.
+2. Allow specifying environment variables per directory. This seems to have been done in [direnv](https://github.com/direnv/direnv) so it should be possible here. See also, https://unix.stackexchange.com/a/21364/128067 and https://unix.stackexchange.com/a/170282/128067 (seems like it's better not to override the command and instead use shell hooks--ex. `PROMPT_COMMAND` and tell if the directory changed). For powershell, https://github.com/takekazuomi/posh-direnv. I'm not sure about cmd and would be surprised
 
 Far future:
 
 1. Support breaking up registries into multiple files (ex. it would give a semver range for a file internally). This would only be useful for extremely large files.
+2. Probably editor extensions to properly set the environment variables based on the open project. Ex. you change the folder in VSCode and it properly updates its process' environment variables... wouldn't be hard to do.
 
 Probably unnecessary complexity:
 

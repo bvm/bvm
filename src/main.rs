@@ -21,6 +21,7 @@ use arg_parser::*;
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
+use plugins::{PluginsManifest, PluginsMut, UrlInstallAction};
 use types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
 
 #[tokio::main]
@@ -54,7 +55,6 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::Init => handle_init_command(environment)?,
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
-        SubCommand::Util(command) => handle_util_command(environment, command)?,
         SubCommand::Shell(command) => handle_shell_command(environment, command)?,
     }
 
@@ -65,7 +65,7 @@ fn handle_resolve_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     resolve_command: ResolveCommand,
 ) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let plugin_manifest = PluginsManifest::load(environment)?;
     let command_name = CommandName::from_string(resolve_command.binary_name);
     let info = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?;
     let executable_path = if let Some(info) = info {
@@ -98,40 +98,38 @@ async fn handle_install_command<TEnvironment: Environment>(
     command: InstallCommand,
 ) -> Result<(), ErrBox> {
     let config_file = get_config_file_or_error(environment)?;
-    let shim_dir = utils::get_shim_dir(environment)?;
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
 
-    if let Some(pre_install) = &config_file.pre_install {
+    if let Some(pre_install) = &config_file.on_pre_install {
         environment.run_shell_command(&environment.cwd()?, pre_install)?;
     }
 
     for entry in config_file.binaries.iter() {
-        let install_action = get_url_install_action(environment, &mut plugin_manifest, &entry, command.force).await?;
+        let install_action = plugins.get_url_install_action(&entry, command.force).await?;
         if let UrlInstallAction::Install(plugin_file) = install_action {
             // setup the plugin
-            let binary_item = plugins::setup_plugin(environment, &mut plugin_manifest, &plugin_file, &shim_dir).await?;
+            let binary_item = plugins.setup_plugin(&plugin_file).await?;
             let identifier = binary_item.get_identifier();
             // check if there is a global binary location set and if not, set it
             for command_name in binary_item.get_command_names() {
-                set_global_binary_if_not_set(environment, &mut plugin_manifest, &identifier, &command_name)?;
+                plugins.set_global_binary_if_not_set(&identifier, &command_name)?;
             }
-            plugin_manifest.save(environment)?; // write for every setup plugin in case a further one fails
+            plugins.save()?; // write for every setup plugin in case a further one fails
         }
     }
 
     if command.use_command {
         for entry in config_file.binaries.iter() {
-            let identifier = plugin_manifest.get_identifier_from_url(&entry).unwrap().clone();
-            let binary = plugin_manifest.get_binary(&identifier).unwrap();
+            let identifier = plugins.manifest.get_identifier_from_url(&entry).unwrap().clone();
+            let binary = plugins.manifest.get_binary(&identifier).unwrap();
             for command_name in binary.get_command_names() {
-                plugin_manifest
-                    .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
+                plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
             }
         }
-        plugin_manifest.save(environment)?;
+        plugins.save()?;
     }
 
-    if let Some(post_install) = &config_file.post_install {
+    if let Some(post_install) = &config_file.on_post_install {
         environment.run_shell_command(&environment.cwd()?, post_install)?;
     }
 
@@ -142,67 +140,59 @@ async fn handle_install_url_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: InstallUrlCommand,
 ) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
     let url = resolve_url(environment, &command.url_or_name).await?;
 
-    let result = install_url(environment, &mut plugin_manifest, &url, &command).await;
+    let result = install_url(environment, &mut plugins, &url, &command).await;
     match result {
         Ok(()) => {}
         Err(err) => return err!("Error installing {}. {}", url.path_or_url, err.to_string()),
     }
 
     if command.use_command {
-        let identifier = plugin_manifest
+        let identifier = plugins
+            .manifest
             .get_identifier_from_url(&url)
             .map(|identifier| identifier.clone())
             .unwrap();
-        let command_names = plugin_manifest.get_binary(&identifier).unwrap().get_command_names();
+        let command_names = plugins.manifest.get_binary(&identifier).unwrap().get_command_names();
         for command_name in command_names {
-            let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
-            plugin_manifest.use_global_version(
+            let is_command_in_config_file =
+                get_is_command_in_config_file(environment, &plugins.manifest, &command_name);
+            plugins.use_global_version(
                 command_name.clone(),
                 plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
-            );
+            )?;
             if is_command_in_config_file {
                 display_command_in_config_file_error(environment, &command_name);
             }
         }
     }
 
-    plugin_manifest.save(environment)?;
+    plugins.save()?;
 
     return Ok(());
 
     async fn install_url<TEnvironment: Environment>(
         environment: &TEnvironment,
-        plugin_manifest: &mut plugins::PluginsManifest,
+        plugins: &mut PluginsMut<TEnvironment>,
         url: &ChecksumPathOrUrl,
         command: &InstallUrlCommand,
     ) -> Result<(), ErrBox> {
-        let install_action = get_url_install_action(environment, plugin_manifest, url, command.force).await?;
+        let install_action = plugins.get_url_install_action(url, command.force).await?;
 
         match install_action {
             UrlInstallAction::None => {
                 environment.log_error("Already installed. Provide the `--force` flag to reinstall.")
             }
             UrlInstallAction::Install(plugin_file) => {
-                let shim_dir = utils::get_shim_dir(environment)?;
                 let identifier = plugin_file.get_identifier();
                 // remove the existing binary from the cache (the setup_plugin function will delete it from the disk)
-                let previous_global_command_names = {
-                    let previous_global_command_names = plugin_manifest.get_global_command_names(&identifier);
-                    plugin_manifest.remove_binary(&identifier);
-                    plugin_manifest.save(environment)?;
-                    // check if this is the last binary with this command. If so, delete the shim
-                    for command_name in previous_global_command_names.iter() {
-                        if !plugin_manifest.has_binary_with_command(&command_name) {
-                            environment.remove_file(&plugins::get_shim_path(&shim_dir, &command_name))?;
-                        }
-                    }
-                    previous_global_command_names
-                };
+                let previous_global_command_names = plugins.manifest.get_global_command_names(&identifier);
+                plugins.remove_binary(&identifier)?;
+                plugins.save()?;
 
-                let binary_item = plugins::setup_plugin(environment, plugin_manifest, &plugin_file, &shim_dir).await?;
+                let binary_item = plugins.setup_plugin(&plugin_file).await?;
                 let identifier = binary_item.get_identifier();
                 let binary_name = binary_item.name.clone();
                 let version = binary_item.version.clone();
@@ -211,15 +201,15 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                 // set this back as being the global version if setup is successful
                 for command_name in previous_global_command_names {
                     if command_names.contains(&command_name) {
-                        plugin_manifest
-                            .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
+                        plugins
+                            .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
                     }
                 }
 
                 if !command.use_command {
                     let mut not_set_command_name = false;
                     for command_name in command_names.iter() {
-                        if !set_global_binary_if_not_set(environment, plugin_manifest, &identifier, &command_name)? {
+                        if !plugins.set_global_binary_if_not_set(&identifier, &command_name)? {
                             not_set_command_name = true;
                         }
                     }
@@ -227,7 +217,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                         environment.log_error(&format!(
                             "Installed. Run `bvm use {} {}` to use it on the path as {}.",
                             binary_name
-                                .display_toggled_owner(!plugin_manifest.binary_name_has_same_owner(&binary_name)),
+                                .display_toggled_owner(!plugins.manifest.binary_name_has_same_owner(&binary_name)),
                             version,
                             command_names
                                 .into_iter()
@@ -339,53 +329,22 @@ async fn handle_install_url_command<TEnvironment: Environment>(
     }
 }
 
-fn set_global_binary_if_not_set(
-    environment: &impl Environment,
-    plugin_manifest: &mut plugins::PluginsManifest,
-    identifier: &plugins::BinaryIdentifier,
-    command_name: &CommandName,
-) -> Result<bool, ErrBox> {
-    Ok(if plugin_manifest.get_global_binary_location(&command_name).is_none() {
-        if utils::get_path_executable_path(environment, &command_name)?.is_some() {
-            plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path);
-            false
-        } else {
-            plugin_manifest.use_global_version(
-                command_name.clone(),
-                plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
-            );
-            true
-        }
-    } else {
-        plugin_manifest.is_global_version(identifier, command_name)
-    })
-}
-
 fn handle_uninstall_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     uninstall_command: UninstallCommand,
 ) -> Result<(), ErrBox> {
-    let shim_dir = utils::get_shim_dir(environment)?;
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
     let binary = get_binary_with_name_and_version(
-        &plugin_manifest,
+        &plugins.manifest,
         &uninstall_command.selector,
         &uninstall_command.version,
     )?;
-    let command_names = binary.get_command_names();
     let plugin_dir = plugins::get_plugin_dir(environment, &binary.name, &binary.version)?;
     let binary_identifier = binary.get_identifier();
 
     // remove the plugin from the manifest first
-    plugin_manifest.remove_binary(&binary_identifier);
-    plugin_manifest.save(environment)?;
-
-    // check if this is the last binary using these command names. If so, delete the shim
-    for command_name in command_names.iter() {
-        if !plugin_manifest.has_binary_with_command(&command_name) {
-            environment.remove_file(&plugins::get_shim_path(&shim_dir, &command_name))?;
-        }
-    }
+    plugins.remove_binary(&binary_identifier)?;
+    plugins.save()?;
 
     // now attempt to delete the directory
     environment.remove_dir_all(&plugin_dir)?;
@@ -406,18 +365,17 @@ fn handle_uninstall_command<TEnvironment: Environment>(
 
 fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     // use all the binaries in the current configuration file
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
     let config_file = get_config_file_or_error(environment)?;
 
     for entry in config_file.binaries.iter() {
         let mut was_installed = false;
-        let identifier = plugin_manifest.get_identifier_from_url(&entry).map(|i| i.to_owned());
+        let identifier = plugins.manifest.get_identifier_from_url(&entry).map(|i| i.to_owned());
         if let Some(identifier) = identifier {
-            let binary = plugin_manifest.get_binary(&identifier);
+            let binary = plugins.manifest.get_binary(&identifier);
             if let Some(binary) = binary {
                 for command_name in binary.get_command_names() {
-                    plugin_manifest
-                        .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()));
+                    plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
                 }
                 was_installed = true;
             }
@@ -428,7 +386,7 @@ fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> 
         }
     }
 
-    plugin_manifest.save(environment)?;
+    plugins.save()?;
     Ok(())
 }
 
@@ -436,11 +394,11 @@ fn handle_use_binary_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     use_command: UseBinaryCommand,
 ) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
     let command_names = match &use_command.version {
         PathOrVersionSelector::Path => {
             // get the current binaries for the selector
-            let binaries = plugin_manifest.get_binaries_matching(&use_command.selector);
+            let binaries = plugins.manifest.get_binaries_matching(&use_command.selector);
             let have_same_owner = get_have_same_owner(&binaries);
             if !have_same_owner {
                 let mut binary_names = binaries
@@ -477,13 +435,13 @@ fn handle_use_binary_command<TEnvironment: Environment>(
         PathOrVersionSelector::Version(version) => {
             // todo: select version based on version selector
             let binary =
-                get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.to_version()?)?;
+                get_binary_with_name_and_version(&plugins.manifest, &use_command.selector, &version.to_version()?)?;
             binary.get_command_names()
         }
     };
 
     for command_name in command_names {
-        let is_command_in_config_file = get_is_command_in_config_file(environment, &plugin_manifest, &command_name);
+        let is_command_in_config_file = get_is_command_in_config_file(environment, &plugins.manifest, &command_name);
         match &use_command.version {
             PathOrVersionSelector::Path => {
                 if utils::get_path_executable_path(environment, &command_name)?.is_none() {
@@ -492,14 +450,13 @@ fn handle_use_binary_command<TEnvironment: Environment>(
                         command_name
                     );
                 }
-                plugin_manifest.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path);
+                plugins.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path)?;
             }
             PathOrVersionSelector::Version(version) => {
                 let binary =
-                    get_binary_with_name_and_version(&plugin_manifest, &use_command.selector, &version.to_version()?)?;
+                    get_binary_with_name_and_version(&plugins.manifest, &use_command.selector, &version.to_version()?)?;
                 let identifier = binary.get_identifier();
-                plugin_manifest
-                    .use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier));
+                plugins.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier))?;
             }
         }
 
@@ -507,14 +464,14 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             display_command_in_config_file_error(environment, &command_name);
         }
     }
-    plugin_manifest.save(environment)?;
+    plugins.save()?;
 
     Ok(())
 }
 
 fn get_is_command_in_config_file(
     environment: &impl Environment,
-    plugin_manifest: &plugins::PluginsManifest,
+    plugin_manifest: &PluginsManifest,
     command_name: &CommandName,
 ) -> bool {
     let result = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name);
@@ -537,7 +494,7 @@ fn display_command_in_config_file_error(environment: &impl Environment, command_
 }
 
 fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let plugin_manifest = PluginsManifest::load(environment)?;
     let mut binaries = plugin_manifest.binaries().collect::<Vec<_>>();
     if !binaries.is_empty() {
         binaries.sort();
@@ -566,9 +523,9 @@ fn handle_init_command<TEnvironment: Environment>(environment: &TEnvironment) ->
 }
 
 fn handle_clear_url_cache<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
-    plugin_manifest.clear_cached_urls();
-    plugin_manifest.save(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
+    plugins.clear_cached_urls();
+    plugins.save()?;
     Ok(())
 }
 
@@ -618,30 +575,6 @@ fn handle_registry_list_command<TEnvironment: Environment>(environment: &TEnviro
     Ok(())
 }
 
-fn handle_util_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    sub_command: UtilSubCommand,
-) -> Result<(), ErrBox> {
-    match sub_command {
-        UtilSubCommand::CommandExists(command) => handle_util_command_exists_command(environment, command),
-    }
-}
-
-fn handle_util_command_exists_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    command: UtilCommandExistsCommand,
-) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
-    if plugin_manifest.has_binary_with_name_and_command(&command.binary_name, &command.command_name) {
-        environment.exit(0)?;
-    }
-    if utils::get_path_executable_path(environment, &command.command_name)?.is_some() {
-        environment.exit(0)?;
-    }
-
-    environment.exit(1)
-}
-
 fn handle_shell_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: ShellSubCommand,
@@ -661,7 +594,7 @@ fn handle_shell_get_new_path_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: ShellGetNewPathCommand,
 ) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let plugin_manifest = PluginsManifest::load(environment)?;
     let local_data_dir = environment.get_local_user_data_dir()?;
     let mut paths = command
         .current_sys_path
@@ -696,15 +629,15 @@ fn handle_shell_get_new_path_command<TEnvironment: Environment>(
 fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
     environment: &TEnvironment,
 ) -> Result<(), ErrBox> {
-    let mut plugin_manifest = plugins::PluginsManifest::load(environment)?;
-    plugin_manifest.clear_pending_env_changes();
-    plugin_manifest.save(environment)?;
+    let mut plugins = PluginsMut::load(environment)?;
+    plugins.clear_pending_env_changes();
+    plugins.save()?;
 
     Ok(())
 }
 
 fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
-    let plugin_manifest = plugins::PluginsManifest::load(environment)?;
+    let plugin_manifest = PluginsManifest::load(environment)?;
     let local_data_dir = environment.get_local_user_data_dir()?;
     let path_text = plugin_manifest
         .get_bin_env_paths()
@@ -740,56 +673,6 @@ fn handle_shell_windows_uninstall_command<TEnvironment: Environment>(
     Ok(())
 }
 
-enum UrlInstallAction {
-    None,
-    Install(plugins::PluginFile),
-}
-
-async fn get_url_install_action<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    plugin_manifest: &mut plugins::PluginsManifest,
-    checksum_url: &ChecksumPathOrUrl,
-    force_install: bool,
-) -> Result<UrlInstallAction, ErrBox> {
-    // always install for force
-    if force_install {
-        return Ok(UrlInstallAction::Install(
-            get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?,
-        ));
-    }
-
-    // check the cache for if the identifier is saved
-    let identifier = plugin_manifest
-        .get_identifier_from_url(&checksum_url)
-        .map(|identifier| identifier.clone());
-    return Ok(if let Some(identifier) = identifier {
-        if plugin_manifest.has_binary(&identifier) {
-            UrlInstallAction::None
-        } else {
-            let plugin_file = get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?;
-            UrlInstallAction::Install(plugin_file)
-        }
-    } else {
-        let plugin_file = get_and_associate_plugin_file(environment, plugin_manifest, checksum_url).await?;
-        let identifier = plugin_file.get_identifier();
-        if plugin_manifest.has_binary(&identifier) {
-            UrlInstallAction::None
-        } else {
-            UrlInstallAction::Install(plugin_file)
-        }
-    });
-
-    async fn get_and_associate_plugin_file<TEnvironment: Environment>(
-        environment: &TEnvironment,
-        plugin_manifest: &mut plugins::PluginsManifest,
-        checksum_url: &ChecksumPathOrUrl,
-    ) -> Result<plugins::PluginFile, ErrBox> {
-        let plugin_file = plugins::get_and_associate_plugin_file(environment, plugin_manifest, &checksum_url).await?;
-        plugin_manifest.save(environment)?;
-        Ok(plugin_file)
-    }
-}
-
 struct ConfigFileExecutableInfo {
     executable_path: Option<PathBuf>,
     had_uninstalled_binary: bool,
@@ -797,7 +680,7 @@ struct ConfigFileExecutableInfo {
 
 fn get_executable_path_from_config_file<TEnvironment: Environment>(
     environment: &TEnvironment,
-    plugin_manifest: &plugins::PluginsManifest,
+    plugin_manifest: &PluginsManifest,
     command_name: &CommandName,
 ) -> Result<Option<ConfigFileExecutableInfo>, ErrBox> {
     Ok(if let Some(config_file) = get_config_file(environment)? {
@@ -833,7 +716,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
 }
 
 fn get_binary_with_name_and_version<'a>(
-    plugin_manifest: &'a plugins::PluginsManifest,
+    plugin_manifest: &'a PluginsManifest,
     selector: &BinarySelector,
     version: &Version,
 ) -> Result<&'a plugins::BinaryManifestItem, ErrBox> {
@@ -895,7 +778,7 @@ fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
 
 fn get_global_binary_file_name(
     environment: &impl Environment,
-    plugin_manifest: &plugins::PluginsManifest,
+    plugin_manifest: &PluginsManifest,
     command_name: &CommandName,
 ) -> Result<PathBuf, ErrBox> {
     match plugin_manifest.get_global_binary_location(command_name) {
@@ -1340,7 +1223,7 @@ mod test {
         environment
             .write_file_text(
                 &PathBuf::from("/project/.bvmrc.json"),
-                r#"{"preInstall": "echo \"Test\"", "postInstall": "echo \"Hello world!\"", "binaries": ["http://localhost/package.json"]}"#,
+                r#"{"onPreInstall": "echo \"Test\"", "onPostInstall": "echo \"Hello world!\"", "binaries": ["http://localhost/package.json"]}"#,
             )
             .unwrap();
 
@@ -1582,6 +1465,39 @@ mod test {
         run_cli(vec!["use", "owner/name", "path"], &environment).await.unwrap();
         assert_resolves!(&environment, path_binary_path);
         assert_resolves_name!(&environment, "name-second", path_second_binary_path);
+    }
+
+    #[tokio::test]
+    async fn use_command_on_use_on_stop_use() {
+        let builder = EnvironmentBuilder::new();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
+        plugin_builder.on_use("command1");
+        plugin_builder.on_stop_use("command2");
+        plugin_builder.download_type(PluginDownloadType::Zip);
+        plugin_builder.build();
+        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "3.0.0");
+        let environment = builder.build();
+        let first_bin_dir = get_binary_dir("owner", "name", "1.0.0");
+
+        // install the packages
+        install_url!(environment, "http://localhost/package.json");
+        let commands = environment.take_run_shell_commands();
+        assert_eq!(commands, [(first_bin_dir.clone(), "command1".to_string())]); // should use
+        install_url!(environment, "http://localhost/package2.json");
+        install_url!(environment, "http://localhost/package3.json");
+        environment.clear_logs();
+
+        run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
+        let commands = environment.take_run_shell_commands();
+        assert_eq!(commands, [(first_bin_dir.clone(), "command2".to_string())]);
+        run_cli(vec!["use", "name", "3.0.0"], &environment).await.unwrap();
+        let commands = environment.take_run_shell_commands();
+        assert_eq!(commands.is_empty(), true);
+        run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
+        let commands = environment.take_run_shell_commands();
+        assert_eq!(commands, [(first_bin_dir, "command1".to_string())]);
     }
 
     #[tokio::test]
@@ -1899,42 +1815,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn util_command_exists_no_command() {
-        let environment = TestEnvironment::new();
-        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
-            .await
-            .err()
-            .unwrap();
-        assert_eq!(err.to_string(), "Exited with code 1");
-    }
-
-    #[tokio::test]
-    async fn util_command_exists_bvm_command() {
-        let builder = EnvironmentBuilder::new();
-        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
-        let environment = builder.build();
-        install_url!(environment, "http://localhost/package.json");
-        environment.clear_logs();
-        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
-            .await
-            .err()
-            .unwrap();
-        assert_eq!(err.to_string(), "Exited with code 0");
-    }
-
-    #[tokio::test]
-    async fn util_command_exists_path() {
-        let builder = EnvironmentBuilder::new();
-        builder.add_binary_to_path("name");
-        let environment = builder.build();
-        let err = run_cli(vec!["util", "command-exists", "owner/name", "name"], &environment)
-            .await
-            .err()
-            .unwrap();
-        assert_eq!(err.to_string(), "Exited with code 0");
-    }
-
-    #[tokio::test]
     async fn binary_has_environment_variable() {
         let builder = EnvironmentBuilder::new();
         builder.add_binary_to_path("name");
@@ -2213,6 +2093,14 @@ mod test {
             format!("/data/shims/{}.bat", name)
         } else {
             format!("/data/shims/{}", name)
+        }
+    }
+
+    fn get_binary_dir(owner: &str, name: &str, version: &str) -> String {
+        if cfg!(target_os = "windows") {
+            format!("/local-data\\binaries\\{}\\{}\\{}", owner, name, version)
+        } else {
+            format!("/local-data/binaries/{}/{}/{}", owner, name, version)
         }
     }
 

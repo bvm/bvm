@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{BinaryName, BinarySelector, CommandName, PathOrVersionSelector, Version, VersionSelector};
+use super::types::{BinarySelector, PathOrVersionSelector, Version, VersionSelector};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -23,7 +23,6 @@ pub enum SubCommand {
     ClearUrlCache,
     Shell(ShellSubCommand),
     Help(String),
-    Util(UtilSubCommand),
 }
 
 pub struct ResolveCommand {
@@ -73,15 +72,6 @@ pub struct RegistryAddCommand {
 
 pub struct RegistryRemoveCommand {
     pub url: String,
-}
-
-pub enum UtilSubCommand {
-    CommandExists(UtilCommandExistsCommand),
-}
-
-pub struct UtilCommandExistsCommand {
-    pub binary_name: BinaryName,
-    pub command_name: CommandName,
 }
 
 pub enum ShellSubCommand {
@@ -188,26 +178,6 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             })),
             ("list", _) => SubCommand::Registry(RegistrySubCommand::List),
             _ => unreachable!(),
-        }
-    } else if matches.is_present("util") {
-        let util_matches = matches.subcommand_matches("util").unwrap();
-        if util_matches.is_present("command-exists") {
-            let matches = util_matches.subcommand_matches("command-exists").unwrap();
-            let command_name = CommandName::from_string(matches.value_of("command").map(String::from).unwrap());
-            let full_binary_name = matches.value_of("full-binary-name").map(String::from).unwrap();
-            let binary_selector = parse_binary_selector(full_binary_name);
-            let name = binary_selector.name;
-            let owner = binary_selector
-                .owner
-                .ok_or_else(|| err_obj!("Please provide a full binary name (ex. binary/name)."))?;
-            let binary_name = BinaryName::new(owner, name);
-
-            SubCommand::Util(UtilSubCommand::CommandExists(UtilCommandExistsCommand {
-                binary_name,
-                command_name,
-            }))
-        } else {
-            unreachable!();
         }
     } else if matches.is_present("hidden-shell") {
         let matches = matches.subcommand_matches("hidden-shell").unwrap();

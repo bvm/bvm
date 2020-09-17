@@ -1,9 +1,13 @@
-use dprint_cli_core::checksums::{get_sha256_checksum, verify_sha256_checksum, ChecksumPathOrUrl};
+use dprint_cli_core::checksums::verify_sha256_checksum;
 use dprint_cli_core::types::ErrBox;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use super::*;
+use super::create_shim;
 use crate::environment::Environment;
+use crate::plugins::{
+    get_plugin_dir, BinaryEnvironment, BinaryIdentifier, BinaryManifestItem, BinaryManifestItemCommand,
+    BinaryManifestItemSource, PlatformInfo, PlatformInfoCommand, SerializedPluginFile,
+};
 use crate::types::{BinaryName, Version};
 use crate::utils;
 
@@ -12,7 +16,7 @@ pub struct PluginFile {
     pub url: String,
     pub checksum: String,
 
-    file: SerializedPluginFile,
+    pub(super) file: SerializedPluginFile,
 }
 
 pub enum DownloadType {
@@ -60,12 +64,20 @@ impl PluginFile {
         })
     }
 
-    pub fn get_pre_install_script(&self) -> Result<&Option<String>, ErrBox> {
-        Ok(&self.get_platform_info()?.pre_install)
+    pub fn get_pre_install_command(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.on_pre_install)
     }
 
-    pub fn get_post_install_script(&self) -> Result<&Option<String>, ErrBox> {
-        Ok(&self.get_platform_info()?.post_install)
+    pub fn get_post_install_command(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.on_post_install)
+    }
+
+    pub fn get_on_use_command(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.on_use)
+    }
+
+    pub fn get_on_stop_use_command(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.on_stop_use)
     }
 
     fn get_platform_info(&self) -> Result<&PlatformInfo, ErrBox> {
@@ -80,9 +92,9 @@ impl PluginFile {
         return get_plugin_platform_info(&self.file.windows);
     }
 
-    pub fn get_identifier(&self) -> super::BinaryIdentifier {
+    pub fn get_identifier(&self) -> BinaryIdentifier {
         let binary_name = BinaryName::new(self.file.owner.clone(), self.file.name.clone());
-        super::BinaryIdentifier::new(&binary_name, &self.file.version)
+        BinaryIdentifier::new(&binary_name, &self.file.version)
     }
 }
 
@@ -94,40 +106,10 @@ fn get_plugin_platform_info<'a>(platform_info: &'a Option<PlatformInfo>) -> Resu
     }
 }
 
-pub async fn get_and_associate_plugin_file<'a, TEnvironment: Environment>(
-    environment: &TEnvironment,
-    plugin_manifest: &'a mut PluginsManifest,
-    checksum_url: &ChecksumPathOrUrl,
-) -> Result<PluginFile, ErrBox> {
-    let plugin_file_bytes = environment.download_file(&checksum_url.path_or_url).await?;
-
-    let checksum = if let Some(checksum) = &checksum_url.checksum {
-        verify_sha256_checksum(&plugin_file_bytes, &checksum)?;
-        checksum.clone()
-    } else {
-        get_sha256_checksum(&plugin_file_bytes)
-    };
-
-    let serialized_plugin_file = read_plugin_file(&plugin_file_bytes)?;
-
-    // associate the url to the binary identifier
-    let plugin_file = PluginFile {
-        url: checksum_url.path_or_url.clone(),
-        checksum,
-        file: serialized_plugin_file,
-    };
-    let identifier = plugin_file.get_identifier();
-    plugin_manifest.set_identifier_for_url(&checksum_url, identifier);
-
-    Ok(plugin_file)
-}
-
 pub async fn setup_plugin<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
-    plugin_manifest: &'a mut PluginsManifest,
     plugin_file: &PluginFile,
-    bin_dir: &Path,
-) -> Result<&'a BinaryManifestItem, ErrBox> {
+) -> Result<BinaryManifestItem, ErrBox> {
     // download the url's bytes
     let url = plugin_file.get_url()?;
     let download_type = plugin_file.get_download_type()?;
@@ -139,9 +121,9 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     let _ignore = environment.remove_dir_all(&plugin_cache_dir_path);
     environment.create_dir_all(&plugin_cache_dir_path)?;
 
-    // run the pre install script
-    if let Some(pre_install_script) = plugin_file.get_pre_install_script()? {
-        environment.run_shell_command(&plugin_cache_dir_path, pre_install_script)?;
+    // run the pre install command
+    if let Some(pre_install_command) = plugin_file.get_pre_install_command()? {
+        environment.run_shell_command(&plugin_cache_dir_path, pre_install_command)?;
     }
 
     // handle the setup based on the download type
@@ -174,14 +156,14 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
         }
     }
 
-    // run the post install script
-    if let Some(post_install_script) = plugin_file.get_post_install_script()? {
-        environment.run_shell_command(&plugin_cache_dir_path, post_install_script)?;
+    // run the post install command
+    if let Some(post_install_command) = plugin_file.get_post_install_command()? {
+        environment.run_shell_command(&plugin_cache_dir_path, post_install_command)?;
     }
 
-    // create the shims
+    // create the shims after in case the post install fails
     for command in commands {
-        create_shim(environment, &bin_dir, &command.name)?;
+        create_shim(environment, &command.name)?;
     }
 
     // add the plugin information to the manifest
@@ -201,11 +183,10 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
             checksum: plugin_file.checksum.clone(),
         },
         environment: plugin_file.get_environment()?.clone(),
+        on_use: plugin_file.get_on_use_command()?.clone(),
+        on_stop_use: plugin_file.get_on_stop_use_command()?.clone(),
     };
-    let identifier = item.get_identifier();
-    plugin_manifest.add_binary(item);
-
-    Ok(plugin_manifest.get_binary(&identifier).unwrap())
+    Ok(item)
 }
 
 fn verify_commands(commands: &Vec<PlatformInfoCommand>) -> Result<(), ErrBox> {

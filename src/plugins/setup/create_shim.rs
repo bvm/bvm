@@ -1,16 +1,13 @@
 use dprint_cli_core::types::ErrBox;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::environment::Environment;
 use crate::types::CommandName;
+use crate::utils;
 
 #[cfg(unix)]
-pub fn create_shim(
-    environment: &impl Environment,
-    binaries_cache_dir: &Path,
-    command_name: &CommandName,
-) -> Result<(), ErrBox> {
-    let file_path = get_shim_path(binaries_cache_dir, command_name);
+pub(super) fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
+    let file_path = get_shim_path(environment, command_name)?;
     environment.write_file_text(
         &file_path,
         &format!(
@@ -27,14 +24,10 @@ exe_path=$(bvm resolve {})
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_shim(
-    environment: &impl Environment,
-    binaries_cache_dir: &Path,
-    command_name: &CommandName,
-) -> Result<(), ErrBox> {
+pub(super) fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
     // https://stackoverflow.com/a/6362922/188246
     // todo: needs to handle when this fails to find the binary or something
-    let file_path = get_shim_path(binaries_cache_dir, command_name);
+    let file_path = get_shim_path(environment, command_name)?;
     environment.write_file_text(
         &file_path,
         &format!(
@@ -49,9 +42,10 @@ FOR /F "tokens=* USEBACKQ" %%F IN (`bvm resolve {}`) DO (
     Ok(())
 }
 
-pub fn get_shim_path(binaries_cache_dir: &Path, command_name: &CommandName) -> PathBuf {
+pub fn get_shim_path(environment: &impl Environment, command_name: &CommandName) -> Result<PathBuf, ErrBox> {
+    let shim_dir = utils::get_shim_dir(environment)?;
     #[cfg(target_os = "windows")]
-    return binaries_cache_dir.join(format!("{}.bat", command_name.as_str()));
+    return Ok(shim_dir.join(format!("{}.bat", command_name.as_str())));
     #[cfg(unix)]
-    return binaries_cache_dir.join(format!("{}", command_name.as_str()));
+    return Ok(shim_dir.join(format!("{}", command_name.as_str())));
 }

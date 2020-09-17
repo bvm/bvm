@@ -3,8 +3,8 @@ use dprint_cli_core::types::ErrBox;
 use jsonc_parser::{parse_to_value, JsonValue};
 
 pub struct ConfigFile {
-    pub pre_install: Option<String>,
-    pub post_install: Option<String>,
+    pub on_pre_install: Option<String>,
+    pub on_post_install: Option<String>,
     pub binaries: Vec<ChecksumPathOrUrl>,
 }
 
@@ -29,8 +29,8 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
         binaries.push(url);
     }
 
-    let pre_install = root_object_node.take_string("preInstall");
-    let post_install = root_object_node.take_string("postInstall");
+    let on_pre_install = root_object_node.take_string("onPreInstall");
+    let on_post_install = root_object_node.take_string("onPostInstall");
 
     for (key, _) in root_object_node.into_iter() {
         return err!("Unknown key in configuration file: {}", key);
@@ -38,7 +38,7 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
 
     Ok(ConfigFile {
         binaries,
-        pre_install,
-        post_install,
+        on_pre_install,
+        on_post_install,
     })
 }
