@@ -31,8 +31,6 @@ Install by running a script based on your environment:
 
 ## Project Setup
 
-For creating directory specific binaries, follow
-
 1. Run `bvm init` in the project's root directory.
 2. Open up the created _.bvmrc.json_ file and specify the paths to the binary manifest files.
    ```jsonc
@@ -99,6 +97,10 @@ The binary and version must have been previously installed.
 bvm use deno 1.3.2
 bvm use denoland/deno 1.3.2
 bvm use name-stealer/deno 2.0.0
+bvm use deno 1
+bvm use deno 1.0
+bvm use deno ^1.1
+bvm use deno ~1.1
 ```
 
 ### `bvm use [binary-name or owner-name/binary-name] path`
@@ -207,6 +209,9 @@ Installs the specified binary and version based on the first matching version in
 ```
 # Examples
 bvm install deno 1.3.3
+bvm install deno 1
+bvm install deno 1.3
+bvm install deno ^1.3
 bvm install --use node 14.9.0
 ```
 
@@ -280,11 +285,10 @@ Low effort:
 4. Perhaps rename "registry" to something else since it's a binary per registry.
 5. Document why there won't be support for multiple binaries per registry (open an issue and write it in there).
 6. Output the binary owner/name, description, and recent versions after adding a registry.
-7. Support `bvm use <binary-name> x.x` or with one version or highest matching a range, or even `bvm use <binary-name>` to use the latest.
-8. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally). It should also "use" any binaries as specified in the configuration.
-9. Add "onPostUninstall" script
-10. Add an `--isolate` flag for `bvm exec`.
-11. Validate group and binary names. Probably use the same rules https://www.npmjs.com/package/validate-npm-package-name#naming-rules and add no `bvm` binary name allowed.
+7. Add command to ensure all binaries in the manifest file are installed (when using Windows, this is useful for when a user goes on a different computer since the binaries are stored locally). It should also "use" any binaries as specified in the configuration.
+8. Add "onPostUninstall" script
+9. Add an `--isolate` flag for `bvm exec`.
+10. Validate group and binary names. Probably use the same rules https://www.npmjs.com/package/validate-npm-package-name#naming-rules and add no `bvm` binary name allowed.
 
 Medium effort:
 

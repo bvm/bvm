@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
-use crate::types::{BinaryName, BinarySelector};
+use crate::types::{BinaryName, NameSelector};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -65,11 +65,11 @@ impl Registry {
         Ok(())
     }
 
-    pub fn get_urls(&self, selector: &BinarySelector) -> Vec<UrlResult> {
+    pub fn get_urls(&self, name_selector: &NameSelector) -> Vec<UrlResult> {
         let mut result = Vec::new();
 
         for (url_name, urls) in self.name_to_urls.iter() {
-            if selector.is_match(url_name) {
+            if name_selector.is_match(url_name) {
                 for url in urls.iter() {
                     result.push(UrlResult {
                         owner: url_name.owner.clone(),

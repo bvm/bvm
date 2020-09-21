@@ -4,6 +4,8 @@ extern crate dprint_cli_core;
 mod types;
 #[macro_use]
 mod environment;
+#[macro_use]
+extern crate lazy_static;
 
 #[cfg(test)]
 mod test_builders;
@@ -14,6 +16,7 @@ mod plugins;
 mod registry;
 mod utils;
 
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -22,7 +25,7 @@ use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
 use plugins::{PluginsManifest, PluginsMut, UrlInstallAction};
-use types::{BinarySelector, CommandName, PathOrVersionSelector, Version};
+use types::{CommandName, NameSelector, PathOrVersionSelector, VersionSelector};
 
 #[tokio::main]
 async fn main() -> Result<(), ErrBox> {
@@ -240,7 +243,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
             UrlOrName::Url(url) => Ok(url.to_owned()),
             UrlOrName::Name(name) => {
                 let registry = registry::Registry::load(environment)?;
-                let url_results = registry.get_urls(&name.selector);
+                let url_results = registry.get_urls(&name.name_selector);
 
                 if url_results.is_empty() {
                     return err!("There were no registries found for the provided binary. Did you mean to add one using `bvm registry add <url>`?");
@@ -252,33 +255,35 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                     .map(|r| &r.owner)
                     .collect::<HashSet<_>>()
                     .into_iter()
-                    .map(|o| format!("{}/{}", o, name.selector.name))
+                    .map(|o| format!("{}/{}", o, name.name_selector.name))
                     .collect::<Vec<String>>();
                 if binary_names.len() > 1 {
                     binary_names.sort();
                     return err!(
                         "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
-                        name.selector.name,
+                        name.name_selector.name,
                         binary_names.join("\n  ")
                     );
                 }
 
                 // now get the url
                 let urls = url_results.into_iter().map(|r| r.url).collect();
-                let selected_url = if let Some(version) = &name.version {
-                    // todo: properly use version selector
-                    let version = version.to_version()?;
-                    find_url(environment, &urls, |item| &item.version == &version).await?
+                let selected_url = if let Some(version) = &name.version_selector {
+                    find_url(environment, &urls, |item| version.matches(&item.version)).await?
                 } else {
                     find_latest_url(environment, &urls).await?
                 };
                 if let Some(selected_url) = selected_url {
                     Ok(selected_url)
                 } else {
-                    if let Some(version) = &name.version {
-                        err!("Could not find binary {} {} in any registry.", name.selector, version)
+                    if let Some(version) = &name.version_selector {
+                        err!(
+                            "Could not find binary {} matching {} in any registry.",
+                            name.name_selector,
+                            version
+                        )
                     } else {
-                        return err!("Could not find binary {} in any registry.", name.selector);
+                        return err!("Could not find binary {} in any registry.", name.name_selector);
                     }
                 }
             }
@@ -290,15 +295,23 @@ async fn handle_install_url_command<TEnvironment: Environment>(
         urls: &Vec<String>,
         is_match: impl Fn(&registry::RegistryVersionInfo) -> bool,
     ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
+        let mut best_match: Option<registry::RegistryVersionInfo> = None;
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
-            for item in registry_file.versions {
-                if is_match(&item) {
-                    return Ok(Some(item.get_url()));
+            for version_info in registry_file.versions {
+                if is_match(&version_info) {
+                    if let Some(best_match_val) = &best_match {
+                        if best_match_val.version.cmp(&version_info.version) == Ordering::Less {
+                            best_match = Some(version_info);
+                        }
+                    } else {
+                        best_match = Some(version_info);
+                    }
                 }
             }
         }
-        Ok(None)
+
+        Ok(best_match.map(|version_info| version_info.get_url()))
     }
 
     async fn find_latest_url<TEnvironment: Environment>(
@@ -336,8 +349,8 @@ fn handle_uninstall_command<TEnvironment: Environment>(
     let mut plugins = PluginsMut::load(environment)?;
     let binary = get_binary_with_name_and_version(
         &plugins.manifest,
-        &uninstall_command.selector,
-        &uninstall_command.version,
+        &uninstall_command.name_selector,
+        &uninstall_command.version.to_selector(),
     )?;
     let plugin_dir = plugins::get_plugin_dir(environment, &binary.name, &binary.version)?;
     let binary_identifier = binary.get_identifier();
@@ -398,7 +411,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
     let command_names = match &use_command.version {
         PathOrVersionSelector::Path => {
             // get the current binaries for the selector
-            let binaries = plugins.manifest.get_binaries_matching(&use_command.selector);
+            let binaries = plugins.manifest.get_binaries_matching(&use_command.name_selector);
             let have_same_owner = get_have_same_owner(&binaries);
             if !have_same_owner {
                 let mut binary_names = binaries
@@ -410,7 +423,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
                 binary_names.sort();
                 return err!(
                     "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
-                    use_command.selector.name,
+                    use_command.name_selector.name,
                     binary_names.join("\n  ")
                 );
             }
@@ -428,14 +441,14 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             } else {
                 return err!(
                     "Could not find any installed binaries named '{}'.",
-                    use_command.selector
+                    use_command.name_selector
                 );
             }
         }
-        PathOrVersionSelector::Version(version) => {
+        PathOrVersionSelector::Version(version_selector) => {
             // todo: select version based on version selector
             let binary =
-                get_binary_with_name_and_version(&plugins.manifest, &use_command.selector, &version.to_version()?)?;
+                get_binary_with_name_and_version(&plugins.manifest, &use_command.name_selector, &version_selector)?;
             binary.get_command_names()
         }
     };
@@ -452,9 +465,9 @@ fn handle_use_binary_command<TEnvironment: Environment>(
                 }
                 plugins.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Path)?;
             }
-            PathOrVersionSelector::Version(version) => {
+            PathOrVersionSelector::Version(version_selector) => {
                 let binary =
-                    get_binary_with_name_and_version(&plugins.manifest, &use_command.selector, &version.to_version()?)?;
+                    get_binary_with_name_and_version(&plugins.manifest, &use_command.name_selector, &version_selector)?;
                 let identifier = binary.get_identifier();
                 plugins.use_global_version(command_name.clone(), plugins::GlobalBinaryLocation::Bvm(identifier))?;
             }
@@ -717,31 +730,32 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
 
 fn get_binary_with_name_and_version<'a>(
     plugin_manifest: &'a PluginsManifest,
-    selector: &BinarySelector,
-    version: &Version,
+    name_selector: &NameSelector,
+    version_selector: &VersionSelector,
 ) -> Result<&'a plugins::BinaryManifestItem, ErrBox> {
-    let binaries = plugin_manifest.get_binaries_by_selector_and_version(selector, version);
+    let binaries = plugin_manifest.get_binaries_by_name_and_version_selector(name_selector, version_selector);
+
     if binaries.len() == 0 {
-        let binaries = plugin_manifest.get_binaries_matching(selector);
+        let binaries = plugin_manifest.get_binaries_matching(name_selector);
         if binaries.is_empty() {
-            err!("Could not find any installed binaries named '{}'", selector)
+            err!("Could not find any installed binaries named '{}'", name_selector)
         } else {
             err!(
-                "Could not find binary '{}' with version '{}'\n\nInstalled versions:\n  {}",
-                selector,
-                version,
+                "Could not find binary '{}' that matched version '{}'\n\nInstalled versions:\n  {}",
+                name_selector,
+                version_selector,
                 display_binaries_versions(binaries).join("\n "),
             )
         }
-    } else if binaries.len() > 1 {
+    } else if !get_have_same_owner(&binaries) {
         return err!(
-            "There were multiple binaries with the specified name '{}' with version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
-            selector,
-            version,
+            "There were multiple binaries with the specified name '{}' that matched version '{}'. Please include the owner to uninstall.\n\nInstalled versions:\n  {}",
+            name_selector,
+            version_selector,
             display_binaries_versions(binaries).join("\n  "),
         );
     } else {
-        Ok(binaries[0])
+        Ok(get_latest_binary(&binaries).unwrap())
     }
 }
 
@@ -774,6 +788,22 @@ fn get_have_same_owner(binaries: &Vec<&plugins::BinaryManifestItem>) -> bool {
         let first_owner = &binaries[0].name.owner;
         binaries.iter().all(|b| &b.name.owner == first_owner)
     }
+}
+
+fn get_latest_binary<'a>(binaries: &Vec<&'a plugins::BinaryManifestItem>) -> Option<&'a plugins::BinaryManifestItem> {
+    let mut latest_binary: Option<&'a plugins::BinaryManifestItem> = None;
+
+    for binary in binaries.iter() {
+        if let Some(latest_binary_val) = &latest_binary {
+            if latest_binary_val.cmp(binary) == Ordering::Less {
+                latest_binary = Some(binary);
+            }
+        } else {
+            latest_binary = Some(binary);
+        }
+    }
+
+    latest_binary
 }
 
 fn get_global_binary_file_name(
@@ -1371,24 +1401,59 @@ mod test {
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let first_binary_path_second = get_binary_path_second("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
-        let second_binary_path_second = get_binary_path_second("owner", "name", "2.0.0");
+        let third_binary_path = get_binary_path("owner", "name", "2.1.0");
+        let third_binary_path_second = get_binary_path_second("owner", "name", "2.1.0");
+        let fourth_binary_path = get_binary_path("owner", "name", "2.1.1");
 
         builder.create_remote_zip_multiple_commands_package("http://localhost/package.json", "owner", "name", "1.0.0");
         builder.create_remote_zip_multiple_commands_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package3.json", "owner", "name", "2.1.0");
+        builder.create_remote_zip_multiple_commands_package("http://localhost/package4.json", "owner", "name", "2.1.1");
+        builder.create_remote_zip_multiple_commands_package(
+            "http://localhost/package5.json",
+            "owner",
+            "name",
+            "3.1.1-alpha",
+        );
         let environment = builder.build();
 
         // install the packages
         install_url!(environment, "http://localhost/package.json");
         install_url!(environment, "http://localhost/package2.json");
+        install_url!(environment, "http://localhost/package3.json");
+        install_url!(environment, "http://localhost/package4.json");
+        install_url!(environment, "http://localhost/package5.json");
         environment.clear_logs();
 
         assert_resolves!(&environment, first_binary_path);
         assert_resolves_name!(&environment, "name-second", first_binary_path_second);
 
-        // use the second package
-        run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
+        // specify full version
+        run_cli(vec!["use", "name", "2.1.0"], &environment).await.unwrap();
+        assert_resolves!(&environment, third_binary_path);
+        assert_resolves_name!(&environment, "name-second", third_binary_path_second);
+
+        // specify only major
+        run_cli(vec!["use", "name", "2"], &environment).await.unwrap();
+        assert_resolves!(&environment, fourth_binary_path);
+
+        // specify minor
+        run_cli(vec!["use", "name", "2.0"], &environment).await.unwrap();
         assert_resolves!(&environment, second_binary_path);
-        assert_resolves_name!(&environment, "name-second", second_binary_path_second);
+        run_cli(vec!["use", "name", "2.1"], &environment).await.unwrap();
+        assert_resolves!(&environment, fourth_binary_path);
+
+        // specify caret
+        run_cli(vec!["use", "name", "^2.0"], &environment).await.unwrap();
+        assert_resolves!(&environment, fourth_binary_path);
+
+        // specify tilde
+        run_cli(vec!["use", "name", "~2.0"], &environment).await.unwrap();
+        assert_resolves!(&environment, second_binary_path);
+
+        // specify none (use latest, but not pre releases)
+        run_cli(vec!["use", "name"], &environment).await.unwrap();
+        assert_resolves!(&environment, fourth_binary_path);
     }
 
     #[tokio::test]
@@ -1624,15 +1689,29 @@ mod test {
     async fn registry_install_command() {
         let builder = EnvironmentBuilder::new();
         let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let checksum2 = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.0.1");
+        let checksum3 = builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "1.1.0");
         builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
             "name",
-            vec![registry::RegistryVersionInfo {
-                version: "1.0.0".into(),
-                checksum,
-                path: "http://localhost/package.json".to_string(),
-            }],
+            vec![
+                registry::RegistryVersionInfo {
+                    version: "1.0.0".into(),
+                    checksum,
+                    path: "http://localhost/package.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "1.0.1".into(),
+                    checksum: checksum2,
+                    path: "http://localhost/package2.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "1.1.0".into(),
+                    checksum: checksum3,
+                    path: "http://localhost/package3.json".to_string(),
+                },
+            ],
         );
         let environment = builder.build();
 
@@ -1643,6 +1722,54 @@ mod test {
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
         assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+
+        // install latest when only specifying major
+        run_cli(vec!["install", "name", "1"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            [
+                "Extracting archive for owner/name 1.1.0...",
+                "Installed. Run `bvm use name 1.1.0` to use it on the path as 'name'.",
+            ]
+        );
+
+        // install latest patch when specifying minor
+        run_cli(vec!["install", "name", "1.0"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            [
+                "Extracting archive for owner/name 1.0.1...",
+                "Installed. Run `bvm use name 1.0.1` to use it on the path as 'name'.",
+            ]
+        );
+
+        run_cli(vec!["uninstall", "name", "1.0.1"], &environment).await.unwrap();
+        run_cli(vec!["uninstall", "name", "1.1.0"], &environment).await.unwrap();
+        environment.clear_logs();
+
+        // install when specifying caret
+        run_cli(vec!["install", "name", "^1.0.0"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            [
+                "Extracting archive for owner/name 1.1.0...",
+                "Installed. Run `bvm use name 1.1.0` to use it on the path as 'name'.",
+            ]
+        );
+
+        // install when specifying tilde
+        run_cli(vec!["install", "name", "~1.0.0"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            [
+                "Extracting archive for owner/name 1.0.1...",
+                "Installed. Run `bvm use name 1.0.1` to use it on the path as 'name'.",
+            ]
+        );
     }
 
     #[tokio::test]

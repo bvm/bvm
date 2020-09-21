@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{BinarySelector, PathOrVersionSelector, Version, VersionSelector};
+use super::types::{NameSelector, PathOrVersionSelector, Version, VersionSelector};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -30,7 +30,7 @@ pub struct ResolveCommand {
 }
 
 pub struct UseBinaryCommand {
-    pub selector: BinarySelector,
+    pub name_selector: NameSelector,
     pub version: PathOrVersionSelector,
 }
 
@@ -51,12 +51,12 @@ pub enum UrlOrName {
 }
 
 pub struct InstallName {
-    pub selector: BinarySelector,
-    pub version: Option<VersionSelector>,
+    pub name_selector: NameSelector,
+    pub version_selector: Option<VersionSelector>,
 }
 
 pub struct UninstallCommand {
-    pub selector: BinarySelector,
+    pub name_selector: NameSelector,
     pub version: Version,
 }
 
@@ -120,11 +120,11 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         if let Some(url_or_name) = install_matches.value_of("url_or_name").map(String::from) {
             let version = install_matches.value_of("version").map(String::from);
             if version.is_some() || Url::parse(&url_or_name).is_err() {
-                let selector = parse_binary_selector(url_or_name);
+                let name_selector = parse_name_selector(url_or_name);
                 SubCommand::InstallUrl(InstallUrlCommand {
                     url_or_name: UrlOrName::Name(InstallName {
-                        selector,
-                        version: if let Some(v) = &version {
+                        name_selector,
+                        version_selector: if let Some(v) = &version {
                             Some(VersionSelector::parse(v)?)
                         } else {
                             None
@@ -146,19 +146,24 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     } else if matches.is_present("use") {
         let use_matches = matches.subcommand_matches("use").unwrap();
         if let Some(binary_name) = use_matches.value_of("binary_name").map(String::from) {
-            let selector = parse_binary_selector(binary_name);
+            let name_selector = parse_name_selector(binary_name);
             SubCommand::UseBinary(UseBinaryCommand {
-                selector,
-                version: PathOrVersionSelector::parse(&use_matches.value_of("version").map(String::from).unwrap())?,
+                name_selector,
+                version: PathOrVersionSelector::parse(
+                    &use_matches
+                        .value_of("version")
+                        .map(String::from)
+                        .unwrap_or("*".to_string()),
+                )?,
             })
         } else {
             SubCommand::Use
         }
     } else if matches.is_present("uninstall") {
         let uninstall_matches = matches.subcommand_matches("uninstall").unwrap();
-        let selector = parse_binary_selector(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
+        let name_selector = parse_name_selector(uninstall_matches.value_of("binary_name").map(String::from).unwrap());
         SubCommand::Uninstall(UninstallCommand {
-            selector,
+            name_selector,
             version: Version::parse(&uninstall_matches.value_of("version").map(String::from).unwrap())?,
         })
     } else if matches.is_present("list") {
@@ -219,17 +224,17 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     Ok(CliArgs { sub_command })
 }
 
-fn parse_binary_selector(text: String) -> BinarySelector {
+fn parse_name_selector(text: String) -> NameSelector {
     let index = text.find('/');
     if let Some(index) = index {
         let owner_name = text[0..index].to_string();
         let name = text[index + 1..].to_string();
-        BinarySelector {
+        NameSelector {
             owner: Some(owner_name),
             name,
         }
     } else {
-        BinarySelector {
+        NameSelector {
             owner: None,
             name: text,
         }
@@ -317,7 +322,6 @@ ARGS:
                     Arg::with_name("binary_name")
                         .help("The binary name.")
                         .takes_value(true)
-                        .requires("version"),
                 )
                 .arg(
                     Arg::with_name("version")

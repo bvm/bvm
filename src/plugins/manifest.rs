@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::environment::{Environment, PATH_SEPARATOR};
 use crate::plugins::{get_plugin_dir_relative_local_user_data, BinaryEnvironment};
-use crate::types::{BinaryName, BinarySelector, CommandName, Version};
+use crate::types::{BinaryName, CommandName, NameSelector, Version, VersionSelector};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -85,8 +85,8 @@ impl BinaryManifestItem {
         BinaryIdentifier::new(&self.name, &self.version)
     }
 
-    pub fn matches(&self, selector: &BinarySelector) -> bool {
-        selector.is_match(&self.name)
+    pub fn matches(&self, name_selector: &NameSelector) -> bool {
+        name_selector.is_match(&self.name)
     }
 
     pub fn get_command_names(&self) -> Vec<CommandName> {
@@ -269,13 +269,13 @@ impl PluginsManifest {
         self.get_binary(identifier).is_some()
     }
 
-    pub fn get_binaries_by_selector_and_version(
+    pub fn get_binaries_by_name_and_version_selector(
         &self,
-        selector: &BinarySelector,
-        version: &Version,
+        name_selector: &NameSelector,
+        version: &VersionSelector,
     ) -> Vec<&BinaryManifestItem> {
         self.binaries()
-            .filter(|b| b.matches(selector) && &b.version == version)
+            .filter(|b| b.matches(name_selector) && version.matches(&b.version))
             .collect()
     }
 
@@ -300,8 +300,8 @@ impl PluginsManifest {
         }
     }
 
-    pub fn get_binaries_matching(&self, selector: &BinarySelector) -> Vec<&BinaryManifestItem> {
-        self.binaries().filter(|b| b.matches(selector)).collect()
+    pub fn get_binaries_matching(&self, name_selector: &NameSelector) -> Vec<&BinaryManifestItem> {
+        self.binaries().filter(|b| b.matches(name_selector)).collect()
     }
 
     pub fn get_binaries_with_command(&self, name: &CommandName) -> Vec<&BinaryManifestItem> {

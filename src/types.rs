@@ -1,18 +1,18 @@
 use dprint_cli_core::types::ErrBox;
-use semver::Version as SemVersion;
-use semver_parser;
+use regex::Regex;
+use semver::{Version as SemVersion, VersionReq as SemVersionReq};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::fmt;
 use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BinarySelector {
+pub struct NameSelector {
     pub owner: Option<String>,
     pub name: String,
 }
 
-impl BinarySelector {
+impl NameSelector {
     pub fn is_match(&self, name: &BinaryName) -> bool {
         if name.name.as_str() == self.name {
             if let Some(owner_name) = &self.owner {
@@ -26,7 +26,7 @@ impl BinarySelector {
     }
 }
 
-impl fmt::Display for BinarySelector {
+impl fmt::Display for NameSelector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(owner) = &self.owner {
             write!(f, "{}/{}", owner, self.name)
@@ -72,6 +72,10 @@ impl Version {
 
     pub fn is_prerelease(&self) -> bool {
         self.sem_ver.is_prerelease()
+    }
+
+    pub fn to_selector(&self) -> VersionSelector {
+        VersionSelector::parse(&self.full_text).unwrap() // should always work
     }
 }
 
@@ -139,40 +143,34 @@ impl<'de> Deserialize<'de> for Version {
 
 pub struct VersionSelector {
     full_text: String,
-    pub major: u64,
-    pub minor: Option<u64>,
-    pub patch: Option<u64>,
+    version_req: SemVersionReq,
 }
 
 impl VersionSelector {
     pub fn parse(text: &str) -> Result<VersionSelector, ErrBox> {
-        // todo: unit tests
-        match VersionSelector::inner_parse(text.trim()) {
-            Ok(result) => Ok(result),
-            Err(err) => err!("Error parsing {} to a version. {}", text, err.to_string()),
+        lazy_static! {
+            static ref FULL_VERSION_RE: Regex = Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+$").unwrap();
+            static ref MINOR_VERSION_RE: Regex = Regex::new(r"^[0-9]+\.[0-9]+$").unwrap();
+        }
+        let text = text.trim();
+        // make full versions exact and minor versions only within the minor
+        if FULL_VERSION_RE.is_match(text) {
+            Ok(VersionSelector::inner_parse(&format!("={}", text))?)
+        } else if MINOR_VERSION_RE.is_match(text) {
+            Ok(VersionSelector::inner_parse(&format!("~{}.0", text))?)
+        } else {
+            match VersionSelector::inner_parse(text) {
+                Ok(result) => Ok(result),
+                Err(err) => err!("Error parsing {} to a version. {}", text, err.to_string()),
+            }
         }
     }
 
-    fn inner_parse<'a>(text: &'a str) -> Result<VersionSelector, semver_parser::parser::Error<'a>> {
-        let mut p = semver_parser::parser::Parser::new(text)?;
-        let major = p.numeric()?;
-        let mut minor = None;
-        let mut patch = None;
-
-        if !p.is_eof() {
-            minor = Some(p.dot_numeric()?);
-            if !p.is_eof() {
-                // Patch is good enough for our purposes
-                // do not worry about pre and build as they are
-                // in the full text.
-                patch = Some(p.dot_numeric()?);
-            }
-        }
+    fn inner_parse<'a>(text: &'a str) -> Result<VersionSelector, ErrBox> {
+        let version_req = SemVersionReq::parse(text)?;
         Ok(VersionSelector {
             full_text: text.to_string(),
-            major,
-            minor,
-            patch,
+            version_req,
         })
     }
 
@@ -180,14 +178,8 @@ impl VersionSelector {
         &self.full_text
     }
 
-    pub fn to_version(&self) -> Result<Version, ErrBox> {
-        if self.minor.is_some() && self.patch.is_some() {
-            return Version::parse(self.as_str());
-        }
-        return err!(
-            "Could not parse '{}' as semantic version with three parts (ex. 1.0.0).",
-            self.as_str()
-        );
+    pub fn matches(&self, version: &Version) -> bool {
+        self.version_req.matches(&version.sem_ver)
     }
 }
 
