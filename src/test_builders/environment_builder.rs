@@ -1,4 +1,4 @@
-use super::PluginFileBuilder;
+use super::{BvmrcBuilder, PluginFileBuilder};
 use crate::environment::{Environment, TestEnvironment};
 
 use std::io::Write;
@@ -75,19 +75,15 @@ impl EnvironmentBuilder {
     }
 
     pub fn create_bvmrc(&self, binaries: Vec<&str>) {
-        let mut text = String::new();
-        for (i, binary) in binaries.into_iter().enumerate() {
-            if i > 0 {
-                text.push_str(",");
-            }
-            text.push_str(&format!("\"{}\"", binary));
+        let mut builder = self.create_bvmrc_builder();
+        for url in binaries.into_iter() {
+            builder.add_binary_path(url);
         }
-        self.environment
-            .write_file_text(
-                &PathBuf::from("/project/.bvmrc.json"),
-                &format!(r#"{{"binaries": [{}]}}"#, text),
-            )
-            .unwrap();
+        builder.build();
+    }
+
+    pub fn create_bvmrc_builder(&self) -> BvmrcBuilder {
+        BvmrcBuilder::new(&self.environment)
     }
 
     pub fn create_remote_registry_file(
@@ -186,6 +182,20 @@ impl PluginBuilder {
         self.file.windows().add_env_path(value);
         self.file.linux().add_env_path(value);
         self.file.mac().add_env_path(value);
+        self
+    }
+
+    pub fn on_pre_install<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+        self.file.windows().on_pre_install(value);
+        self.file.linux().on_pre_install(value);
+        self.file.mac().on_pre_install(value);
+        self
+    }
+
+    pub fn on_post_install<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+        self.file.windows().on_post_install(value);
+        self.file.linux().on_post_install(value);
+        self.file.mac().on_post_install(value);
         self
     }
 

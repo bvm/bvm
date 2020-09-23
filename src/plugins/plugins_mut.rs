@@ -1,12 +1,13 @@
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 
-use super::get_plugin_dir;
 use super::manifest::get_manifest_file_path;
 use super::setup::{get_plugin_file, get_shim_path, setup_plugin, PluginFile};
+use super::{get_plugin_dir, helpers};
 use super::{BinaryIdentifier, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
+use crate::configuration::ConfigFileBinary;
 use crate::environment::Environment;
-use crate::types::{BinaryName, CommandName};
+use crate::types::{BinaryName, CommandName, VersionSelector};
 use crate::utils;
 
 pub enum UrlInstallAction {
@@ -42,9 +43,10 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
     pub async fn get_url_install_action(
         &mut self,
         checksum_url: &ChecksumPathOrUrl,
+        version_selector: Option<&VersionSelector>,
         force_install: bool,
     ) -> Result<UrlInstallAction, ErrBox> {
-        // always install for force
+        // always install the url version for force
         if force_install {
             return Ok(UrlInstallAction::Install(
                 self.get_and_associate_plugin_file(checksum_url).await?,
@@ -52,26 +54,52 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         }
 
         // check the cache for if the identifier is saved
-        let identifier = self
-            .manifest
-            .get_identifier_from_url(&checksum_url)
-            .map(|identifier| identifier.clone());
-        return Ok(if let Some(identifier) = identifier {
-            if self.manifest.has_binary(&identifier) {
-                UrlInstallAction::None
-            } else {
-                let plugin_file = self.get_and_associate_plugin_file(checksum_url).await?;
-                UrlInstallAction::Install(plugin_file)
+        let identifier = self.manifest.get_identifier_from_url(&checksum_url);
+
+        // use the exact version if installed
+        if let Some(identifier) = &identifier {
+            if self.manifest.has_binary(identifier) {
+                self.error_if_identifier_not_matches_version_selector(&identifier, &version_selector)?;
+                return Ok(UrlInstallAction::None);
             }
-        } else {
-            let plugin_file = self.get_and_associate_plugin_file(checksum_url).await?;
-            let identifier = plugin_file.get_identifier();
-            if self.manifest.has_binary(&identifier) {
-                UrlInstallAction::None
-            } else {
-                UrlInstallAction::Install(plugin_file)
+        }
+
+        let plugin_file = self.get_and_associate_plugin_file(checksum_url).await?;
+        let identifier = plugin_file.get_identifier();
+
+        self.error_if_identifier_not_matches_version_selector(&identifier, &version_selector)?;
+
+        // check again if it's installed after associating the plugin file to an identifier
+        if self.manifest.has_binary(&identifier) {
+            return Ok(UrlInstallAction::None);
+        }
+
+        // check if a version is installed that matches the provided version, if so use that
+        if let Some(version_selector) = &version_selector {
+            let name_selector = identifier.get_binary_name().to_selector();
+            let binary =
+                helpers::get_latest_binary_matching_name_and_version(&self.manifest, &name_selector, version_selector);
+            if binary.is_some() {
+                return Ok(UrlInstallAction::None);
             }
-        });
+        }
+
+        // install the specified url's plugin file
+        Ok(UrlInstallAction::Install(plugin_file))
+    }
+
+    fn error_if_identifier_not_matches_version_selector(
+        &self,
+        identifier: &BinaryIdentifier,
+        version_selector: &Option<&VersionSelector>,
+    ) -> Result<(), ErrBox> {
+        if let Some(version_selector) = version_selector {
+            let version = identifier.get_version();
+            if !version_selector.matches(&version) {
+                return err!("The specified version '{}' did not match '{}' in the path file. Please specify a different path or update the version.", version_selector, version);
+            }
+        }
+        Ok(())
     }
 
     async fn get_and_associate_plugin_file(&mut self, checksum_url: &ChecksumPathOrUrl) -> Result<PluginFile, ErrBox> {
@@ -99,6 +127,22 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         } else {
             self.manifest.is_global_version(identifier, command_name)
         })
+    }
+
+    pub async fn get_installed_binary_for_config_binary(
+        &mut self,
+        config_binary: &ConfigFileBinary,
+    ) -> Result<Option<&BinaryManifestItem>, ErrBox> {
+        // associate the url to an identifier in order to be able to tell the name
+        if self.manifest.get_identifier_from_url(&config_binary.path).is_none() {
+            self.get_and_associate_plugin_file(&config_binary.path).await?;
+        }
+
+        // now get the binary item based on the config file
+        Ok(helpers::get_installed_binary_if_associated_config_file_binary(
+            &self.manifest,
+            &config_binary,
+        ))
     }
 
     // pending environment changes

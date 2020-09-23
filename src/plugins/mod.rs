@@ -1,4 +1,5 @@
 mod get_plugin_dir;
+pub mod helpers;
 mod manifest;
 mod plugins_mut;
 mod serialized_plugin_file;

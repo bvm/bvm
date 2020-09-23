@@ -159,15 +159,20 @@ impl VersionSelector {
         } else if MINOR_VERSION_RE.is_match(text) {
             Ok(VersionSelector::inner_parse(&format!("~{}.0", text))?)
         } else {
-            match VersionSelector::inner_parse(text) {
-                Ok(result) => Ok(result),
-                Err(err) => err!("Error parsing {} to a version. {}", text, err.to_string()),
-            }
+            VersionSelector::inner_parse(text)
         }
     }
 
+    /// Parses where "1" is equivalent to "^1" and "1.1" is equivalent to "^1.1"
+    pub fn parse_for_config(text: &str) -> Result<VersionSelector, ErrBox> {
+        VersionSelector::inner_parse(text)
+    }
+
     fn inner_parse<'a>(text: &'a str) -> Result<VersionSelector, ErrBox> {
-        let version_req = SemVersionReq::parse(text)?;
+        let version_req = match SemVersionReq::parse(text) {
+            Ok(result) => result,
+            Err(err) => return err!("Error parsing {} to a version. {}", text, err.to_string()),
+        };
         Ok(VersionSelector {
             full_text: text.to_string(),
             version_req,
@@ -241,6 +246,13 @@ impl BinaryName {
             format!("{}", self)
         } else {
             self.name.clone()
+        }
+    }
+
+    pub fn to_selector(&self) -> NameSelector {
+        NameSelector {
+            owner: Some(self.owner.clone()),
+            name: self.name.clone(),
         }
     }
 }

@@ -29,46 +29,7 @@ Install by running a script based on your environment:
   - [Installer](https://github.com/dsherret/bvm/releases/latest/download/bvm-x86_64-pc-windows-msvc-installer.exe)
   - Or install via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
 
-## Project Setup
-
-1. Run `bvm init` in the project's root directory.
-2. Open up the created _.bvmrc.json_ file and specify the paths to the binary manifest files.
-   ```jsonc
-   {
-     // optional commands to run on pre and post install
-     "onPreInstall": "",
-     "onPostInstall": "",
-     // list of binaries to use
-     "binaries": [
-       "https://bvm.land/deno/1.3.2.json",
-       "https://bvm.land/node/14.9.0.json",
-       "https://bvm.land/dprint/0.9.1.json"
-     ]
-   }
-   ```
-   Or specify with checksums to ensure the remote files don't change:
-   ```jsonc
-   {
-     "binaries": [
-       "https://bvm.land/deno/1.3.2.json@6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97",
-       "https://bvm.land/dprint/0.9.1.json@52b473cd29888badf1620ea501afbd210373e6dec66d249019d1a284cf43380b"
-     ]
-   }
-   ```
-3. Run `bvm install`
-
-## Commands
-
-### `bvm init`
-
-Creates an empty `.bvmrc.json` file in the current directory.
-
-### `bvm install`
-
-Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm if not previously done.
-
-- Provide the `--use` flag to also use all the binaries in the configuration file on the path when outside this directory.
-- Provide the `--force` flag to force an install of everything even if already installed.
+## Global Commands
 
 ### `bvm install [url]`
 
@@ -105,18 +66,12 @@ bvm use deno ~1.1
 
 ### `bvm use [binary-name or owner-name/binary-name] path`
 
-Use the version of the binary that's installed on the path if it exists.
+Uses the version of the binary that's installed on the path if it exists.
 
 ```
 # Example
 bvm use deno path
 ```
-
-### `bvm use`
-
-Use all the binaries in the current configuration files globally on the path.
-
-Generally it's not necessary to ever use this command as this happens automatically being in the current directory.
 
 ### `bvm resolve [command-name]`
 
@@ -215,6 +170,56 @@ bvm install deno ^1.3
 bvm install --use node 14.9.0
 ```
 
+## Projects
+
+`bvm` allows for specifying versions of binaries to automatically use within a current directory.
+
+### Setup
+
+1. Run `bvm init` in the project's root directory.
+2. Open up the created _.bvmrc.json_ file and specify the paths to the binary manifest files.
+   ```jsonc
+   {
+     // optional commands to run on pre and post install
+     "onPreInstall": "",
+     "onPostInstall": "",
+     // list of binaries to use
+     "binaries": [
+       // Either specify:
+       // 1. Urls
+       "https://bvm.land/node/14.9.0.json",
+       // 2. Urls with a checksum to ensure the remote file doesn't change
+       "https://bvm.land/dprint/0.9.1.json@52b473cd29888badf1620ea501afbd210373e6dec66d249019d1a284cf43380b",
+       // 3. Objects
+       {
+         "path": "https://bvm.land/deno/1.3.2.json",
+         "checksum": "6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97", // optional for path above
+         "version": "^1.3.0" // optional, won't install specified url if user has a version installed that matches
+       }
+     ]
+   }
+   ```
+3. Run `bvm install`
+
+### Commands
+
+### `bvm init`
+
+Creates an empty `.bvmrc.json` file in the current directory.
+
+### `bvm install`
+
+Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm if not previously done.
+
+- Provide the `--use` flag to also use all the binaries in the configuration file on the path when outside this directory.
+- Provide the `--force` flag to force an install of everything even if already installed or has a matching version.
+
+### `bvm use`
+
+Uses all the binaries in the current configuration files globally on the path.
+
+Generally it's not necessary to ever use this command as this happens automatically being in the current directory.
+
 ## Redirect Service
 
 The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
@@ -292,19 +297,9 @@ Low effort:
 
 Medium effort:
 
-1. Ability to specify a range of supported versions in _.bvmrc.json_ to reduce the number of downloaded binaries:
-   ```jsonc
-   {
-     "binaries": [{
-       "path": "https://bvm.land/deno/1.3.1.json",
-       "version": "^1.3.0"
-     }]
-   }
-   ```
-2. Support for file paths everywhere in addition to urls.
-3. Ability to easily create and remove aliases (ex. `deno2`)
+1. Ability to easily create and remove aliases (ex. `deno2`)
    - These should be associated with the binary they alias so when you uninstall the binary it deletes the alias.
-4. Command aliases in the configuration file.
+2. Command aliases in the configuration file.
    ```jsonc
    {
      "binaries": [{
@@ -313,10 +308,11 @@ Medium effort:
      }]
    }
    ```
-5. Ability to execute a specific version of an executable one time. `bvm exec deno 1.2.0 -V` or perhaps at the shim level `deno -V --bvm-use-version 1.2.0`... or maybe this should use `bvm resolve` somehow.
-6. Add `bvm lock` to update the configuration file urls with checksums.
-7. Multiple sub binary download locations (ex. say `npm` were installed from a different zip for `node`).
-8. Add key/value setting storage. Example: `bvm setting nodejs/node <key> <value>` and `bvm setting nodejs/node <key>` to get. Use this instead of environment variables.
+3. Ability to execute a specific version of an executable one time. (ex. `bvm exec deno 1.2.0 deno -V` -- will probably require command name unfortunately).
+4. Add `bvm lock` to update the configuration file urls with checksums.
+5. Multiple sub binary download locations (ex. say `npm` were installed from a different zip for `node`).
+6. Add key/value setting storage. Example: `bvm setting nodejs/node <key> <value>` and `bvm setting nodejs/node <key>` to get. Use this instead of environment variables.
+7. Ability to add to a bvmrc.json via registries or specifying urls. For example: `bvm add deno 1.3.1` or `bvm add https://bvm.land/deno/1.3.1.json`
 
 Large effort:
 
@@ -340,3 +336,4 @@ Probably unnecessary complexity:
 4. Ability to purge any binaries that haven't been run for X days.
 5. Ability to get a specific version of a binary when using `bvm resolve` (ex. `bvm resolve deno 1.3.1`)
 6. Consider creating a `bvm resolve-v1` hidden sub command. Too much complexity. Better to just have a command to recreate the shims.
+7. Support for file paths everywhere in addition to urls.

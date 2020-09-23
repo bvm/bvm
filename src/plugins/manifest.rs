@@ -135,6 +135,16 @@ impl BinaryIdentifier {
     pub fn new(name: &BinaryName, version: &Version) -> Self {
         BinaryIdentifier(format!("{}||{}||{}", name.owner, name.name.as_str(), version))
     }
+
+    pub fn get_binary_name(&self) -> BinaryName {
+        let parts = self.0.split("||").collect::<Vec<_>>();
+        BinaryName::new(parts[0].to_string(), parts[1].to_string())
+    }
+
+    pub fn get_version(&self) -> Version {
+        let parts = self.0.split("||").collect::<Vec<_>>();
+        parts[2].into()
+    }
 }
 
 pub enum GlobalBinaryLocation {
@@ -269,16 +279,6 @@ impl PluginsManifest {
         self.get_binary(identifier).is_some()
     }
 
-    pub fn get_binaries_by_name_and_version_selector(
-        &self,
-        name_selector: &NameSelector,
-        version: &VersionSelector,
-    ) -> Vec<&BinaryManifestItem> {
-        self.binaries()
-            .filter(|b| b.matches(name_selector) && version.matches(&b.version))
-            .collect()
-    }
-
     pub fn binaries(&self) -> Values<'_, BinaryIdentifier, BinaryManifestItem> {
         self.binaries.values()
     }
@@ -300,8 +300,18 @@ impl PluginsManifest {
         }
     }
 
-    pub fn get_binaries_matching(&self, name_selector: &NameSelector) -> Vec<&BinaryManifestItem> {
+    pub fn get_binaries_matching_name(&self, name_selector: &NameSelector) -> Vec<&BinaryManifestItem> {
         self.binaries().filter(|b| b.matches(name_selector)).collect()
+    }
+
+    pub fn get_binaries_matching_name_and_version(
+        &self,
+        name_selector: &NameSelector,
+        version: &VersionSelector,
+    ) -> Vec<&BinaryManifestItem> {
+        self.binaries()
+            .filter(|b| b.matches(name_selector) && version.matches(&b.version))
+            .collect()
     }
 
     pub fn get_binaries_with_command(&self, name: &CommandName) -> Vec<&BinaryManifestItem> {
