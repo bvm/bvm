@@ -16,12 +16,12 @@ pub struct ConfigFileBinary {
 
 pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
     let value = parse_to_value(file_text)?;
-    let mut root_object_node = match value {
+    let mut root_object = match value {
         Some(JsonValue::Object(obj)) => obj,
-        _ => return err!("Expected a root object in the json"),
+        _ => return err!("Expected a root object in the json file."),
     };
 
-    let json_binaries = root_object_node
+    let json_binaries = root_object
         .take_array("binaries")
         .ok_or_else(|| err_obj!("Expected to find a 'binaries' array."))?;
 
@@ -59,11 +59,11 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
         });
     }
 
-    let on_pre_install = root_object_node.take_string("onPreInstall");
-    let on_post_install = root_object_node.take_string("onPostInstall");
+    let on_pre_install = root_object.take_string("onPreInstall");
+    let on_post_install = root_object.take_string("onPostInstall");
 
-    for (key, _) in root_object_node.into_iter() {
-        return err!("Unknown key in configuration file: {}", key);
+    for (key, _) in root_object.into_iter() {
+        return err!("Unknown key '{}'", key);
     }
 
     Ok(ConfigFile {

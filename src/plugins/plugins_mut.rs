@@ -134,15 +134,21 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         config_binary: &ConfigFileBinary,
     ) -> Result<Option<&BinaryManifestItem>, ErrBox> {
         // associate the url to an identifier in order to be able to tell the name
-        if self.manifest.get_identifier_from_url(&config_binary.path).is_none() {
-            self.get_and_associate_plugin_file(&config_binary.path).await?;
-        }
+        self.ensure_url_associated(&config_binary.path).await?;
 
         // now get the binary item based on the config file
         Ok(helpers::get_installed_binary_if_associated_config_file_binary(
             &self.manifest,
             &config_binary,
         ))
+    }
+
+    pub async fn ensure_url_associated(&mut self, url: &ChecksumPathOrUrl) -> Result<(), ErrBox> {
+        // associate the url to an identifier in order to be able to tell the name
+        if self.manifest.get_identifier_from_url(&url).is_none() {
+            self.get_and_associate_plugin_file(&url).await?;
+        }
+        Ok(())
     }
 
     // pending environment changes

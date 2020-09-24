@@ -21,12 +21,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use arg_parser::*;
-use configuration::ConfigFileBinary;
-use dprint_cli_core::checksums::ChecksumPathOrUrl;
+use dprint_cli_core::checksums::{get_sha256_checksum, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
 use plugins::{helpers as plugin_helpers, PluginsManifest, PluginsMut, UrlInstallAction};
-use types::{CommandName, PathOrVersionSelector};
+use types::{CommandName, PathOrVersionSelector, VersionSelector};
 
 #[tokio::main]
 async fn main() -> Result<(), ErrBox> {
@@ -59,6 +58,7 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::Init => handle_init_command(environment)?,
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
+        SubCommand::Add(command) => handle_add_command(environment, command).await?,
         SubCommand::Shell(command) => handle_shell_command(environment, command)?,
     }
 
@@ -101,7 +101,7 @@ async fn handle_install_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: InstallCommand,
 ) -> Result<(), ErrBox> {
-    let config_file = get_config_file_or_error(environment)?;
+    let (_, config_file) = get_config_file_or_error(environment)?;
     let mut plugins = PluginsMut::load(environment)?;
 
     if let Some(pre_install) = &config_file.on_pre_install {
@@ -109,7 +109,7 @@ async fn handle_install_command<TEnvironment: Environment>(
     }
 
     for binary in config_file.binaries.iter() {
-        match install_binary(&mut plugins, &command, &binary).await {
+        match install_binary(&mut plugins, &binary.path, binary.version.as_ref(), command.force).await {
             Err(err) => return err!("Error installing {}: {}", &binary.path.path_or_url, err.to_string()),
             _ => {}
         }
@@ -131,28 +131,29 @@ async fn handle_install_command<TEnvironment: Environment>(
         environment.run_shell_command(&environment.cwd()?, post_install)?;
     }
 
-    return Ok(());
+    Ok(())
+}
 
-    async fn install_binary<TEnvironment: Environment>(
-        plugins: &mut PluginsMut<TEnvironment>,
-        command: &InstallCommand,
-        binary: &ConfigFileBinary,
-    ) -> Result<(), ErrBox> {
-        let install_action = plugins
-            .get_url_install_action(&binary.path, binary.version.as_ref(), command.force)
-            .await?;
-        if let UrlInstallAction::Install(plugin_file) = install_action {
-            // setup the plugin
-            let binary_item = plugins.setup_plugin(&plugin_file).await?;
-            let identifier = binary_item.get_identifier();
-            // check if there is a global binary location set and if not, set it
-            for command_name in binary_item.get_command_names() {
-                plugins.set_global_binary_if_not_set(&identifier, &command_name)?;
-            }
-            plugins.save()?; // write for every setup plugin in case a further one fails
+async fn install_binary<TEnvironment: Environment>(
+    plugins: &mut PluginsMut<TEnvironment>,
+    checksum_url: &ChecksumPathOrUrl,
+    version_selector: Option<&VersionSelector>,
+    force: bool,
+) -> Result<(), ErrBox> {
+    let install_action = plugins
+        .get_url_install_action(checksum_url, version_selector, force)
+        .await?;
+    if let UrlInstallAction::Install(plugin_file) = install_action {
+        // setup the plugin
+        let binary_item = plugins.setup_plugin(&plugin_file).await?;
+        let identifier = binary_item.get_identifier();
+        // check if there is a global binary location set and if not, set it
+        for command_name in binary_item.get_command_names() {
+            plugins.set_global_binary_if_not_set(&identifier, &command_name)?;
         }
-        Ok(())
+        plugins.save()?; // write for every setup plugin in case a further one fails
     }
+    Ok(())
 }
 
 async fn handle_install_url_command<TEnvironment: Environment>(
@@ -160,7 +161,7 @@ async fn handle_install_url_command<TEnvironment: Environment>(
     command: InstallUrlCommand,
 ) -> Result<(), ErrBox> {
     let mut plugins = PluginsMut::load(environment)?;
-    let url = resolve_url(environment, &command.url_or_name).await?;
+    let url = resolve_url_or_name(environment, &command.url_or_name).await?;
 
     let result = install_url(environment, &mut plugins, &url, &command).await;
     match result {
@@ -250,61 +251,61 @@ async fn handle_install_url_command<TEnvironment: Environment>(
         }
         Ok(())
     }
+}
 
-    async fn resolve_url<TEnvironment: Environment>(
-        environment: &TEnvironment,
-        url_or_name: &UrlOrName,
-    ) -> Result<ChecksumPathOrUrl, ErrBox> {
-        match url_or_name {
-            UrlOrName::Url(url) => Ok(url.to_owned()),
-            UrlOrName::Name(name) => {
-                let registry = registry::Registry::load(environment)?;
-                let url_results = registry.get_urls(&name.name_selector);
+async fn resolve_url_or_name<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    url_or_name: &UrlOrName,
+) -> Result<ChecksumPathOrUrl, ErrBox> {
+    return match url_or_name {
+        UrlOrName::Url(url) => Ok(url.to_owned()),
+        UrlOrName::Name(name) => {
+            let registry = registry::Registry::load(environment)?;
+            let url_results = registry.get_urls(&name.name_selector);
 
-                if url_results.is_empty() {
-                    return err!("There were no registries found for the provided binary. Did you mean to add one using `bvm registry add <url>`?");
-                }
+            if url_results.is_empty() {
+                return err!("There were no registries found for the provided binary. Did you mean to add one using `bvm registry add <url>`?");
+            }
 
-                // display an error if there are multiple owners
-                let mut binary_names = url_results
-                    .iter()
-                    .map(|r| &r.owner)
-                    .collect::<HashSet<_>>()
-                    .into_iter()
-                    .map(|o| format!("{}/{}", o, name.name_selector.name))
-                    .collect::<Vec<String>>();
-                if binary_names.len() > 1 {
-                    binary_names.sort();
-                    return err!(
-                        "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
-                        name.name_selector.name,
-                        binary_names.join("\n  ")
-                    );
-                }
+            // display an error if there are multiple owners
+            let mut binary_names = url_results
+                .iter()
+                .map(|r| &r.owner)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .map(|o| format!("{}/{}", o, name.name_selector.name))
+                .collect::<Vec<String>>();
+            if binary_names.len() > 1 {
+                binary_names.sort();
+                return err!(
+                    "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
+                    name.name_selector.name,
+                    binary_names.join("\n  ")
+                );
+            }
 
-                // now get the url
-                let urls = url_results.into_iter().map(|r| r.url).collect();
-                let selected_url = if let Some(version) = &name.version_selector {
-                    find_url(environment, &urls, |item| version.matches(&item.version)).await?
+            // now get the url
+            let urls = url_results.into_iter().map(|r| r.url).collect();
+            let selected_url = if let Some(version) = &name.version_selector {
+                find_url(environment, &urls, |item| version.matches(&item.version)).await?
+            } else {
+                find_latest_url(environment, &urls).await?
+            };
+            if let Some(selected_url) = selected_url {
+                Ok(selected_url)
+            } else {
+                if let Some(version) = &name.version_selector {
+                    err!(
+                        "Could not find binary {} matching {} in any registry.",
+                        name.name_selector,
+                        version
+                    )
                 } else {
-                    find_latest_url(environment, &urls).await?
-                };
-                if let Some(selected_url) = selected_url {
-                    Ok(selected_url)
-                } else {
-                    if let Some(version) = &name.version_selector {
-                        err!(
-                            "Could not find binary {} matching {} in any registry.",
-                            name.name_selector,
-                            version
-                        )
-                    } else {
-                        return err!("Could not find binary {} in any registry.", name.name_selector);
-                    }
+                    return err!("Could not find binary {} in any registry.", name.name_selector);
                 }
             }
         }
-    }
+    };
 
     async fn find_url<TEnvironment: Environment>(
         environment: &TEnvironment,
@@ -395,7 +396,7 @@ fn handle_uninstall_command<TEnvironment: Environment>(
 async fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     // use all the binaries in the current configuration file
     let mut plugins = PluginsMut::load(environment)?;
-    let config_file = get_config_file_or_error(environment)?;
+    let (_, config_file) = get_config_file_or_error(environment)?;
     let mut found_not_installed = false;
 
     for entry in config_file.binaries.iter() {
@@ -573,6 +574,82 @@ async fn handle_registry_command<TEnvironment: Environment>(
     }
 }
 
+async fn handle_add_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: AddCommand,
+) -> Result<(), ErrBox> {
+    let url = resolve_url_or_name(environment, &command.url_or_name).await?;
+    let (config_file_path, config_file) = get_config_file_or_error(environment)?;
+    let config_has_url = config_file
+        .binaries
+        .iter()
+        .any(|b| &b.path.path_or_url == &url.path_or_url);
+
+    if config_has_url {
+        environment.log_error(&format!(
+            "Skipping. The url {} is already in the configuration file.",
+            &url.path_or_url
+        ));
+    } else {
+        let mut plugins = PluginsMut::load(environment)?;
+
+        // install the binary
+        install_binary(&mut plugins, &url, None, false).await?;
+        let binary_identifier = plugins.manifest.get_identifier_from_url(&url).unwrap().clone();
+        let binary_name = binary_identifier.get_binary_name();
+
+        // get the replace index if this binary name is already in the config file
+        let mut replace_index = None;
+        for (i, config_binary) in config_file.binaries.iter().enumerate() {
+            // ignore errors when associating
+            if let Err(err) = plugins.ensure_url_associated(&config_binary.path).await {
+                environment.log_error(&format!(
+                    "Error associating {}. {}",
+                    &config_binary.path.path_or_url,
+                    err.to_string()
+                ));
+            } else {
+                let config_binary_name = plugins
+                    .manifest
+                    .get_identifier_from_url(&config_binary.path)
+                    .unwrap()
+                    .get_binary_name();
+                if binary_name == config_binary_name {
+                    replace_index = Some(i);
+                    break;
+                }
+            }
+        }
+
+        // now add it to the configuration file
+        let binary = plugins.manifest.get_binary(&binary_identifier).unwrap();
+        let checksum = match url.checksum {
+            Some(checksum) => checksum,
+            None => {
+                let url_file_bytes = environment.download_file(&url.path_or_url).await?;
+                get_sha256_checksum(&url_file_bytes)
+            }
+        };
+
+        configuration::add_binary_to_config_file(
+            environment,
+            &config_file_path,
+            &configuration::ConfigFileBinary {
+                path: ChecksumPathOrUrl {
+                    path_or_url: url.path_or_url,
+                    checksum: Some(checksum),
+                },
+                version: Some(VersionSelector::parse(&format!("^{}", binary.version.as_str())).unwrap()),
+            },
+            replace_index,
+        )?;
+
+        plugins.save()?;
+    }
+
+    Ok(())
+}
+
 async fn handle_registry_add_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: RegistryAddCommand,
@@ -716,7 +793,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
     plugin_manifest: &PluginsManifest,
     command_name: &CommandName,
 ) -> Result<Option<ConfigFileExecutableInfo>, ErrBox> {
-    Ok(if let Some(config_file) = get_config_file(environment)? {
+    Ok(if let Some((_, config_file)) = get_config_file(environment)? {
         let mut had_uninstalled_binary = false;
         let mut executable_path = None;
 
@@ -745,17 +822,20 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
     })
 }
 
-fn get_config_file_or_error(environment: &impl Environment) -> Result<configuration::ConfigFile, ErrBox> {
+fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, configuration::ConfigFile), ErrBox> {
     match get_config_file(environment)? {
         Some(config_file) => Ok(config_file),
         None => return err!("Could not find .bvmrc.json in the current directory or its ancestors."),
     }
 }
 
-fn get_config_file(environment: &impl Environment) -> Result<Option<configuration::ConfigFile>, ErrBox> {
+fn get_config_file(environment: &impl Environment) -> Result<Option<(PathBuf, configuration::ConfigFile)>, ErrBox> {
     if let Some(config_file_path) = configuration::find_config_file(environment)? {
         let config_file_text = environment.read_file_text(&config_file_path)?;
-        Ok(Some(configuration::read_config_file(&config_file_text)?))
+        match configuration::read_config_file(&config_file_text) {
+            Ok(file) => Ok(Some((config_file_path, file))),
+            Err(err) => err!("Error reading {}: {}", config_file_path.display(), err.to_string()),
+        }
     } else {
         Ok(None)
     }
@@ -1341,7 +1421,10 @@ mod test {
             .unwrap();
 
         let error_message = run_cli(vec!["install"], &environment).await.err().unwrap();
-        assert_eq!(error_message.to_string(), "Unknown key in configuration file: test");
+        assert_eq!(
+            error_message.to_string(),
+            "Error reading /.bvmrc.json: Unknown key 'test'"
+        );
     }
 
     #[tokio::test]
@@ -2208,6 +2291,366 @@ mod test {
                 "exiting/path{0}other/path{0}{1}",
                 SYS_PATH_DELIMITER, first_path_str
             )]
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_url_no_binaries() {
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_bvmrc_builder().build();
+        let environment = builder.build();
+
+        // run the add command
+        environment.set_cwd("/project");
+        run_cli(vec!["add", "http://localhost/package.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(
+            environment
+                .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
+                .unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package.json",
+      "checksum": "{}",
+      "version": "^1.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_url_other_binary() {
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/other.json", "owner", "other", "2.0.0");
+        builder
+            .create_bvmrc_builder()
+            .add_binary_object(&format!("http://localhost/other.json"), None, Some("~1.1"))
+            .build();
+        let environment = builder.build();
+
+        // run the add command
+        environment.set_cwd("/project");
+        run_cli(vec!["add", "http://localhost/package.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(
+            environment
+                .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
+                .unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/other.json",
+      "version": "~1.1"
+    }},
+    {{
+      "path": "http://localhost/package.json",
+      "checksum": "{}",
+      "version": "^1.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_registry() {
+        let builder = EnvironmentBuilder::new();
+        let checksum1 = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let checksum2 = builder.create_remote_zip_package("http://localhost/other2.json", "owner", "other", "2.0.0");
+        builder.create_remote_registry_file(
+            "http://localhost/registry1.json",
+            "owner",
+            "name",
+            vec![registry::RegistryVersionInfo {
+                version: "1.0.0".into(),
+                checksum: checksum1.clone(),
+                path: "http://localhost/package.json".to_string(),
+            }],
+        );
+        builder.create_remote_registry_file(
+            "http://localhost/registry2.json",
+            "owner",
+            "other",
+            vec![
+                registry::RegistryVersionInfo {
+                    version: "1.0.0".into(),
+                    checksum: "some-not-checked-checksum".to_string(),
+                    path: "http://localhost/other1.json".to_string(),
+                },
+                registry::RegistryVersionInfo {
+                    version: "2.0.0".into(),
+                    checksum: checksum2.clone(),
+                    path: "http://localhost/other2.json".to_string(),
+                },
+            ],
+        );
+        builder.create_bvmrc_builder().path("/.bvmrc.json").build();
+        let environment = builder.build();
+
+        run_cli(vec!["registry", "add", "http://localhost/registry1.json"], &environment)
+            .await
+            .unwrap();
+        run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
+            .await
+            .unwrap();
+
+        run_cli(vec!["add", "owner/name", "1.0.0"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+
+        run_cli(vec!["add", "other"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/other 2.0.0..."]);
+
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package.json",
+      "checksum": "{}",
+      "version": "^1.0.0"
+    }},
+    {{
+      "path": "http://localhost/other2.json",
+      "checksum": "{}",
+      "version": "^2.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum1, checksum2
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_existing_url() {
+        let builder = EnvironmentBuilder::new();
+        let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        builder.create_remote_registry_file(
+            "http://localhost/registry.json",
+            "owner",
+            "name",
+            vec![registry::RegistryVersionInfo {
+                version: "1.0.0".into(),
+                checksum,
+                path: "http://localhost/package.json".to_string(),
+            }],
+        );
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_path("http://localhost/package.json")
+            .build();
+        let environment = builder.build();
+
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap();
+
+        run_cli(vec!["add", "name", "1.0.0"], &environment).await.unwrap();
+        // should just warn and not error completely
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            ["Skipping. The url http://localhost/package.json is already in the configuration file."]
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_existing_package_different_url_replaces() {
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+        let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.0.0");
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_path("http://localhost/package.json")
+            .build();
+        let environment = builder.build();
+
+        // should also associate the existing url if not associated
+        run_cli(vec!["add", "http://localhost/package2.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package2.json",
+      "checksum": "{}",
+      "version": "^1.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_existing_package_different_url_replaces_start() {
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
+        let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/other.json", "owner", "other", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_object("http://localhost/package1.json", None, None)
+            .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
+            .add_binary_object("http://localhost/final.json", None, Some("1"))
+            .build();
+        let environment = builder.build();
+
+        run_cli(vec!["add", "http://localhost/package2.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package2.json",
+      "checksum": "{}",
+      "version": "^2.0.0"
+    }},
+    {{
+      "path": "http://localhost/other.json",
+      "version": "~1.0.0"
+    }},
+    {{
+      "path": "http://localhost/final.json",
+      "version": "1"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_existing_package_different_url_replaces_middle() {
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
+        let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/other.json", "owner", "other", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
+            .add_binary_object("http://localhost/package1.json", None, None)
+            .add_binary_object("http://localhost/final.json", None, Some("1"))
+            .build();
+        let environment = builder.build();
+
+        run_cli(vec!["add", "http://localhost/package2.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/other.json",
+      "version": "~1.0.0"
+    }},
+    {{
+      "path": "http://localhost/package2.json",
+      "checksum": "{}",
+      "version": "^2.0.0"
+    }},
+    {{
+      "path": "http://localhost/final.json",
+      "version": "1"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn add_command_existing_package_different_url_replaces_end() {
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
+        let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
+        builder.create_remote_zip_package("http://localhost/other.json", "owner", "other", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
+            .add_binary_object("http://localhost/final.json", None, Some("1"))
+            .add_binary_object("http://localhost/package1.json", None, None)
+            .build();
+        let environment = builder.build();
+
+        run_cli(vec!["add", "http://localhost/package2.json"], &environment)
+            .await
+            .unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/other.json",
+      "version": "~1.0.0"
+    }},
+    {{
+      "path": "http://localhost/final.json",
+      "version": "1"
+    }},
+    {{
+      "path": "http://localhost/package2.json",
+      "checksum": "{}",
+      "version": "^2.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
         );
     }
 

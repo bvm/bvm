@@ -70,33 +70,33 @@ impl BvmrcBuilder {
         let mut writer = String::new();
         writer.push_str("{");
         if let Some(text) = &self.on_pre_install {
-            writer.push_str(&format!(r#""onPreInstall": "{}","#, escape_quotes(text)));
+            writer.push_str(&format!("\n  \"onPreInstall\": \"{}\",", escape_quotes(text)));
         }
         if let Some(text) = &self.on_post_install {
-            writer.push_str(&format!(r#""onPostInstall": "{}","#, escape_quotes(text)));
+            writer.push_str(&format!("\n  \"onPostInstall\": \"{}\",", escape_quotes(text)));
         }
-        writer.push_str(r#""binaries": ["#);
+        writer.push_str("\n  \"binaries\": [");
         for (i, binary_item) in self.binaries.iter().enumerate() {
             if i > 0 {
                 writer.push_str(",");
             }
+            writer.push_str("\n    ");
             match binary_item {
                 BinaryItem::String(text) => writer.push_str(&format!(r#""{}""#, escape_quotes(text))),
                 BinaryItem::Object(obj) => {
                     writer.push_str("{");
-                    writer.push_str(&format!(r#""path": "{}""#, escape_quotes(&obj.path)));
+                    writer.push_str(&format!("\n      \"path\": \"{}\"", escape_quotes(&obj.path)));
                     if let Some(text) = &obj.checksum {
-                        writer.push_str(&format!(r#","checksum": "{}""#, escape_quotes(text)));
+                        writer.push_str(&format!(",\n      \"checksum\": \"{}\"", escape_quotes(text)));
                     }
                     if let Some(text) = &obj.version {
-                        writer.push_str(&format!(r#","version": "{}""#, escape_quotes(text)));
+                        writer.push_str(&format!(",\n      \"version\": \"{}\"", escape_quotes(text)));
                     }
-                    writer.push_str("}");
+                    writer.push_str("\n    }");
                 }
             }
         }
-        writer.push_str("]");
-        writer.push_str("}");
+        writer.push_str("\n  ]\n}\n");
         let file_path = PathBuf::from(self.path.clone().unwrap_or("/project/.bvmrc.json".to_string()));
         self.environment.write_file_text(&file_path, &writer).unwrap();
     }

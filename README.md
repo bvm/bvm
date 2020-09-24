@@ -214,6 +214,42 @@ Downloads & installs the binaries in the current `.bvmrc.json` configuration fil
 - Provide the `--use` flag to also use all the binaries in the configuration file on the path when outside this directory.
 - Provide the `--force` flag to force an install of everything even if already installed or has a matching version.
 
+### `bvm add [url]`
+
+Adds the specified binary at the specified url to a project's `.bvmrc.json` file based on the current directory. Installs if necessary.
+
+```
+# Example
+bvm add https://bvm.land/deno/1.3.2.json
+```
+
+Configuration file would then contain:
+
+```jsonc
+{
+  "binaries": [
+    {
+      "path": "https://bvm.land/deno/1.3.2.json",
+      "checksum": "6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97",
+      "version": "^1.3.2"
+    }
+  ]
+}
+```
+
+### `bvm add [binary-name or owner-name/binary-name] [version]`
+
+Adds the specified binary from a registry to a project's `.bvmrc.json` file based on the current directory. Installs if necessary.
+
+The version is optional.
+
+```
+# Examples
+bvm add deno 1.3.1
+bvm add name-stealer/deno 2.0.0
+bvm add node
+```
+
 ### `bvm use`
 
 Uses all the binaries in the current configuration files globally on the path.
@@ -312,7 +348,6 @@ Medium effort:
 4. Add `bvm lock` to update the configuration file urls with checksums.
 5. Multiple sub binary download locations (ex. say `npm` were installed from a different zip for `node`).
 6. Add key/value setting storage. Example: `bvm setting nodejs/node <key> <value>` and `bvm setting nodejs/node <key>` to get. Use this instead of environment variables.
-7. Ability to add to a bvmrc.json via registries or specifying urls. For example: `bvm add deno 1.3.1` or `bvm add https://bvm.land/deno/1.3.1.json`
 
 Large effort:
 

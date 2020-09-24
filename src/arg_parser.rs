@@ -18,6 +18,7 @@ pub enum SubCommand {
     InstallUrl(InstallUrlCommand),
     Uninstall(UninstallCommand),
     Registry(RegistrySubCommand),
+    Add(AddCommand),
     Version,
     Init,
     ClearUrlCache,
@@ -72,6 +73,10 @@ pub struct RegistryAddCommand {
 
 pub struct RegistryRemoveCommand {
     pub url: String,
+}
+
+pub struct AddCommand {
+    pub url_or_name: UrlOrName,
 }
 
 pub enum ShellSubCommand {
@@ -183,6 +188,27 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             })),
             ("list", _) => SubCommand::Registry(RegistrySubCommand::List),
             _ => unreachable!(),
+        }
+    } else if matches.is_present("add") {
+        let matches = matches.subcommand_matches("add").unwrap();
+        let url_or_name = matches.value_of("url_or_name").map(String::from).unwrap();
+        let version = matches.value_of("version").map(String::from);
+        if version.is_some() || Url::parse(&url_or_name).is_err() {
+            let name_selector = parse_name_selector(url_or_name);
+            SubCommand::Add(AddCommand {
+                url_or_name: UrlOrName::Name(InstallName {
+                    name_selector,
+                    version_selector: if let Some(v) = &version {
+                        Some(VersionSelector::parse(v)?)
+                    } else {
+                        None
+                    },
+                }),
+            })
+        } else {
+            SubCommand::Add(AddCommand {
+                url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url_or_name)),
+            })
         }
     } else if matches.is_present("hidden-shell") {
         let matches = matches.subcommand_matches("hidden-shell").unwrap();
@@ -331,6 +357,21 @@ ARGS:
         )
         .subcommand(SubCommand::with_name("list").about("Output a list of installed binary versions."))
         .subcommand(SubCommand::with_name("init").about("Creates an empty .bvmrc.json file in the current directory."))
+        .subcommand(
+            SubCommand::with_name("add")
+                .about("Programmatically adds a binary to the .bvmrc.json file.")
+                .arg(
+                    Arg::with_name("url_or_name")
+                        .help("The url or name of the binary.")
+                        .takes_value(true)
+                        .required(true),
+                )
+                .arg(
+                    Arg::with_name("version")
+                        .help("The version to add if providing a name.")
+                        .required(false),
+                )
+        )
         .subcommand(
             SubCommand::with_name("resolve")
                 .about("Outputs the binary path according to the current working directory.")

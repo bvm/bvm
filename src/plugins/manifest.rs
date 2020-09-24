@@ -143,7 +143,7 @@ impl BinaryIdentifier {
 
     pub fn get_version(&self) -> Version {
         let parts = self.0.split("||").collect::<Vec<_>>();
-        parts[2].into()
+        Version::parse(parts[2]).unwrap()
     }
 }
 
