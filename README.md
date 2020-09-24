@@ -240,13 +240,14 @@ Configuration file would then contain:
 
 ### `bvm add [binary-name or owner-name/binary-name] [version]`
 
-Adds the specified binary from a registry to a project's `.bvmrc.json` file based on the current directory. Installs if necessary.
+Similar to above with a url, but adds the specified binary from an added registry.
 
 The version is optional.
 
 ```
 # Examples
 bvm add deno 1.3.1
+bvm add deno ~1.3.1
 bvm add node
 ```
 
