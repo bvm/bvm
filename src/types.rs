@@ -155,26 +155,26 @@ impl VersionSelector {
         let text = text.trim();
         // make full versions exact and minor versions only within the minor
         if FULL_VERSION_RE.is_match(text) {
-            Ok(VersionSelector::inner_parse(&format!("={}", text))?)
+            Ok(VersionSelector::inner_parse(&format!("={}", text), text)?)
         } else if MINOR_VERSION_RE.is_match(text) {
-            Ok(VersionSelector::inner_parse(&format!("~{}.0", text))?)
+            Ok(VersionSelector::inner_parse(&format!("~{}.0", text), text)?)
         } else {
-            VersionSelector::inner_parse(text)
+            VersionSelector::inner_parse(text, text)
         }
     }
 
     /// Parses where "1" is equivalent to "^1" and "1.1" is equivalent to "^1.1"
     pub fn parse_for_config(text: &str) -> Result<VersionSelector, ErrBox> {
-        VersionSelector::inner_parse(text)
+        VersionSelector::inner_parse(text, text)
     }
 
-    fn inner_parse<'a>(text: &'a str) -> Result<VersionSelector, ErrBox> {
-        let version_req = match SemVersionReq::parse(text) {
+    fn inner_parse<'a>(version_text: &'a str, full_text: &'a str) -> Result<VersionSelector, ErrBox> {
+        let version_req = match SemVersionReq::parse(version_text) {
             Ok(result) => result,
-            Err(err) => return err!("Error parsing {} to a version. {}", text, err.to_string()),
+            Err(err) => return err!("Error parsing {} to a version. {}", version_text, err.to_string()),
         };
         Ok(VersionSelector {
-            full_text: text.to_string(),
+            full_text: full_text.to_string(),
             version_req,
         })
     }

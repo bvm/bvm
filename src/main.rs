@@ -580,72 +580,66 @@ async fn handle_add_command<TEnvironment: Environment>(
 ) -> Result<(), ErrBox> {
     let url = resolve_url_or_name(environment, &command.url_or_name).await?;
     let (config_file_path, config_file) = get_config_file_or_error(environment)?;
-    let config_has_url = config_file
-        .binaries
-        .iter()
-        .any(|b| &b.path.path_or_url == &url.path_or_url);
+    let mut plugins = PluginsMut::load(environment)?;
 
-    if config_has_url {
-        environment.log_error(&format!(
-            "Skipping. The url {} is already in the configuration file.",
-            &url.path_or_url
-        ));
-    } else {
-        let mut plugins = PluginsMut::load(environment)?;
+    // install the binary
+    install_binary(&mut plugins, &url, None, false).await?;
+    let binary_identifier = plugins.manifest.get_identifier_from_url(&url).unwrap().clone();
+    let binary_name = binary_identifier.get_binary_name();
 
-        // install the binary
-        install_binary(&mut plugins, &url, None, false).await?;
-        let binary_identifier = plugins.manifest.get_identifier_from_url(&url).unwrap().clone();
-        let binary_name = binary_identifier.get_binary_name();
-
-        // get the replace index if this binary name is already in the config file
-        let mut replace_index = None;
-        for (i, config_binary) in config_file.binaries.iter().enumerate() {
-            // ignore errors when associating
-            if let Err(err) = plugins.ensure_url_associated(&config_binary.path).await {
-                environment.log_error(&format!(
-                    "Error associating {}. {}",
-                    &config_binary.path.path_or_url,
-                    err.to_string()
-                ));
-            } else {
-                let config_binary_name = plugins
-                    .manifest
-                    .get_identifier_from_url(&config_binary.path)
-                    .unwrap()
-                    .get_binary_name();
-                if binary_name == config_binary_name {
-                    replace_index = Some(i);
-                    break;
-                }
+    // get the replace index if this binary name is already in the config file
+    let mut replace_index = None;
+    for (i, config_binary) in config_file.binaries.iter().enumerate() {
+        // ignore errors when associating
+        if let Err(err) = plugins.ensure_url_associated(&config_binary.path).await {
+            environment.log_error(&format!(
+                "Error associating {}. {}",
+                &config_binary.path.path_or_url,
+                err.to_string()
+            ));
+        } else {
+            let config_binary_name = plugins
+                .manifest
+                .get_identifier_from_url(&config_binary.path)
+                .unwrap()
+                .get_binary_name();
+            if binary_name == config_binary_name {
+                replace_index = Some(i);
+                break;
             }
         }
-
-        // now add it to the configuration file
-        let binary = plugins.manifest.get_binary(&binary_identifier).unwrap();
-        let checksum = match url.checksum {
-            Some(checksum) => checksum,
-            None => {
-                let url_file_bytes = environment.download_file(&url.path_or_url).await?;
-                get_sha256_checksum(&url_file_bytes)
-            }
-        };
-
-        configuration::add_binary_to_config_file(
-            environment,
-            &config_file_path,
-            &configuration::ConfigFileBinary {
-                path: ChecksumPathOrUrl {
-                    path_or_url: url.path_or_url,
-                    checksum: Some(checksum),
-                },
-                version: Some(VersionSelector::parse(&format!("^{}", binary.version.as_str())).unwrap()),
-            },
-            replace_index,
-        )?;
-
-        plugins.save()?;
     }
+
+    // now add it to the configuration file
+    let binary = plugins.manifest.get_binary(&binary_identifier).unwrap();
+    let checksum = match url.checksum {
+        Some(checksum) => checksum,
+        None => {
+            let url_file_bytes = environment.download_file(&url.path_or_url).await?;
+            get_sha256_checksum(&url_file_bytes)
+        }
+    };
+
+    configuration::add_binary_to_config_file(
+        environment,
+        &config_file_path,
+        &configuration::ConfigFileBinary {
+            path: ChecksumPathOrUrl {
+                path_or_url: url.path_or_url,
+                checksum: Some(checksum),
+            },
+            version: Some(
+                match command.url_or_name {
+                    UrlOrName::Url(_) => None,
+                    UrlOrName::Name(name) => name.version_selector,
+                }
+                .unwrap_or(VersionSelector::parse(binary.version.as_str()).unwrap()),
+            ),
+        },
+        replace_index,
+    )?;
+
+    plugins.save()?;
 
     Ok(())
 }
@@ -825,7 +819,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
 fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, configuration::ConfigFile), ErrBox> {
     match get_config_file(environment)? {
         Some(config_file) => Ok(config_file),
-        None => return err!("Could not find .bvmrc.json in the current directory or its ancestors."),
+        None => return err!("Could not find .bvmrc.json in the current directory or its ancestors. Perhaps created one with `bvm init`?"),
     }
 }
 
@@ -1150,7 +1144,7 @@ mod test {
         let error_text = run_cli(vec!["install"], &environment).await.err().unwrap().to_string();
         assert_eq!(
             error_text,
-            "Could not find .bvmrc.json in the current directory or its ancestors."
+            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps created one with `bvm init`?"
         );
 
         // move to the correct dir, then try again
@@ -2318,7 +2312,7 @@ mod test {
     {{
       "path": "http://localhost/package.json",
       "checksum": "{}",
-      "version": "^1.0.0"
+      "version": "1.0.0"
     }}
   ]
 }}
@@ -2360,7 +2354,7 @@ mod test {
     {{
       "path": "http://localhost/package.json",
       "checksum": "{}",
-      "version": "^1.0.0"
+      "version": "1.0.0"
     }}
   ]
 }}
@@ -2374,7 +2368,8 @@ mod test {
     async fn add_command_registry() {
         let builder = EnvironmentBuilder::new();
         let checksum1 = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
-        let checksum2 = builder.create_remote_zip_package("http://localhost/other2.json", "owner", "other", "2.0.0");
+        let checksum2 = builder.create_remote_zip_package("http://localhost/other1.json", "owner", "other", "1.0.0");
+        let checksum3 = builder.create_remote_zip_package("http://localhost/other2.json", "owner", "other", "2.0.0");
         builder.create_remote_registry_file(
             "http://localhost/registry1.json",
             "owner",
@@ -2392,12 +2387,12 @@ mod test {
             vec![
                 registry::RegistryVersionInfo {
                     version: "1.0.0".into(),
-                    checksum: "some-not-checked-checksum".to_string(),
+                    checksum: checksum2.clone(),
                     path: "http://localhost/other1.json".to_string(),
                 },
                 registry::RegistryVersionInfo {
                     version: "2.0.0".into(),
-                    checksum: checksum2.clone(),
+                    checksum: checksum3.clone(),
                     path: "http://localhost/other2.json".to_string(),
                 },
             ],
@@ -2428,18 +2423,52 @@ mod test {
     {{
       "path": "http://localhost/package.json",
       "checksum": "{}",
-      "version": "^1.0.0"
+      "version": "1.0.0"
     }},
     {{
       "path": "http://localhost/other2.json",
       "checksum": "{}",
-      "version": "^2.0.0"
+      "version": "2.0.0"
+    }}
+  ]
+}}
+"#,
+                checksum1, checksum3
+            )
+        );
+
+        // now say to use ~1.0 and it should replace that in the file
+        run_cli(vec!["add", "other", "~1.0"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(logged_errors, ["Extracting archive for owner/other 1.0.0..."]);
+
+        assert_eq!(
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package.json",
+      "checksum": "{}",
+      "version": "1.0.0"
+    }},
+    {{
+      "path": "http://localhost/other1.json",
+      "checksum": "{}",
+      "version": "~1.0"
     }}
   ]
 }}
 "#,
                 checksum1, checksum2
             )
+        );
+
+        // specify a version that doesn't exist and it should error
+        let err = run_cli(vec!["add", "other", "~1.1"], &environment).await.err().unwrap();
+        assert_eq!(
+            err.to_string(),
+            "Could not find binary other matching ~1.1 in any registry."
         );
     }
 
@@ -2453,7 +2482,7 @@ mod test {
             "name",
             vec![registry::RegistryVersionInfo {
                 version: "1.0.0".into(),
-                checksum,
+                checksum: checksum.clone(),
                 path: "http://localhost/package.json".to_string(),
             }],
         );
@@ -2463,17 +2492,30 @@ mod test {
             .add_binary_path("http://localhost/package.json")
             .build();
         let environment = builder.build();
+        run_cli(vec!["install"], &environment).await.unwrap();
+        environment.clear_logs();
 
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        run_cli(vec!["add", "name", "1"], &environment).await.unwrap();
 
-        run_cli(vec!["add", "name", "1.0.0"], &environment).await.unwrap();
-        // should just warn and not error completely
-        let logged_errors = environment.take_logged_errors();
+        // should replace it
         assert_eq!(
-            logged_errors,
-            ["Skipping. The url http://localhost/package.json is already in the configuration file."]
+            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            format!(
+                r#"{{
+  "binaries": [
+    {{
+      "path": "http://localhost/package.json",
+      "checksum": "{}",
+      "version": "1"
+    }}
+  ]
+}}
+"#,
+                checksum
+            )
         );
     }
 
@@ -2503,7 +2545,7 @@ mod test {
     {{
       "path": "http://localhost/package2.json",
       "checksum": "{}",
-      "version": "^1.0.0"
+      "version": "1.0.0"
     }}
   ]
 }}
@@ -2542,7 +2584,7 @@ mod test {
     {{
       "path": "http://localhost/package2.json",
       "checksum": "{}",
-      "version": "^2.0.0"
+      "version": "2.0.0"
     }},
     {{
       "path": "http://localhost/other.json",
@@ -2593,7 +2635,7 @@ mod test {
     {{
       "path": "http://localhost/package2.json",
       "checksum": "{}",
-      "version": "^2.0.0"
+      "version": "2.0.0"
     }},
     {{
       "path": "http://localhost/final.json",
@@ -2644,7 +2686,7 @@ mod test {
     {{
       "path": "http://localhost/package2.json",
       "checksum": "{}",
-      "version": "^2.0.0"
+      "version": "2.0.0"
     }}
   ]
 }}
