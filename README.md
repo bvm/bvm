@@ -172,7 +172,7 @@ bvm install --use node 14.9.0
 
 ## Projects
 
-`bvm` allows for specifying versions of binaries to automatically use within a current directory.
+`bvm` allows for specifying versions of binaries to automatically use within a directory.
 
 ### Setup
 
@@ -218,8 +218,9 @@ Downloads & installs the binaries in the current `.bvmrc.json` configuration fil
 
 Adds the specified binary at the specified url to a project's `.bvmrc.json` file based on the current directory. Installs if necessary.
 
+#### Example
+
 ```
-# Example
 bvm add https://bvm.land/deno/1.3.2.json
 ```
 
@@ -246,7 +247,6 @@ The version is optional.
 ```
 # Examples
 bvm add deno 1.3.1
-bvm add name-stealer/deno 2.0.0
 bvm add node
 ```
 
