@@ -9,13 +9,28 @@ use crate::types::{BinaryName, Version};
 #[serde(rename_all = "camelCase")]
 pub struct RegistryFile {
     pub schema_version: u32,
-    name: String,
-    owner: String,
-    description: String,
-    pub versions: Vec<RegistryVersionInfo>,
+    pub binaries: Vec<RegistryBinary>,
 }
 
 impl RegistryFile {
+    pub fn take_binary_with_name(self, name: &BinaryName) -> Option<RegistryBinary> {
+        self.binaries
+            .into_iter()
+            .filter(|b| b.owner == name.owner && b.name == name.name)
+            .next()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryBinary {
+    name: String,
+    owner: String,
+    pub description: String,
+    pub versions: Vec<RegistryVersionInfo>,
+}
+
+impl RegistryBinary {
     pub fn get_binary_name(&self) -> BinaryName {
         BinaryName::new(self.owner.clone(), self.name.clone())
     }
@@ -58,12 +73,20 @@ fn read_registry_file(file_bytes: &[u8]) -> Result<RegistryFile, ErrBox> {
                 );
             }
 
-            if file.name.contains("/") || file.owner.contains("/") {
-                return err!("The binary owner and name may not contain a forward slash.");
+            for binary in file.binaries.iter() {
+                verify_binary_name(&binary)?;
             }
 
             Ok(file)
         }
         Err(err) => err!("Error deserializing registry file. {}", err.to_string()),
     }
+}
+
+fn verify_binary_name(binary: &RegistryBinary) -> Result<(), ErrBox> {
+    if binary.name.contains("/") || binary.owner.contains("/") {
+        return err!("The binary owner and name may not contain a forward slash.");
+    }
+
+    Ok(())
 }

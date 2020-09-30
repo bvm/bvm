@@ -119,7 +119,7 @@ Adding a registry allows you to more easily install copies of a binary without d
 
 ### `bvm registry add [url]`
 
-Adds the registry at the specified url to the local CLI.
+Adds or reassociates the registry at the specified url to the local CLI.
 
 ```
 # Examples

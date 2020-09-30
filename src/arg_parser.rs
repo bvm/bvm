@@ -389,7 +389,7 @@ ARGS:
                 .setting(AppSettings::SubcommandRequiredElseHelp)
                 .subcommand(
                     SubCommand::with_name("add")
-                        .about("Add a url to a registry.")
+                        .about("Add or reassociate a url as a registry.")
                         .arg(
                             Arg::with_name("url")
                                 .help("The url of the binary registry.")
@@ -399,7 +399,7 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("remove")
-                        .about("Remove a url from the registry.")
+                        .about("Remove the url as a registry.")
                         .arg(
                             Arg::with_name("url")
                                 .help("The url of the binary registry.")
@@ -409,7 +409,7 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("list")
-                        .about("List all the urls in the registry.")
+                        .about("List all the urls to registries.")
                 )
         )
         .subcommand(

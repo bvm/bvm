@@ -25,7 +25,7 @@ use dprint_cli_core::checksums::{get_sha256_checksum, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
 use plugins::{helpers as plugin_helpers, PluginsManifest, PluginsMut, UrlInstallAction};
-use types::{CommandName, PathOrVersionSelector, VersionSelector};
+use types::{BinaryName, CommandName, PathOrVersionSelector, VersionSelector};
 
 #[tokio::main]
 async fn main() -> Result<(), ErrBox> {
@@ -283,25 +283,26 @@ async fn resolve_url_or_name<TEnvironment: Environment>(
                     binary_names.join("\n  ")
                 );
             }
+            let binary_name = BinaryName::new(url_results[0].owner.clone(), name.name_selector.name.clone());
 
             // now get the url
             let urls = url_results.into_iter().map(|r| r.url).collect();
             let selected_url = if let Some(version) = &name.version_selector {
-                find_url(environment, &urls, |item| version.matches(&item.version)).await?
+                find_url(environment, &urls, &binary_name, |item| version.matches(&item.version)).await?
             } else {
-                find_latest_url(environment, &urls).await?
+                find_latest_url(environment, &urls, &binary_name).await?
             };
             if let Some(selected_url) = selected_url {
                 Ok(selected_url)
             } else {
                 if let Some(version) = &name.version_selector {
                     err!(
-                        "Could not find binary {} matching {} in any registry.",
+                        "Could not find binary '{}' matching '{}' in any registry.",
                         name.name_selector,
                         version
                     )
                 } else {
-                    return err!("Could not find binary {} in any registry.", name.name_selector);
+                    return err!("Could not find binary '{}' in any registry.", name.name_selector);
                 }
             }
         }
@@ -310,19 +311,22 @@ async fn resolve_url_or_name<TEnvironment: Environment>(
     async fn find_url<TEnvironment: Environment>(
         environment: &TEnvironment,
         urls: &Vec<String>,
+        name: &BinaryName,
         is_match: impl Fn(&registry::RegistryVersionInfo) -> bool,
     ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
         let mut best_match: Option<registry::RegistryVersionInfo> = None;
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
-            for version_info in registry_file.versions {
-                if is_match(&version_info) {
-                    if let Some(best_match_val) = &best_match {
-                        if best_match_val.version.cmp(&version_info.version) == Ordering::Less {
+            if let Some(registry_binary) = registry_file.take_binary_with_name(&name) {
+                for version_info in registry_binary.versions {
+                    if is_match(&version_info) {
+                        if let Some(best_match_val) = &best_match {
+                            if best_match_val.version.cmp(&version_info.version) == Ordering::Less {
+                                best_match = Some(version_info);
+                            }
+                        } else {
                             best_match = Some(version_info);
                         }
-                    } else {
-                        best_match = Some(version_info);
                     }
                 }
             }
@@ -334,23 +338,26 @@ async fn resolve_url_or_name<TEnvironment: Environment>(
     async fn find_latest_url<TEnvironment: Environment>(
         environment: &TEnvironment,
         urls: &Vec<String>,
+        name: &BinaryName,
     ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
         let mut latest_pre_release: Option<registry::RegistryVersionInfo> = None;
         let mut latest_release: Option<registry::RegistryVersionInfo> = None;
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url).await?;
-            for item in registry_file.versions {
-                let latest = if item.version.is_prerelease() {
-                    &mut latest_pre_release
-                } else {
-                    &mut latest_release
-                };
-                if let Some(latest) = latest.as_mut() {
-                    if item.version.gt(&latest.version) {
-                        *latest = item;
+            if let Some(registry_binary) = registry_file.take_binary_with_name(&name) {
+                for item in registry_binary.versions {
+                    let latest = if item.version.is_prerelease() {
+                        &mut latest_pre_release
+                    } else {
+                        &mut latest_release
+                    };
+                    if let Some(latest) = latest.as_mut() {
+                        if item.version.gt(&latest.version) {
+                            *latest = item;
+                        }
+                    } else {
+                        *latest = Some(item);
                     }
-                } else {
-                    *latest = Some(item);
                 }
             }
         }
@@ -650,7 +657,39 @@ async fn handle_registry_add_command<TEnvironment: Environment>(
 ) -> Result<(), ErrBox> {
     let mut registry = registry::Registry::load(environment)?;
     let registry_file = registry::download_registry_file(environment, &command.url).await?;
-    registry.add_url(registry_file.get_binary_name(), command.url);
+
+    // clear any previous associations if they exist
+    registry.remove_url(&command.url);
+
+    // add the current ones
+    if registry_file.binaries.is_empty() {
+        environment.log_error("For some reason the registry was empty. Did not associate any binaries with this url.");
+    } else {
+        environment.log("The following binaries were associated with the provided registry:\n");
+        let mut previous_matches: Vec<(BinaryName, Vec<String>)> = Vec::new();
+
+        // todo: display description of binary here
+        for registry_binary in registry_file.binaries {
+            let binary_name = registry_binary.get_binary_name();
+            let current_urls = registry.get_urls(&binary_name.to_selector());
+
+            if current_urls.len() > 0 {
+                previous_matches.push((binary_name.clone(), current_urls.into_iter().map(|u| u.url).collect()));
+            }
+
+            environment.log(&format!("* {} - {}", binary_name, registry_binary.description));
+            registry.add_url(binary_name, command.url.clone());
+        }
+
+        for (binary_name, previous_urls) in previous_matches {
+            environment.log(&format!(
+                "\nWARNING! This may be ok, but the '{}' binary was already associated to the following url(s): {} -- They are now all associated and binary selection will go through each registry to find a matching version.",
+                binary_name,
+                previous_urls.join(", ")
+            ));
+        }
+    }
+
     registry.save(environment)?;
     Ok(())
 }
@@ -1770,15 +1809,44 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* owner/name - Some description."
+            ]
+        );
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap(); // add twice
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* owner/name - Some description."
+            ]
+        );
         run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
             .await
             .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* owner/name - Some description.",
+                "\nWARNING! This may be ok, but the 'owner/name' binary was already associated to the following url(s): http://localhost/registry.json -- They are now all associated and binary selection will go through each registry to find a matching version."
+            ]
+        );
         run_cli(vec!["registry", "add", "http://localhost/registry3.json"], &environment)
             .await
             .unwrap();
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* owner2/name2 - Some description."
+            ]
+        );
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
         let logged_messages = environment.take_logged_messages();
         assert_eq!(logged_messages, ["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
@@ -1826,6 +1894,7 @@ mod test {
         let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
         let checksum2 = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.0.1");
         let checksum3 = builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "1.1.0");
+        let checksum4 = builder.create_remote_zip_package("http://localhost/binary.json", "other", "name", "1.0.0");
         builder.create_remote_registry_file(
             "http://localhost/registry.json",
             "owner",
@@ -1853,6 +1922,14 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* owner/name - Some description."
+            ]
+        );
 
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
@@ -1905,6 +1982,64 @@ mod test {
                 "Installed. Run `bvm use name 1.0.1` to use it on the path as 'name'.",
             ]
         );
+
+        // clear up the state
+        run_cli(vec!["uninstall", "name", "1.1.0"], &environment).await.unwrap();
+        run_cli(vec!["uninstall", "name", "1.0.1"], &environment).await.unwrap();
+        environment.clear_logs();
+
+        // now update the registry file to have a different binary
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_registry_file(
+            "http://localhost/registry.json",
+            "other",
+            "name",
+            vec![registry::RegistryVersionInfo {
+                version: "1.0.0".into(),
+                checksum: checksum4,
+                path: "http://localhost/binary.json".to_string(),
+            }],
+        );
+        let new_file_bytes = builder
+            .build()
+            .download_file(&"http://localhost/registry.json")
+            .await
+            .unwrap();
+        environment.add_remote_file(&"http://localhost/registry.json", new_file_bytes);
+
+        // attempt to install the previous binary by name only and it should not exist (since we haven't reassociated the registry with the new name)
+        let err_message = run_cli(vec!["install", "name", "1.0.0"], &environment)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(
+            err_message.to_string(),
+            "Could not find binary 'name' matching '1.0.0' in any registry."
+        );
+
+        // now reassociate
+        run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            environment.take_logged_messages(),
+            vec![
+                "The following binaries were associated with the provided registry:\n",
+                "* other/name - Some description."
+            ]
+        );
+
+        // and install
+        run_cli(vec!["install", "name", "1"], &environment).await.unwrap();
+        let logged_errors = environment.take_logged_errors();
+        assert_eq!(
+            logged_errors,
+            [
+                "Extracting archive for other/name 1.0.0...",
+                "Installed. Run `bvm use other/name 1.0.0` to use it on the path as 'name'.",
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1947,6 +2082,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
@@ -1982,6 +2118,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
@@ -2007,6 +2144,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
 
         let err = run_cli(vec!["install", "name", "1.0.0"], &environment)
             .await
@@ -2068,6 +2206,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
 
         let error = run_cli(vec!["install", "name", "1.0.0"], &environment)
             .await
@@ -2406,6 +2545,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
 
         run_cli(vec!["add", "owner/name", "1.0.0"], &environment).await.unwrap();
         let logged_errors = environment.take_logged_errors();
@@ -2468,7 +2608,7 @@ mod test {
         let err = run_cli(vec!["add", "other", "~1.1"], &environment).await.err().unwrap();
         assert_eq!(
             err.to_string(),
-            "Could not find binary other matching ~1.1 in any registry."
+            "Could not find binary 'other' matching '~1.1' in any registry."
         );
     }
 
@@ -2498,6 +2638,7 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
+        environment.clear_logs();
         run_cli(vec!["add", "name", "1"], &environment).await.unwrap();
 
         // should replace it

@@ -96,10 +96,12 @@ impl EnvironmentBuilder {
         let file_text = format!(
             r#"{{
     "schemaVersion": 1,
-    "owner": "{}",
-    "name": "{}",
-    "description": "Some description.",
-    "versions": [{}]
+    "binaries": [{{
+        "owner": "{}",
+        "name": "{}",
+        "description": "Some description.",
+        "versions": [{}]
+    }}]
 }}"#,
             owner,
             name,
