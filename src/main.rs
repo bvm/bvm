@@ -665,7 +665,7 @@ async fn handle_registry_add_command<TEnvironment: Environment>(
     if registry_file.binaries.is_empty() {
         environment.log_error("For some reason the registry was empty. Did not associate any binaries with this url.");
     } else {
-        environment.log("The following binaries were associated with the provided registry:\n");
+        environment.log("Associated binaries:");
         let mut previous_matches: Vec<(BinaryName, Vec<String>)> = Vec::new();
 
         // todo: display description of binary here
@@ -1811,20 +1811,14 @@ mod test {
             .unwrap();
         assert_eq!(
             environment.take_logged_messages(),
-            vec![
-                "The following binaries were associated with the provided registry:\n",
-                "* owner/name - Some description."
-            ]
+            vec!["Associated binaries:", "* owner/name - Some description."]
         );
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap(); // add twice
         assert_eq!(
             environment.take_logged_messages(),
-            vec![
-                "The following binaries were associated with the provided registry:\n",
-                "* owner/name - Some description."
-            ]
+            vec!["Associated binaries:", "* owner/name - Some description."]
         );
         run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
             .await
@@ -1832,7 +1826,7 @@ mod test {
         assert_eq!(
             environment.take_logged_messages(),
             vec![
-                "The following binaries were associated with the provided registry:\n",
+                "Associated binaries:",
                 "* owner/name - Some description.",
                 "\nWARNING! This may be ok, but the 'owner/name' binary was already associated to the following url(s): http://localhost/registry.json -- They are now all associated and binary selection will go through each registry to find a matching version."
             ]
@@ -1842,10 +1836,7 @@ mod test {
             .unwrap();
         assert_eq!(
             environment.take_logged_messages(),
-            vec![
-                "The following binaries were associated with the provided registry:\n",
-                "* owner2/name2 - Some description."
-            ]
+            vec!["Associated binaries:", "* owner2/name2 - Some description."]
         );
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
         let logged_messages = environment.take_logged_messages();
@@ -1925,10 +1916,7 @@ mod test {
 
         assert_eq!(
             environment.take_logged_messages(),
-            vec![
-                "The following binaries were associated with the provided registry:\n",
-                "* owner/name - Some description."
-            ]
+            vec!["Associated binaries:", "* owner/name - Some description."]
         );
 
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
@@ -2024,10 +2012,7 @@ mod test {
 
         assert_eq!(
             environment.take_logged_messages(),
-            vec![
-                "The following binaries were associated with the provided registry:\n",
-                "* other/name - Some description."
-            ]
+            vec!["Associated binaries:", "* other/name - Some description."]
         );
 
         // and install

@@ -20,8 +20,6 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 
 ## Install
 
-NOTICE: Don't bother trying this yet as it likely won't work.
-
 Install by running a script based on your environment:
 
 - Shell (Mac, Linux, WSL): `curl -fsSL https://bvm.land/install.sh | sh`
