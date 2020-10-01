@@ -11,5 +11,5 @@ else
     export PATH="$bvm_binary_paths:$PATH"
   fi
 
-  export PATH="$BVM_INSTALL_DIR/bin:$BVM_DATA_DIR/shims:$PATH"
+  export PATH="$BVM_INSTALL_DIR/bin:$BVM_INSTALL_DIR/shims:$PATH"
 fi
