@@ -1,5 +1,7 @@
 @echo off
 
+set bvm_exit_code=0
+
 if "%1" == "exec" GOTO bvmexec
 
 bvm-bin %*
@@ -83,5 +85,5 @@ set bvm_exec_exe_path=
 set bvm_exec_env_path=
 
 REM How to clear this before exit?
-if %bvm_exit_code% GEQ 1 EXIT /B %bvm_exit_code%
+if %bvm_exit_code% GTR 0 EXIT /B %bvm_exit_code%
 set bvm_exit_code=

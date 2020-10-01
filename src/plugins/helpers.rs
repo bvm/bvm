@@ -58,7 +58,7 @@ pub fn get_binary_with_name_and_version<'a>(
                 "Could not find binary '{}' that matched version '{}'\n\nInstalled versions:\n  {}",
                 name_selector,
                 version_selector,
-                display_binaries_versions(binaries).join("\n "),
+                display_binaries_versions(binaries).join("\n  "),
             )
         }
     } else if !get_have_same_owner(&binaries) {
@@ -156,7 +156,7 @@ pub fn get_global_binary_file_name(
                     err!(
                         "No binary is set on the path for command '{}'. Run `bvm use {0} <version>` to set a global version.\n\nInstalled versions:\n  {}",
                         command_name,
-                        display_binaries_versions(binaries).join("\n "),
+                        display_binaries_versions(binaries).join("\n  "),
                     )
                 }
             }
