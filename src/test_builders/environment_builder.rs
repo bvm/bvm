@@ -147,10 +147,11 @@ impl PluginBuilder {
             "set a download type before building"
         );
         let file_text = self.file.to_json_text();
-        let checksum = dprint_cli_core::checksums::get_sha256_checksum(file_text.as_bytes());
+        let bytes = file_text.into_bytes();
+        let checksum = dprint_cli_core::checksums::get_sha256_checksum(&bytes);
         self.environment.add_remote_file(
             self.url.as_ref().expect("Need to set a url before building."),
-            file_text.into_bytes(),
+            bytes,
         );
         checksum
     }
