@@ -694,6 +694,7 @@ fn handle_shell_command<TEnvironment: Environment>(
         ShellSubCommand::GetExecCommandPath(command) => {
             handle_shell_get_exec_command_path_command(environment, command)
         }
+        ShellSubCommand::HasCommand(command) => handle_shell_has_command(environment, command),
         #[cfg(target_os = "windows")]
         ShellSubCommand::WindowsInstall(command) => handle_shell_windows_install_command(environment, command),
         #[cfg(target_os = "windows")]
@@ -813,6 +814,29 @@ fn handle_shell_get_exec_command_path_command<TEnvironment: Environment>(
     };
     environment.log(&exec_path.to_string_lossy());
 
+    Ok(())
+}
+
+fn handle_shell_has_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellHasCommandCommand,
+) -> Result<(), ErrBox> {
+    let command_name = match command.command_name {
+        Some(command_name) => command_name,
+        None => {
+            environment.log("false");
+            return Ok(());
+        }
+    };
+    let plugin_manifest = PluginsManifest::load(environment);
+    let command_names = plugin_helpers::get_command_names_for_name_and_path_or_version_selector(
+        &plugin_manifest,
+        &command.name_selector,
+        &command.version_selector,
+    )?;
+
+    let has_command = command_names.iter().any(|c| c == &command_name);
+    environment.log(&format!("{}", has_command));
     Ok(())
 }
 
@@ -943,6 +967,19 @@ mod test {
             .unwrap();
             let logged_messages = $environment.take_logged_messages();
             assert_eq!(logged_messages, vec![$binary_path.clone()]);
+        };
+    }
+
+    macro_rules! assert_has_command {
+        ($environment:expr, $name:expr, $version:expr, $command:expr, $result:expr) => {
+            run_cli(
+                vec!["hidden-shell", "has-command", $name, $version, $command],
+                &$environment,
+            )
+            .await
+            .unwrap();
+            let logged_messages = $environment.take_logged_messages();
+            assert_eq!(logged_messages, vec![$result.to_string()]);
         };
     }
 
@@ -2948,7 +2985,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn get_exec_exe_path_gets() {
+    async fn get_exec_command_path_and_has_command() {
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
         let third_binary_path = get_binary_path("owner", "name", "2.1.0");
@@ -2988,6 +3025,21 @@ mod test {
             err_message.to_string(),
             "Could not find a matching command. Expected one of the following: other, other-second"
         );
+
+        // test the has-command command
+        assert_has_command!(environment, "name", "1", "name", true);
+        assert_has_command!(environment, "name", "1", "other", false);
+        assert_has_command!(environment, "name", "1", "-v", false);
+        assert_has_command!(environment, "other", "*", "other", true);
+        assert_has_command!(environment, "other", "*", "other-second", true);
+        assert_has_command!(environment, "other", "*", "other-second2", false);
+
+        // check when missing last argument
+        run_cli(vec!["hidden-shell", "has-command", "name", "1"], &environment)
+            .await
+            .unwrap();
+        let logged_messages = environment.take_logged_messages();
+        assert_eq!(logged_messages, vec!["false"]);
     }
 
     #[cfg(target_os = "windows")]

@@ -30,11 +30,21 @@ set bvm_exec_version=%3
 set bvm_exec_command=%4
 set bvm_exec_old_env_path=%PATH%
 
+REM Get if it has the command name
+FOR /F "tokens=*" %%F IN ('bvm-bin hidden-shell has-command "%bvm_exec_name%" "%bvm_exec_version%" "%bvm_exec_command%"') DO (
+  SET bvm_exec_has_command=%%F
+)
+
+REM Seems there is no way to get exit code and get output in batch, so just check if it's empty
+IF [%bvm_exec_has_command%] == [] GOTO end
+
+if "%bvm_exec_has_command%" == "false" SET bvm_exec_command="%bvm_exec_name%"
+
 REM Remove the already captured args
 shift
 shift
 shift
-shift
+if "%bvm_exec_has_command%" == "true" shift
 
 REM Now store the remaining args
 set bvm_exec_args=%1
@@ -49,8 +59,6 @@ REM Get the path of the executable
 FOR /F "tokens=*" %%F IN ('bvm-bin hidden-shell get-exec-command-path "%bvm_exec_name%" "%bvm_exec_version%" "%bvm_exec_command%"') DO (
   SET bvm_exec_exe_path=%%F
 )
-
-REM Seems there is no way to get exit code and get output in batch, so just check if it's empty
 IF [%bvm_exec_exe_path%] == [] GOTO end
 
 REM Get the new env path
@@ -70,6 +78,7 @@ set bvm_exec_name=
 set bvm_exec_version=
 set bvm_exec_command=
 set bvm_exec_old_path=
+set bvm_exec_has_command=
 set bvm_exec_exe_path=
 set bvm_exec_env_path=
 

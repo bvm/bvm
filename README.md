@@ -29,7 +29,7 @@ Install by running a script based on your environment:
 
 ## Global Commands
 
-### `bvm install [url]`
+### `bvm install <url>`
 
 Installs a binary at the specified manifest file.
 
@@ -45,7 +45,7 @@ bvm install --use https://bvm.land/deno/1.3.1.json
 - Provide the `--use` flag to force using this binary on the path (happens automatically if nothing is on the path).
 - Provide the `--force` flag to force an install even if already installed.
 
-### `bvm uninstall [binary-name or owner-name/binary-name] [version]`
+### `bvm uninstall <name-selector> <version>`
 
 Uninstalls the specified binary version.
 
@@ -69,7 +69,7 @@ dprint/dprint 9.0.1
 nodejs/node 14.9.0
 ```
 
-### `bvm use [binary-name or owner-name/binary-name] [version-selector]`
+### `bvm use <name-selector> <version-selector>`
 
 Uses the specified binary name and version globally.
 
@@ -86,7 +86,7 @@ bvm use deno ^1.1
 bvm use deno ~1.1
 ```
 
-### `bvm use [binary-name or owner-name/binary-name] path`
+### `bvm use <name-selector> path`
 
 Uses the version of the binary that's installed on the path if it exists.
 
@@ -95,19 +95,20 @@ Uses the version of the binary that's installed on the path if it exists.
 bvm use deno path
 ```
 
-### `bvm exec [binary-name or owner-name/binary-name] [version-selector] [command-name] [...args]`
+### `bvm exec <name-selector> <version-selector> [command-name] [...args]`
 
-Executes the version and command of the provided binary.
+Executes the version of the matching binary.
 
 ```
 # Examples
-bvm exec deno 1.3.1 deno -V
+bvm exec deno 1.3.1 -V
+bvm exec deno path -v
+bvm exec node ^12.1 -v
 bvm exec node 14 npm -v
-bvm exec nodejs/node ~8.2 node -v
-bvm exec node path npm -v
+bvm exec nodejs/node ~8.2 -v
 ```
 
-### `bvm resolve [command-name]`
+### `bvm resolve <command-name>`
 
 Resolves the executable path of the specified command name based on the current working directory.
 
@@ -127,7 +128,7 @@ Clears any cached urls.
 
 Adding a registry allows you to more easily install copies of a binary without dealing with urls.
 
-### `bvm registry add [url]`
+### `bvm registry add <url>`
 
 Adds or reassociates the registry at the specified url to the local CLI.
 
@@ -137,7 +138,7 @@ bvm registry add https://bvm.land/deno/registry.json
 bvm registry add https://bvm.land/node/registry.json
 ```
 
-### `bvm registry remove [url]`
+### `bvm registry remove <url>`
 
 Removes the registry at the specified url from the local CLI.
 
@@ -157,7 +158,7 @@ denoland/deno - https://bvm.land/deno/registry.json
 nodejs/node - https://bvm.land/node/registry.json
 ```
 
-### `bvm install [binary-name or owner-name/binary-name]`
+### `bvm install <name-selector>`
 
 Installs the latest non-pre-release version of the specified binary based on the CLI's registries.
 
@@ -167,7 +168,7 @@ bvm install deno
 bvm install --use node
 ```
 
-### `bvm install [binary-name or owner-name/binary-name] [version-selector]`
+### `bvm install <name-selector> <version-selector>`
 
 Installs the specified binary and version based on the first matching version in the CLI's registries.
 

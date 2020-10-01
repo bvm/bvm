@@ -83,6 +83,7 @@ pub enum ShellSubCommand {
     GetNewPath(ShellGetNewPathCommand),
     GetExecEnvPath(ShellGetExecEnvPathCommand),
     GetExecCommandPath(ShellGetExecCommandPathCommand),
+    HasCommand(ShellHasCommandCommand),
     ClearPendingChanges,
     GetPaths,
     #[cfg(target_os = "windows")]
@@ -107,6 +108,12 @@ pub struct ShellGetExecCommandPathCommand {
     pub command_name: CommandName,
 }
 
+pub struct ShellHasCommandCommand {
+    pub name_selector: NameSelector,
+    pub version_selector: PathOrVersionSelector,
+    pub command_name: Option<CommandName>,
+}
+
 #[cfg(target_os = "windows")]
 pub struct ShellWindowsInstallCommand {
     pub install_path: String,
@@ -118,6 +125,21 @@ pub struct ShellWindowsUninstallCommand {
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
+    // need to do this to bypass
+    if args.get(1).map(|s| s.as_str()) == Some("hidden-shell") && args.get(2).map(|s| s.as_str()) == Some("has-command")
+    {
+        return Ok(CliArgs {
+            sub_command: SubCommand::Shell(ShellSubCommand::HasCommand(ShellHasCommandCommand {
+                name_selector: parse_name_selector(args.get(3).map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(&args.get(4).map(String::from).unwrap())?,
+                command_name: args
+                    .get(5)
+                    .map(String::from)
+                    .map(|value| CommandName::from_string(value)),
+            })),
+        });
+    }
+
     let mut cli_parser = create_cli_parser();
     let matches = match cli_parser.get_matches_from_safe_borrow(args) {
         Ok(result) => result,
@@ -239,14 +261,18 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             let matches = matches.subcommand_matches("get-exec-env-path").unwrap();
             SubCommand::Shell(ShellSubCommand::GetExecEnvPath(ShellGetExecEnvPathCommand {
                 name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(&matches.value_of("version").map(String::from).unwrap())?,
+                version_selector: PathOrVersionSelector::parse(
+                    &matches.value_of("version").map(String::from).unwrap(),
+                )?,
                 current_sys_path: matches.value_of("current_sys_path").map(String::from).unwrap(),
             }))
         } else if matches.is_present("get-exec-command-path") {
             let matches = matches.subcommand_matches("get-exec-command-path").unwrap();
             SubCommand::Shell(ShellSubCommand::GetExecCommandPath(ShellGetExecCommandPathCommand {
                 name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(&matches.value_of("version").map(String::from).unwrap())?,
+                version_selector: PathOrVersionSelector::parse(
+                    &matches.value_of("version").map(String::from).unwrap(),
+                )?,
                 command_name: CommandName::from_string(matches.value_of("command_name").map(String::from).unwrap()),
             }))
         } else {
