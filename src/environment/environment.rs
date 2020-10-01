@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 #[async_trait]
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn is_real(&self) -> bool;
+    fn ignore_shell_commands(&self);
     fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox>;
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox>;
     fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox>;
@@ -28,9 +29,9 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
         total_size: usize,
     ) -> Result<TResult, ErrBox>;
     /// Data that is specific to a user on a local machine.
-    fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox>;
+    fn get_local_user_data_dir(&self) -> PathBuf;
     /// Data that is specific to a user across machines.
-    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox>;
+    fn get_user_data_dir(&self) -> PathBuf;
     fn get_time_secs(&self) -> u64;
     /// Gets the directories in the path environment variable.
     fn get_system_path_dirs(&self) -> Vec<PathBuf>;

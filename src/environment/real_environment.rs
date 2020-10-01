@@ -15,15 +15,22 @@ pub struct RealEnvironment {
     output_lock: Arc<Mutex<u8>>,
     progress_bars: Arc<ProgressBars>,
     is_verbose: bool,
+    ignore_shell_commands: Arc<Mutex<bool>>,
 }
 
 impl RealEnvironment {
-    pub fn new(is_verbose: bool) -> RealEnvironment {
-        RealEnvironment {
+    pub fn new(is_verbose: bool) -> Result<RealEnvironment, ErrBox> {
+        let environment = RealEnvironment {
             output_lock: Arc::new(Mutex::new(0)),
             progress_bars: Arc::new(ProgressBars::new()),
             is_verbose,
-        }
+            ignore_shell_commands: Arc::new(Mutex::new(false)),
+        };
+
+        environment.create_dir_all(&environment.get_local_user_data_dir())?;
+        environment.create_dir_all(&environment.get_user_data_dir())?;
+
+        Ok(environment)
     }
 }
 
@@ -31,6 +38,11 @@ impl RealEnvironment {
 impl Environment for RealEnvironment {
     fn is_real(&self) -> bool {
         true
+    }
+
+    fn ignore_shell_commands(&self) {
+        let mut ignore_shell_commands = self.ignore_shell_commands.lock().unwrap();
+        *ignore_shell_commands = true;
     }
 
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
@@ -112,29 +124,25 @@ impl Environment for RealEnvironment {
         log_action_with_progress(&self.progress_bars, message, action, total_size).await
     }
 
-    fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+    fn get_local_user_data_dir(&self) -> PathBuf {
         log_verbose!(self, "Getting local user data directory.");
-        let bvm_dir = if cfg!(target_os = "windows") {
+        if cfg!(target_os = "windows") {
             // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
-            let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get local data dir"))?;
+            let dir = dirs::data_local_dir().expect("Could not get local data dir");
             dir.join("bvm")
         } else {
-            get_home_dir()?
-        };
-        self.create_dir_all(&bvm_dir)?;
-        Ok(bvm_dir)
+            get_home_dir()
+        }
     }
 
-    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+    fn get_user_data_dir(&self) -> PathBuf {
         log_verbose!(self, "Getting user data directory.");
-        let bvm_dir = if cfg!(target_os = "windows") {
-            let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get data dir"))?;
+        if cfg!(target_os = "windows") {
+            let dir = dirs::data_dir().expect("Could not get data dir");
             dir.join("bvm")
         } else {
-            get_home_dir()?
-        };
-        self.create_dir_all(&bvm_dir)?;
-        Ok(bvm_dir)
+            get_home_dir()
+        }
     }
 
     fn get_system_path_dirs(&self) -> Vec<PathBuf> {
@@ -206,6 +214,10 @@ impl Environment for RealEnvironment {
     }
 
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox> {
+        if *self.ignore_shell_commands.lock().unwrap() {
+            return Ok(());
+        }
+
         #[cfg(unix)]
         return finalize_and_run_command(cwd, Command::new("/bin/sh").arg("-c").arg(command));
 
@@ -245,7 +257,7 @@ impl Environment for RealEnvironment {
     }
 }
 
-fn get_home_dir() -> Result<PathBuf, ErrBox> {
-    let dir = dirs::home_dir().ok_or_else(|| err_obj!("Could not get home data dir"))?;
-    Ok(dir.join(".bvm"))
+fn get_home_dir() -> PathBuf {
+    let dir = dirs::home_dir().expect("Could not get home data dir");
+    dir.join(".bvm")
 }

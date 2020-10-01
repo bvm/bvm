@@ -3,7 +3,7 @@ use url::Url;
 use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 
-use super::types::{NameSelector, PathOrVersionSelector, Version, VersionSelector};
+use super::types::{CommandName, NameSelector, PathOrVersionSelector, Version, VersionSelector};
 
 pub struct CliArgs {
     pub sub_command: SubCommand,
@@ -32,7 +32,7 @@ pub struct ResolveCommand {
 
 pub struct UseBinaryCommand {
     pub name_selector: NameSelector,
-    pub version: PathOrVersionSelector,
+    pub version_selector: PathOrVersionSelector,
 }
 
 pub struct InstallCommand {
@@ -81,6 +81,8 @@ pub struct AddCommand {
 
 pub enum ShellSubCommand {
     GetNewPath(ShellGetNewPathCommand),
+    GetExecEnvPath(ShellGetExecEnvPathCommand),
+    GetExecCommandPath(ShellGetExecCommandPathCommand),
     ClearPendingChanges,
     GetPaths,
     #[cfg(target_os = "windows")]
@@ -91,6 +93,18 @@ pub enum ShellSubCommand {
 
 pub struct ShellGetNewPathCommand {
     pub current_sys_path: String,
+}
+
+pub struct ShellGetExecEnvPathCommand {
+    pub name_selector: NameSelector,
+    pub version_selector: PathOrVersionSelector,
+    pub current_sys_path: String,
+}
+
+pub struct ShellGetExecCommandPathCommand {
+    pub name_selector: NameSelector,
+    pub version_selector: PathOrVersionSelector,
+    pub command_name: CommandName,
 }
 
 #[cfg(target_os = "windows")]
@@ -154,7 +168,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             let name_selector = parse_name_selector(binary_name);
             SubCommand::UseBinary(UseBinaryCommand {
                 name_selector,
-                version: PathOrVersionSelector::parse(
+                version_selector: PathOrVersionSelector::parse(
                     &use_matches
                         .value_of("version")
                         .map(String::from)
@@ -215,12 +229,26 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         if matches.is_present("get-new-path") {
             let matches = matches.subcommand_matches("get-new-path").unwrap();
             SubCommand::Shell(ShellSubCommand::GetNewPath(ShellGetNewPathCommand {
-                current_sys_path: matches.value_of("current-sys-path").map(String::from).unwrap(),
+                current_sys_path: matches.value_of("current_sys_path").map(String::from).unwrap(),
             }))
         } else if matches.is_present("clear-pending-changes") {
             SubCommand::Shell(ShellSubCommand::ClearPendingChanges)
         } else if matches.is_present("get-paths") {
             SubCommand::Shell(ShellSubCommand::GetPaths)
+        } else if matches.is_present("get-exec-env-path") {
+            let matches = matches.subcommand_matches("get-exec-env-path").unwrap();
+            SubCommand::Shell(ShellSubCommand::GetExecEnvPath(ShellGetExecEnvPathCommand {
+                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(&matches.value_of("version").map(String::from).unwrap())?,
+                current_sys_path: matches.value_of("current_sys_path").map(String::from).unwrap(),
+            }))
+        } else if matches.is_present("get-exec-command-path") {
+            let matches = matches.subcommand_matches("get-exec-command-path").unwrap();
+            SubCommand::Shell(ShellSubCommand::GetExecCommandPath(ShellGetExecCommandPathCommand {
+                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(&matches.value_of("version").map(String::from).unwrap())?,
+                command_name: CommandName::from_string(matches.value_of("command_name").map(String::from).unwrap()),
+            }))
         } else {
             #[cfg(target_os = "windows")]
             if matches.is_present("windows-install") {
@@ -413,33 +441,12 @@ ARGS:
                 )
         )
         .subcommand(
-            SubCommand::with_name("util")
-                .about("Commands that can be used for setting up the system.")
-                .setting(AppSettings::SubcommandRequiredElseHelp)
-                .subcommand(
-                    SubCommand::with_name("command-exists")
-                        .about("Exits with code 0 when the provided command is on the path or locally installed in bvm and 1 when not.")
-                        .arg(
-                            Arg::with_name("full-binary-name")
-                                .help("The full binary name (owner/name).")
-                                .takes_value(true)
-                                .required(true)
-                        )
-                        .arg(
-                            Arg::with_name("command")
-                                .help("The name of the command.")
-                                .takes_value(true)
-                                .required(true)
-                        )
-                )
-        )
-        .subcommand(
             SubCommand::with_name("hidden-shell")
                 .setting(AppSettings::Hidden)
                 .subcommand(
                     SubCommand::with_name("get-new-path")
                         .arg(
-                            Arg::with_name("current-sys-path")
+                            Arg::with_name("current_sys_path")
                                 .takes_value(true)
                                 .required(true)
                         )
@@ -449,6 +456,42 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("get-paths")
+                )
+                .subcommand(
+                    SubCommand::with_name("get-exec-env-path")
+                        .arg(
+                            Arg::with_name("binary_name")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("version")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("current_sys_path")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                )
+                .subcommand(
+                    SubCommand::with_name("get-exec-command-path")
+                        .arg(
+                            Arg::with_name("binary_name")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("version")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("command_name")
+                                .takes_value(true)
+                                .required(true)
+                        )
                 )
                 .subcommand(
                     SubCommand::with_name("windows-install")

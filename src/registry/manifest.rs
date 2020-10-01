@@ -44,22 +44,22 @@ impl Registry {
         }
     }
 
-    pub fn load(environment: &impl Environment) -> Result<Registry, ErrBox> {
-        let file_path = get_registry_file_path(environment)?;
+    pub fn load(environment: &impl Environment) -> Registry {
+        let file_path = get_registry_file_path(environment);
         match environment.read_file_text(&file_path) {
             Ok(text) => match serde_json::from_str(&text) {
-                Ok(manifest) => Ok(manifest),
+                Ok(manifest) => manifest,
                 Err(err) => {
                     environment.log_error(&format!("Error deserializing registry: {}", err));
-                    Ok(Registry::new())
+                    Registry::new()
                 }
             },
-            Err(_) => Ok(Registry::new()),
+            Err(_) => Registry::new(),
         }
     }
 
     pub fn save(&self, environment: &impl Environment) -> Result<(), ErrBox> {
-        let file_path = get_registry_file_path(environment)?;
+        let file_path = get_registry_file_path(environment);
         let serialized_manifest = serde_json::to_string(&self)?;
         environment.write_file_text(&file_path, &serialized_manifest)?;
         Ok(())
@@ -128,7 +128,7 @@ impl Registry {
     }
 }
 
-fn get_registry_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_user_data_dir()?; // share across domains
-    Ok(user_data_dir.join("registry.json"))
+fn get_registry_file_path(environment: &impl Environment) -> PathBuf {
+    let user_data_dir = environment.get_user_data_dir(); // share across domains
+    user_data_dir.join("registry.json")
 }

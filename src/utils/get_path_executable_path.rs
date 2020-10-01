@@ -1,4 +1,3 @@
-use dprint_cli_core::types::ErrBox;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
@@ -7,8 +6,8 @@ use crate::types::CommandName;
 pub fn get_path_executable_path(
     environment: &impl Environment,
     command_name: &CommandName,
-) -> Result<Option<PathBuf>, ErrBox> {
-    let shim_dir = super::get_shim_dir(environment)?;
+) -> Option<PathBuf> {
+    let shim_dir = super::get_shim_dir(environment);
     let command_name = command_name.as_str().to_lowercase();
     let executable_file_names = get_executable_file_names(&command_name);
 
@@ -19,12 +18,12 @@ pub fn get_path_executable_path(
         for executable_file_name in executable_file_names.iter() {
             let final_path = path_dir.join(executable_file_name);
             if environment.path_exists(&final_path) {
-                return Ok(Some(final_path));
+                return Some(final_path);
             }
         }
     }
 
-    Ok(None)
+    None
 }
 
 fn get_executable_file_names(command_name: &str) -> Vec<String> {

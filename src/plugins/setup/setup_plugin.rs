@@ -117,7 +117,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
-    let plugin_cache_dir_path = get_plugin_dir(environment, &plugin_file.get_binary_name(), &plugin_file.version())?;
+    let plugin_cache_dir_path = get_plugin_dir(environment, &plugin_file.get_binary_name(), &plugin_file.version());
     let _ignore = environment.remove_dir_all(&plugin_cache_dir_path);
     environment.create_dir_all(&plugin_cache_dir_path)?;
 

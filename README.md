@@ -45,7 +45,31 @@ bvm install --use https://bvm.land/deno/1.3.1.json
 - Provide the `--use` flag to force using this binary on the path (happens automatically if nothing is on the path).
 - Provide the `--force` flag to force an install even if already installed.
 
-### `bvm use [binary-name or owner-name/binary-name] [version]`
+### `bvm uninstall [binary-name or owner-name/binary-name] [version]`
+
+Uninstalls the specified binary version.
+
+```
+# Examples
+bvm uninstall deno 1.2.0
+bvm uninstall denoland/deno 1.3.2
+bvm uninstall name-stealer/deno 2.0.0
+```
+
+### `bvm list`
+
+Displays the installed binaries.
+
+Example output:
+
+```
+denoland/deno 1.2.0
+denoland/deno 1.3.2
+dprint/dprint 9.0.1
+nodejs/node 14.9.0
+```
+
+### `bvm use [binary-name or owner-name/binary-name] [version-selector]`
 
 Uses the specified binary name and version globally.
 
@@ -71,6 +95,18 @@ Uses the version of the binary that's installed on the path if it exists.
 bvm use deno path
 ```
 
+### `bvm exec [binary-name or owner-name/binary-name] [version-selector] [command-name] [...args]`
+
+Executes the version and command of the provided binary.
+
+```
+# Examples
+bvm exec deno 1.3.1 deno -V
+bvm exec node 14 npm -v
+bvm exec nodejs/node ~8.2 node -v
+bvm exec node path npm -v
+```
+
 ### `bvm resolve [command-name]`
 
 Resolves the executable path of the specified command name based on the current working directory.
@@ -80,31 +116,7 @@ This command is used by the created shell/batch files (shims) to tell how to res
 ```
 # Example
 bvm resolve deno
-# on windows, outputs: C:\Users\<user>\AppData\Local\bvm\bvm\binaries\denoland\deno\1.3.1\deno.exe
-```
-
-### `bvm uninstall [binary-name or owner-name/binary-name] [version]`
-
-Uninstalls the specified binary version.
-
-```
-# Examples
-bvm uninstall deno 1.2.0
-bvm uninstall denoland/deno 1.3.2
-bvm uninstall name-stealer/deno 2.0.0
-```
-
-### `bvm list`
-
-Displays the installed binaries.
-
-Example output:
-
-```
-denoland/deno 1.2.0
-denoland/deno 1.3.2
-dprint/dprint 9.0.1
-nodejs/node 14.9.0
+# on windows, outputs something like: C:\Users\YourUserName\AppData\Local\bvm\binaries\denoland\deno\1.3.1\deno.exe
 ```
 
 ### `bvm clear-url-cache`
@@ -155,7 +167,7 @@ bvm install deno
 bvm install --use node
 ```
 
-### `bvm install [binary-name or owner-name/binary-name] [version]`
+### `bvm install [binary-name or owner-name/binary-name] [version-selector]`
 
 Installs the specified binary and version based on the first matching version in the CLI's registries.
 
@@ -236,7 +248,7 @@ Configuration file would then contain:
 }
 ```
 
-### `bvm add [binary-name or owner-name/binary-name] [version]`
+### `bvm add [binary-name or owner-name/binary-name] [version-selector]`
 
 Similar to above with a url, but adds the specified binary from an added registry.
 

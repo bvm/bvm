@@ -1,4 +1,3 @@
-use dprint_cli_core::types::ErrBox;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
@@ -8,9 +7,9 @@ pub fn get_plugin_dir(
     environment: &impl Environment,
     binary_name: &BinaryName,
     version: &Version,
-) -> Result<PathBuf, ErrBox> {
-    let local_data_dir = environment.get_local_user_data_dir()?; // do not share across domains
-    Ok(local_data_dir.join(get_plugin_dir_relative_local_user_data(binary_name, version)))
+) -> PathBuf {
+    let local_data_dir = environment.get_local_user_data_dir(); // do not share across domains
+    local_data_dir.join(get_plugin_dir_relative_local_user_data(binary_name, version))
 }
 
 pub fn get_plugin_dir_relative_local_user_data(binary_name: &BinaryName, version: &Version) -> PathBuf {

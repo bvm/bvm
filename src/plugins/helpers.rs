@@ -1,11 +1,12 @@
 use dprint_cli_core::types::ErrBox;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use super::{get_plugin_dir, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
 use crate::configuration::ConfigFileBinary;
-use crate::environment::Environment;
-use crate::types::{CommandName, NameSelector, VersionSelector};
+use crate::environment::{Environment, SYS_PATH_DELIMITER};
+use crate::types::{CommandName, NameSelector, PathOrVersionSelector, VersionSelector};
 use crate::utils;
 
 pub fn get_installed_binary_if_associated_config_file_binary<'a>(
@@ -127,7 +128,7 @@ pub fn get_global_binary_file_name(
     match plugin_manifest.get_global_binary_location(command_name) {
         Some(location) => match location {
             GlobalBinaryLocation::Path => {
-                if let Some(path_executable_path) = utils::get_path_executable_path(environment, command_name)? {
+                if let Some(path_executable_path) = utils::get_path_executable_path(environment, command_name) {
                     Ok(path_executable_path)
                 } else {
                     err!("Binary '{}' is configured to use the executable on the path, but only the bvm version exists on the path. Run `bvm use {0} <some other version>` to select a version to run.", command_name)
@@ -135,14 +136,9 @@ pub fn get_global_binary_file_name(
             }
             GlobalBinaryLocation::Bvm(identifier) => {
                 if let Some(item) = plugin_manifest.get_binary(&identifier) {
-                    let plugin_cache_dir = get_plugin_dir(environment, &item.name, &item.version)?;
-                    let command = item
-                        .commands
-                        .iter()
-                        .filter(|c| &c.name == command_name)
-                        .next()
-                        .expect("Expected to have command.");
-                    Ok(plugin_cache_dir.join(&command.path))
+                    let command_exe_path = get_binary_command_exe_path(environment, &item, command_name)
+                        .expect("Expected to have a command.");
+                    Ok(command_exe_path)
                 } else {
                     err!("Should have found executable path for global binary. Report this as a bug and update the version used by running `bvm use {} <some other version>`", command_name)
                 }
@@ -150,7 +146,7 @@ pub fn get_global_binary_file_name(
         },
         None => {
             // use the executable on the path
-            if let Some(path_executable_path) = utils::get_path_executable_path(environment, command_name)? {
+            if let Some(path_executable_path) = utils::get_path_executable_path(environment, command_name) {
                 Ok(path_executable_path)
             } else {
                 let binaries = plugin_manifest.get_binaries_with_command(command_name);
@@ -166,4 +162,103 @@ pub fn get_global_binary_file_name(
             }
         }
     }
+}
+
+pub fn get_binary_command_exe_path<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    item: &BinaryManifestItem,
+    command_name: &CommandName,
+) -> Option<PathBuf> {
+    item.commands
+        .iter()
+        .filter(|c| &c.name == command_name)
+        .next()
+        .map(|command| get_plugin_dir(environment, &item.name, &item.version).join(&command.path))
+}
+
+pub fn get_command_names_for_name_and_path_or_version_selector(
+    plugin_manifest: &PluginsManifest,
+    name_selector: &NameSelector,
+    version_selector: &PathOrVersionSelector,
+) -> Result<Vec<CommandName>, ErrBox> {
+    match &version_selector {
+        PathOrVersionSelector::Path => {
+            // get the current binaries for the selector
+            let binaries = plugin_manifest.get_binaries_matching_name(&name_selector);
+            let have_same_owner = get_have_same_owner(&binaries);
+            if !have_same_owner {
+                let mut binary_names = binaries
+                    .iter()
+                    .map(|b| format!("{}", b.name))
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<String>>();
+                binary_names.sort();
+                return err!(
+                    "There were multiple binaries with the name '{}'. Please include the owner in the name:\n  {}",
+                    name_selector.name,
+                    binary_names.join("\n  ")
+                );
+            }
+
+            let latest_binary = binaries.iter().filter(|b| !b.version.is_prerelease()).last();
+            if let Some(latest_binary) =
+                latest_binary.or_else(|| binaries.iter().filter(|b| b.version.is_prerelease()).last())
+            {
+                Ok(latest_binary.get_command_names())
+            } else {
+                return err!("Could not find any installed binaries named '{}'.", name_selector);
+            }
+        }
+        PathOrVersionSelector::Version(version_selector) => {
+            let binary = get_binary_with_name_and_version(&plugin_manifest, &name_selector, &version_selector)?;
+            Ok(binary.get_command_names())
+        }
+    }
+}
+
+pub fn get_global_binary_location_for_name_and_path_or_version_selector(
+    plugin_manifest: &PluginsManifest,
+    name_selector: &NameSelector,
+    version_selector: &PathOrVersionSelector,
+) -> Result<GlobalBinaryLocation, ErrBox> {
+    Ok(match &version_selector {
+        PathOrVersionSelector::Path => GlobalBinaryLocation::Path,
+        PathOrVersionSelector::Version(version_selector) => {
+            let binary = get_binary_with_name_and_version(&plugin_manifest, &name_selector, &version_selector)?;
+            let identifier = binary.get_identifier();
+            GlobalBinaryLocation::Bvm(identifier)
+        }
+    })
+}
+
+pub fn get_env_path_from_pending_env_changes<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    plugin_manifest: &PluginsManifest,
+    env_path: &str,
+) -> String {
+    let local_data_dir = environment.get_local_user_data_dir();
+    let mut paths = env_path
+        .split(&SYS_PATH_DELIMITER)
+        .map(String::from)
+        .collect::<Vec<_>>();
+
+    for path in plugin_manifest.get_relative_pending_added_paths() {
+        let path = local_data_dir.join(path).to_string_lossy().to_string();
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    for path in plugin_manifest.get_relative_pending_removed_paths() {
+        let path = local_data_dir.join(path).to_string_lossy().to_string();
+        if let Some(pos) = paths.iter().position(|x| x == &path) {
+            paths.remove(pos);
+        }
+    }
+
+    paths
+        .into_iter()
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(SYS_PATH_DELIMITER)
 }

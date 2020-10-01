@@ -19,16 +19,25 @@ pub enum UrlInstallAction {
 pub struct PluginsMut<TEnvironment: Environment> {
     environment: TEnvironment,
     pub manifest: PluginsManifest,
+    allow_write: bool,
 }
 
 impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
-    pub fn new(environment: TEnvironment, manifest: PluginsManifest) -> Self {
-        PluginsMut { environment, manifest }
+    fn new(environment: TEnvironment, allow_write: bool) -> Self {
+        let manifest = PluginsManifest::load(&environment);
+        PluginsMut {
+            environment,
+            manifest,
+            allow_write,
+        }
     }
 
-    pub fn load(environment: &TEnvironment) -> Result<Self, ErrBox> {
-        let manifest = PluginsManifest::load(environment)?;
-        Ok(PluginsMut::new(environment.clone(), manifest))
+    pub fn load(environment: &TEnvironment) -> Self {
+        PluginsMut::new(environment.clone(), true)
+    }
+
+    pub fn load_disallow_write(environment: &TEnvironment) -> Self {
+        PluginsMut::new(environment.clone(), false)
     }
 
     // general
@@ -117,7 +126,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         command_name: &CommandName,
     ) -> Result<bool, ErrBox> {
         Ok(if self.manifest.get_global_binary_location(&command_name).is_none() {
-            if utils::get_path_executable_path(&self.environment, &command_name)?.is_some() {
+            if utils::get_path_executable_path(&self.environment, &command_name).is_some() {
                 self.use_global_version(command_name.clone(), GlobalBinaryLocation::Path)?;
                 false
             } else {
@@ -212,7 +221,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         for command_name in previous_global_command_names.iter() {
             if !self.manifest.has_binary_with_command(&command_name) {
                 self.environment
-                    .remove_file(&get_shim_path(&self.environment, &command_name)?)?;
+                    .remove_file(&get_shim_path(&self.environment, &command_name))?;
             }
         }
         Ok(())
@@ -223,13 +232,14 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         command_name: CommandName,
         location: GlobalBinaryLocation,
     ) -> Result<(), ErrBox> {
-        let new_identifier = location.to_identifier_option();
+        self.remove_global_binary(&command_name)?;
 
+        let new_identifier = location.to_identifier_option();
         if let Some(new_identifier) = &new_identifier {
             if !self.manifest.has_any_global_command(&new_identifier) {
                 if let Some(binary) = self.manifest.get_binary(&new_identifier) {
                     if let Some(on_use_command) = &binary.on_use {
-                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version)?;
+                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version);
                         self.environment.run_shell_command(&plugin_dir, &on_use_command)?;
                     }
                 }
@@ -242,7 +252,6 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
             }
         }
 
-        self.remove_global_binary(&command_name)?;
         self.manifest.global_versions.set(command_name, location);
         Ok(())
     }
@@ -288,7 +297,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
                 if let Some(binary) = self.manifest.get_binary(&past_identifier) {
                     if let Some(on_stop_use_command) = &binary.on_stop_use {
-                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version)?;
+                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version);
                         self.environment.run_shell_command(&plugin_dir, &on_stop_use_command)?;
                     }
                 }
@@ -299,12 +308,16 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
     }
 
     pub fn save(&mut self) -> Result<(), ErrBox> {
+        if !self.allow_write {
+            panic!("Internal error: Cannot save when allow_write is false.");
+        }
+
         // handle any pending changes
         if self.manifest.pending_env_changes.any() {
             // update the environment variables on windows (the environment manifest will be be set on the path on linux shell startup)
             #[cfg(target_os = "windows")]
             {
-                let local_data_dir = self.environment.get_local_user_data_dir()?;
+                let local_data_dir = self.environment.get_local_user_data_dir();
                 for path in self.manifest.get_relative_pending_added_paths() {
                     self.environment
                         .ensure_system_path(&local_data_dir.join(path).to_string_lossy())?;
@@ -321,7 +334,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         }
 
         // save plugin file
-        let file_path = get_manifest_file_path(&self.environment)?;
+        let file_path = get_manifest_file_path(&self.environment);
         let serialized_manifest = serde_json::to_string(&self.manifest)?;
         self.environment.write_file_text(&file_path, &serialized_manifest)?;
 

@@ -1,5 +1,4 @@
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
-use dprint_cli_core::types::ErrBox;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::hash_map::Values;
@@ -147,6 +146,7 @@ impl BinaryIdentifier {
     }
 }
 
+#[derive(Clone)]
 pub enum GlobalBinaryLocation {
     /// Use a bvm binary.
     Bvm(BinaryIdentifier),
@@ -216,21 +216,21 @@ impl PluginsManifest {
         }
     }
 
-    pub fn load<TEnvironment: Environment>(environment: &TEnvironment) -> Result<PluginsManifest, ErrBox> {
+    pub fn load<TEnvironment: Environment>(environment: &TEnvironment) -> PluginsManifest {
         // If a system wide lock is ever added here, remember that some
         // people might run "bvm util is-installed owner/name" while this may
         // have a lock. In that case, only have a lock on writing, but not
         // on reading.
-        let file_path = get_manifest_file_path(environment)?;
+        let file_path = get_manifest_file_path(environment);
         match environment.read_file_text(&file_path) {
             Ok(text) => match serde_json::from_str(&text) {
-                Ok(manifest) => Ok(manifest),
+                Ok(manifest) => manifest,
                 Err(err) => {
                     environment.log_error(&format!("Error deserializing plugins manifest: {}", err));
-                    Ok(PluginsManifest::new())
+                    PluginsManifest::new()
                 }
             },
-            Err(_) => Ok(PluginsManifest::new()),
+            Err(_) => PluginsManifest::new(),
         }
     }
 
@@ -243,24 +243,31 @@ impl PluginsManifest {
     // pending environment changes
 
     pub fn get_relative_pending_added_paths(&self) -> Vec<String> {
-        self.get_change_paths(&self.pending_env_changes.added)
+        self.get_change_paths(self.pending_env_changes.added.iter())
     }
 
     pub fn get_relative_pending_removed_paths(&self) -> Vec<String> {
-        self.get_change_paths(&self.pending_env_changes.removed)
+        self.get_change_paths(self.pending_env_changes.removed.iter())
     }
 
-    fn get_change_paths(&self, changes: &HashSet<BinaryIdentifier>) -> Vec<String> {
+    fn get_change_paths<'a>(&self, changes: impl Iterator<Item = &'a BinaryIdentifier>) -> Vec<String> {
         let mut result = Vec::new();
-        for identifier in changes.iter() {
-            if let Some(binary) = self.get_binary(&identifier) {
-                let bin_dir = get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
-                for path in binary.get_env_paths() {
-                    result.push(format!("{}{}{}", bin_dir.to_string_lossy(), PATH_SEPARATOR, path));
-                }
-            }
+        for identifier in changes {
+            result.extend(self.get_binary_env_paths(&identifier));
         }
         result
+    }
+
+    fn get_binary_env_paths(&self, identifier: &BinaryIdentifier) -> Vec<String> {
+        if let Some(binary) = self.get_binary(&identifier) {
+            let bin_dir = get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
+            binary.get_env_paths()
+                .into_iter()
+                .map(|path| format!("{}{}{}", bin_dir.to_string_lossy(), PATH_SEPARATOR, path))
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     // binary environment paths
@@ -379,7 +386,7 @@ impl PluginsManifest {
     }
 }
 
-pub(super) fn get_manifest_file_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
-    let user_data_dir = environment.get_user_data_dir()?; // share across domains
-    Ok(user_data_dir.join("binaries-manifest.json"))
+pub(super) fn get_manifest_file_path(environment: &impl Environment) -> PathBuf {
+    let user_data_dir = environment.get_user_data_dir(); // share across domains
+    user_data_dir.join("binaries-manifest.json")
 }

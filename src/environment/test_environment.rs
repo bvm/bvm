@@ -10,6 +10,7 @@ use super::Environment;
 #[derive(Clone)]
 pub struct TestEnvironment {
     is_verbose: Arc<Mutex<bool>>,
+    ignore_shell_commands: Arc<Mutex<bool>>,
     cwd: Arc<Mutex<String>>,
     files: Arc<Mutex<HashMap<PathBuf, Vec<u8>>>>,
     logged_messages: Arc<Mutex<Vec<String>>>,
@@ -24,6 +25,7 @@ impl TestEnvironment {
     pub fn new() -> TestEnvironment {
         TestEnvironment {
             is_verbose: Arc::new(Mutex::new(false)),
+            ignore_shell_commands: Arc::new(Mutex::new(false)),
             cwd: Arc::new(Mutex::new(String::from("/"))),
             files: Arc::new(Mutex::new(HashMap::new())),
             logged_messages: Arc::new(Mutex::new(Vec::new())),
@@ -106,6 +108,11 @@ impl Drop for TestEnvironment {
 impl Environment for TestEnvironment {
     fn is_real(&self) -> bool {
         false
+    }
+
+    fn ignore_shell_commands(&self) {
+        let mut ignore_shell_commands = self.ignore_shell_commands.lock().unwrap();
+        *ignore_shell_commands = true;
     }
 
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
@@ -223,6 +230,10 @@ impl Environment for TestEnvironment {
     }
 
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox> {
+        if *self.ignore_shell_commands.lock().unwrap() {
+            return Ok(());
+        }
+
         let mut run_shell_commands = self.run_shell_commands.lock().unwrap();
         run_shell_commands.push((cwd.to_string_lossy().to_string(), command.to_string()));
         Ok(())
@@ -254,12 +265,12 @@ impl Environment for TestEnvironment {
         Ok(action(Box::new(|_| {})))
     }
 
-    fn get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
-        Ok(PathBuf::from("/local-data"))
+    fn get_local_user_data_dir(&self) -> PathBuf {
+        PathBuf::from("/local-data")
     }
 
-    fn get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
-        Ok(PathBuf::from("/data"))
+    fn get_user_data_dir(&self) -> PathBuf {
+        PathBuf::from("/data")
     }
 
     fn get_time_secs(&self) -> u64 {
