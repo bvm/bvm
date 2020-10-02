@@ -297,9 +297,7 @@ At the moment, it looks like this:
       "path": "deno.exe"
     }],
     "onPreInstall": "# run any command pre installation (ex. kill process)",
-    "onPostInstall": "# this is where you can run some commands if necessary to cause additional setup",
-    "onUse": "# command to execute when using this",
-    "onStopUse": "# command to execute when stopping use of this"
+    "onPostInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
   "linux-x86_64": {
     "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",

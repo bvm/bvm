@@ -15,7 +15,6 @@ pub struct RealEnvironment {
     output_lock: Arc<Mutex<u8>>,
     progress_bars: Arc<ProgressBars>,
     is_verbose: bool,
-    ignore_shell_commands: Arc<Mutex<bool>>,
 }
 
 impl RealEnvironment {
@@ -24,7 +23,6 @@ impl RealEnvironment {
             output_lock: Arc::new(Mutex::new(0)),
             progress_bars: Arc::new(ProgressBars::new()),
             is_verbose,
-            ignore_shell_commands: Arc::new(Mutex::new(false)),
         };
 
         environment.create_dir_all(&environment.get_local_user_data_dir())?;
@@ -38,11 +36,6 @@ impl RealEnvironment {
 impl Environment for RealEnvironment {
     fn is_real(&self) -> bool {
         true
-    }
-
-    fn ignore_shell_commands(&self) {
-        let mut ignore_shell_commands = self.ignore_shell_commands.lock().unwrap();
-        *ignore_shell_commands = true;
     }
 
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
@@ -242,10 +235,6 @@ impl Environment for RealEnvironment {
     }
 
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox> {
-        if *self.ignore_shell_commands.lock().unwrap() {
-            return Ok(());
-        }
-
         #[cfg(unix)]
         return finalize_and_run_command(cwd, Command::new("/bin/sh").arg("-c").arg(command));
 

@@ -857,8 +857,6 @@ fn get_manifest_for_exec_env_changes<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: &ShellExecEnvChangesCommand,
 ) -> Result<PluginsManifest, ErrBox> {
-    // prevent the environment from running any shell commands
-    environment.ignore_shell_commands();
     // load ensuring the changes here won't affect the system state
     let mut plugins = PluginsMut::load_disallow_write(environment);
 
@@ -1960,39 +1958,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn use_command_on_use_on_stop_use() {
-        let builder = EnvironmentBuilder::new();
-        let mut plugin_builder =
-            builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
-        plugin_builder.on_use("command1");
-        plugin_builder.on_stop_use("command2");
-        plugin_builder.download_type(PluginDownloadType::Zip);
-        plugin_builder.build();
-        builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
-        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "3.0.0");
-        let environment = builder.build();
-        let first_bin_dir = get_binary_dir("owner", "name", "1.0.0");
-
-        // install the packages
-        install_url!(environment, "http://localhost/package.json");
-        let commands = environment.take_run_shell_commands();
-        assert_eq!(commands, [(first_bin_dir.clone(), "command1".to_string())]); // should use
-        install_url!(environment, "http://localhost/package2.json");
-        install_url!(environment, "http://localhost/package3.json");
-        environment.clear_logs();
-
-        run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
-        let commands = environment.take_run_shell_commands();
-        assert_eq!(commands, [(first_bin_dir.clone(), "command2".to_string())]);
-        run_cli(vec!["use", "name", "3.0.0"], &environment).await.unwrap();
-        let commands = environment.take_run_shell_commands();
-        assert_eq!(commands.is_empty(), true);
-        run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
-        let commands = environment.take_run_shell_commands();
-        assert_eq!(commands, [(first_bin_dir, "command1".to_string())]);
-    }
-
-    #[tokio::test]
     async fn clear_url_cache_command_path() {
         let builder = EnvironmentBuilder::new();
         builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
@@ -3018,7 +2983,6 @@ mod test {
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
         plugin_builder.add_env_path("dir2");
-        plugin_builder.on_use("command"); // should not execute
         plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
         plugin_builder.add_env_var("test", "2");
         plugin_builder.download_type(PluginDownloadType::TarGz);

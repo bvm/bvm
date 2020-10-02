@@ -72,14 +72,6 @@ impl PluginFile {
         Ok(&self.get_platform_info()?.on_post_install)
     }
 
-    pub fn get_on_use_command(&self) -> Result<&Option<String>, ErrBox> {
-        Ok(&self.get_platform_info()?.on_use)
-    }
-
-    pub fn get_on_stop_use_command(&self) -> Result<&Option<String>, ErrBox> {
-        Ok(&self.get_platform_info()?.on_stop_use)
-    }
-
     fn get_platform_info(&self) -> Result<&PlatformInfo, ErrBox> {
         // todo: how to throw a nice compile error here for an unsupported OS?
         #[cfg(target_os = "linux")]
@@ -183,8 +175,6 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
             checksum: plugin_file.checksum.clone(),
         },
         environment: plugin_file.get_environment()?.clone(),
-        on_use: plugin_file.get_on_use_command()?.clone(),
-        on_stop_use: plugin_file.get_on_stop_use_command()?.clone(),
     };
     Ok(item)
 }

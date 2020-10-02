@@ -114,8 +114,6 @@ impl PlatformInfoBuilder {
                 commands: Vec::new(),
                 on_pre_install: None,
                 on_post_install: None,
-                on_use: None,
-                on_stop_use: None,
                 environment: None,
             },
         }
@@ -159,16 +157,6 @@ impl PlatformInfoBuilder {
 
     pub fn on_post_install<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
         self.info.on_post_install = Some(value.to_string());
-        self
-    }
-
-    pub fn on_use<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        self.info.on_use = Some(value.to_string());
-        self
-    }
-
-    pub fn on_stop_use<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        self.info.on_stop_use = Some(value.to_string());
         self
     }
 

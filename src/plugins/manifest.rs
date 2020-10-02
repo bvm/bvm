@@ -71,10 +71,6 @@ pub struct BinaryManifestItem {
     pub source: BinaryManifestItemSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<BinaryEnvironment>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub on_use: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub on_stop_use: Option<String>,
 }
 
 impl BinaryManifestItem {

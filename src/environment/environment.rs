@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 #[async_trait]
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn is_real(&self) -> bool;
-    fn ignore_shell_commands(&self);
     fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox>;
     fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox>;
     fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox>;

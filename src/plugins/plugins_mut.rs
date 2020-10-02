@@ -1,9 +1,9 @@
 use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 
+use super::helpers;
 use super::manifest::get_manifest_file_path;
 use super::setup::{get_plugin_file, get_shim_path, setup_plugin, PluginFile};
-use super::{get_plugin_dir, helpers};
 use super::{BinaryIdentifier, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
 use crate::configuration::ConfigFileBinary;
 use crate::environment::Environment;
@@ -219,13 +219,6 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         let new_identifier = location.to_identifier_option();
         if let Some(new_identifier) = &new_identifier {
             if !self.manifest.has_any_global_command(&new_identifier) {
-                if let Some(binary) = self.manifest.get_binary(&new_identifier) {
-                    if let Some(on_use_command) = &binary.on_use {
-                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version);
-                        self.environment.run_shell_command(&plugin_dir, &on_use_command)?;
-                    }
-                }
-
                 if self.manifest.has_environment_paths(&new_identifier) {
                     self.manifest
                         .pending_env_changes
@@ -275,13 +268,6 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
                     self.manifest
                         .pending_env_changes
                         .mark_for_removal(past_identifier.clone());
-                }
-
-                if let Some(binary) = self.manifest.get_binary(&past_identifier) {
-                    if let Some(on_stop_use_command) = &binary.on_stop_use {
-                        let plugin_dir = get_plugin_dir(&self.environment, &binary.name, &binary.version);
-                        self.environment.run_shell_command(&plugin_dir, &on_stop_use_command)?;
-                    }
                 }
             }
         }

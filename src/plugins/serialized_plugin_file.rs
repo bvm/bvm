@@ -30,8 +30,6 @@ pub struct PlatformInfo {
     pub commands: Vec<PlatformInfoCommand>,
     pub on_pre_install: Option<String>,
     pub on_post_install: Option<String>,
-    pub on_use: Option<String>,
-    pub on_stop_use: Option<String>,
     pub environment: Option<BinaryEnvironment>,
 }
 

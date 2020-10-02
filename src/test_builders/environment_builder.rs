@@ -216,20 +216,6 @@ impl PluginBuilder {
         self
     }
 
-    pub fn on_use<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().on_use(value);
-        self.file.linux().on_use(value);
-        self.file.mac().on_use(value);
-        self
-    }
-
-    pub fn on_stop_use<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().on_stop_use(value);
-        self.file.linux().on_stop_use(value);
-        self.file.mac().on_stop_use(value);
-        self
-    }
-
     pub fn add_command<'a>(&'a mut self, name: &str) -> &'a mut PluginBuilder {
         assert_eq!(
             self.download_type.is_some(),
