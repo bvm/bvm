@@ -43,7 +43,7 @@ handle_env_messages()
 
 if [ "$1" = "update-environment" ]
 then
-  bvm_new_environment=$bvm_bin hidden-shell get-pending-env-changes
+  bvm_new_environment=$($bvm_bin hidden-shell get-pending-env-changes)
   if [ $? -eq 0 ]
   then
     handle_env_messages "$bvm_new_environment"
