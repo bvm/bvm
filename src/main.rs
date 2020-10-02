@@ -1433,6 +1433,62 @@ mod test {
     }
 
     #[tokio::test]
+    async fn install_url_output_dir() {
+        let builder = EnvironmentBuilder::new();
+        let first_bin_dir = get_binary_dir("owner", "name", "1.0.0");
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package1.json", "owner", "name", "1.0.0");
+        plugin_builder.output_dir("bin");
+        plugin_builder.download_type(PluginDownloadType::Zip);
+        plugin_builder.build();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
+        plugin_builder.output_dir("../bin"); // should error
+        plugin_builder.download_type(PluginDownloadType::Zip);
+        plugin_builder.build();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package3.json", "owner", "name", "3.0.0");
+        #[cfg(target_os = "windows")]
+        plugin_builder.output_dir("C:\\bin"); // should error
+        #[cfg(not(target_os = "windows"))]
+        plugin_builder.output_dir("/bin"); // should error
+        plugin_builder.download_type(PluginDownloadType::Zip);
+        plugin_builder.build();
+        let environment = builder.build();
+
+        install_url!(environment, "http://localhost/package1.json");
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
+        let output_dir = PathBuf::from(first_bin_dir).join("bin");
+        let bin_name = if cfg!(target_os = "windows") {
+            "name.exe"
+        } else {
+            "name"
+        };
+        assert_eq!(environment.path_exists(&output_dir.join(bin_name)), true);
+
+        // test going down a dir
+        let err_message = run_cli(vec!["install", "http://localhost/package2.json"], &environment)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(
+            err_message.to_string(),
+            "Error installing http://localhost/package2.json. Invalid path '../bin'. A path cannot go down directories."
+        );
+
+        // test absolute path
+        let err_message = run_cli(vec!["install", "http://localhost/package3.json"], &environment)
+            .await
+            .err()
+            .unwrap();
+        let expected_error = format!(
+            "Error installing http://localhost/package3.json. Invalid path '{}'. A path cannot be absolute.",
+            if cfg!(target_os = "windows") { "C:\\bin" } else { "/bin" }
+        );
+        assert_eq!(err_message.to_string(), expected_error);
+    }
+
+    #[tokio::test]
     async fn install_command_no_existing_binary() {
         let builder = EnvironmentBuilder::new();
         builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");

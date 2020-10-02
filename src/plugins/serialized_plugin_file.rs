@@ -27,6 +27,7 @@ pub struct PlatformInfo {
     pub checksum: String,
     #[serde(rename = "type")]
     pub download_type: String,
+    pub output_dir: Option<String>,
     pub commands: Vec<PlatformInfoCommand>,
     pub on_pre_install: Option<String>,
     pub on_post_install: Option<String>,

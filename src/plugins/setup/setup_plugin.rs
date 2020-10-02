@@ -64,6 +64,10 @@ impl PluginFile {
         })
     }
 
+    pub fn get_output_dir(&self) -> Result<&Option<String>, ErrBox> {
+        Ok(&self.get_platform_info()?.output_dir)
+    }
+
     pub fn get_pre_install_command(&self) -> Result<&Option<String>, ErrBox> {
         Ok(&self.get_platform_info()?.on_pre_install)
     }
@@ -121,13 +125,21 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     // handle the setup based on the download type
     let commands = plugin_file.get_commands()?;
     verify_commands(commands)?;
+    let output_dir = if let Some(output_dir) = plugin_file.get_output_dir()? {
+        verify_valid_relative_path(&output_dir)?;
+        let output_dir = plugin_cache_dir_path.join(output_dir);
+        environment.create_dir_all(&output_dir)?;
+        output_dir
+    } else {
+        plugin_cache_dir_path.clone()
+    };
     match download_type {
         DownloadType::Zip => {
             utils::extract_zip(
                 &format!("Extracting archive for {}...", plugin_file.display(),),
                 environment,
                 &url_file_bytes,
-                &plugin_cache_dir_path,
+                &output_dir,
             )
             .await?
         }
@@ -136,7 +148,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
                 &format!("Extracting archive for {}...", plugin_file.display(),),
                 environment,
                 &url_file_bytes,
-                &plugin_cache_dir_path,
+                &output_dir,
             )
             .await?
         }
@@ -144,7 +156,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
             if commands.len() != 1 {
                 return err!("The binary download type must have exactly one command specified.");
             }
-            environment.write_file(&plugin_cache_dir_path.join(&commands[0].path), &url_file_bytes)?
+            environment.write_file(&output_dir.join(&commands[0].path), &url_file_bytes)?
         }
     }
 
@@ -186,12 +198,18 @@ fn verify_commands(commands: &Vec<PlatformInfoCommand>) -> Result<(), ErrBox> {
 
     // prevent funny business
     for command in commands.iter() {
-        if command.path.contains("../") || command.path.contains("..\\") {
-            return err!("A command path cannot go down directories.");
-        }
-        if PathBuf::from(&command.path).is_absolute() {
-            return err!("A command path cannot be absolute.");
-        }
+        verify_valid_relative_path(&command.path)?;
+    }
+
+    Ok(())
+}
+
+fn verify_valid_relative_path(path: &str) -> Result<(), ErrBox> {
+    if path.contains("../") || path.contains("..\\") {
+        return err!("Invalid path '{}'. A path cannot go down directories.", path);
+    }
+    if PathBuf::from(&path).is_absolute() {
+        return err!("Invalid path '{}'. A path cannot be absolute.", path);
     }
 
     Ok(())

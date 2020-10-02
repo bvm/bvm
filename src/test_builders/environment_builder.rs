@@ -188,6 +188,13 @@ impl PluginBuilder {
         self
     }
 
+    pub fn output_dir<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+        self.file.windows().output_dir(value);
+        self.file.linux().output_dir(value);
+        self.file.mac().output_dir(value);
+        self
+    }
+
     pub fn add_env_path<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
         self.file.windows().add_env_path(value);
         self.file.linux().add_env_path(value);

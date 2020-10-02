@@ -112,6 +112,7 @@ impl PlatformInfoBuilder {
                 checksum: "".to_string(),
                 download_type: "zip".to_string(),
                 commands: Vec::new(),
+                output_dir: None,
                 on_pre_install: None,
                 on_post_install: None,
                 environment: None,
@@ -147,6 +148,11 @@ impl PlatformInfoBuilder {
             name: CommandName::from_string(name.to_string()),
             path: path.to_string(),
         });
+        self
+    }
+
+    pub fn output_dir<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
+        self.info.output_dir = Some(value.to_string());
         self
     }
 

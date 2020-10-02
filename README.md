@@ -296,6 +296,7 @@ At the moment, it looks like this:
       "name": "deno",
       "path": "deno.exe"
     }],
+    "outputDir": "bin",
     "onPreInstall": "# run any command pre installation (ex. kill process)",
     "onPostInstall": "# this is where you can run some commands if necessary to cause additional setup"
   },
@@ -306,7 +307,8 @@ At the moment, it looks like this:
     "commands": [{
       "name": "deno",
       "path": "deno"
-    }]
+    }],
+    "outputDir": "bin"
   },
   "darwin-x86_64": {
     "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
@@ -315,7 +317,8 @@ At the moment, it looks like this:
     "commands": [{
       "name": "deno",
       "path": "deno"
-    }]
+    }],
+    "outputDir": "bin"
   }
 }
 ```
