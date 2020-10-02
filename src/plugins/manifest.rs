@@ -442,8 +442,12 @@ impl PluginsManifest {
             .unwrap_or(Vec::new())
     }
 
-    pub fn has_environment_paths(&self, identifier: &BinaryIdentifier) -> bool {
-        !self.get_environment_paths(identifier).is_empty()
+    pub fn has_environment_changes(&self, identifier: &BinaryIdentifier) -> bool {
+        if let Some(binary) = self.get_binary(identifier) {
+            !binary.get_env_paths().is_empty() || !binary.get_env_variables().is_empty()
+        } else {
+            false
+        }
     }
 
     pub fn get_global_command_names(&self, identifier: &BinaryIdentifier) -> Vec<CommandName> {

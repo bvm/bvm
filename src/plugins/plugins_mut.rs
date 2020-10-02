@@ -219,7 +219,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         let new_identifier = location.to_identifier_option();
         if let Some(new_identifier) = &new_identifier {
             if !self.manifest.has_any_global_command(&new_identifier) {
-                if self.manifest.has_environment_paths(&new_identifier) {
+                if self.manifest.has_environment_changes(&new_identifier) {
                     self.manifest
                         .pending_env_changes
                         .mark_for_adding(new_identifier.clone());
@@ -264,7 +264,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
         if let Some(past_identifier) = past_identifier {
             if !self.manifest.has_any_global_command(&past_identifier) {
-                if self.manifest.has_environment_paths(&past_identifier) {
+                if self.manifest.has_environment_changes(&past_identifier) {
                     self.manifest
                         .pending_env_changes
                         .mark_for_removal(past_identifier.clone());
