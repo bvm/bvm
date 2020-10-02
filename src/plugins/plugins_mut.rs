@@ -176,24 +176,6 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         self.manifest.pending_env_changes.clear();
     }
 
-    // binary environment paths
-
-    fn add_bin_env_paths(&mut self, paths: Vec<String>) {
-        for path in paths {
-            if !self.manifest.binary_paths.contains(&path) {
-                self.manifest.binary_paths.push(path);
-            }
-        }
-    }
-
-    fn remove_bin_env_paths(&mut self, paths: &Vec<String>) {
-        for path in paths.iter() {
-            if let Some(pos) = self.manifest.binary_paths.iter().position(|p| p == path) {
-                self.manifest.binary_paths.remove(pos);
-            }
-        }
-    }
-
     // binaries
 
     pub fn remove_binary(&mut self, identifier: &BinaryIdentifier) -> Result<(), ErrBox> {
@@ -318,19 +300,23 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
             #[cfg(target_os = "windows")]
             {
                 let local_data_dir = self.environment.get_local_user_data_dir();
-                for path in self.manifest.get_relative_pending_added_paths() {
-                    self.environment
-                        .ensure_system_path(&local_data_dir.join(path).to_string_lossy())?;
-                }
                 for path in self.manifest.get_relative_pending_removed_paths() {
                     self.environment
                         .remove_system_path(&local_data_dir.join(path).to_string_lossy())?;
                 }
-            }
+                for path in self.manifest.get_relative_pending_added_paths() {
+                    self.environment
+                        .ensure_system_path(&local_data_dir.join(path).to_string_lossy())?;
+                }
 
-            // update binary environment paths
-            self.add_bin_env_paths(self.manifest.get_relative_pending_added_paths());
-            self.remove_bin_env_paths(&self.manifest.get_relative_pending_removed_paths());
+                for (key, _) in self.manifest.get_pending_removed_env_variables(&self.environment) {
+                    self.environment.remove_env_variable(&key)?;
+                }
+
+                for (key, value) in self.manifest.get_pending_added_env_variables(&self.environment) {
+                    self.environment.set_env_variable(key, value)?;
+                }
+            }
         }
 
         // save plugin file

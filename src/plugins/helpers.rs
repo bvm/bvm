@@ -235,24 +235,25 @@ pub fn get_global_binary_location_for_name_and_path_or_version_selector(
 pub fn get_env_path_from_pending_env_changes<TEnvironment: Environment>(
     environment: &TEnvironment,
     plugin_manifest: &PluginsManifest,
-    env_path: &str,
 ) -> String {
     let local_data_dir = environment.get_local_user_data_dir();
-    let mut paths = env_path
+    let mut paths = environment
+        .get_env_path()
         .split(&SYS_PATH_DELIMITER)
         .map(String::from)
         .collect::<Vec<_>>();
+
+    for path in plugin_manifest.get_relative_pending_removed_paths() {
+        let path = local_data_dir.join(path).to_string_lossy().to_string();
+        if let Some(pos) = paths.iter().position(|x| x == &path) {
+            paths.remove(pos);
+        }
+    }
 
     for path in plugin_manifest.get_relative_pending_added_paths() {
         let path = local_data_dir.join(path).to_string_lossy().to_string();
         if !paths.contains(&path) {
             paths.push(path);
-        }
-    }
-    for path in plugin_manifest.get_relative_pending_removed_paths() {
-        let path = local_data_dir.join(path).to_string_lossy().to_string();
-        if let Some(pos) = paths.iter().position(|x| x == &path) {
-            paths.remove(pos);
         }
     }
 

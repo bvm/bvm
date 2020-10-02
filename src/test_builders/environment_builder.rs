@@ -1,5 +1,5 @@
 use super::{BvmrcBuilder, PluginFileBuilder};
-use crate::environment::{Environment, TestEnvironment};
+use crate::environment::{Environment, TestEnvironment, SYS_PATH_DELIMITER};
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -60,6 +60,15 @@ impl EnvironmentBuilder {
 
     pub fn add_binary_to_path(&self, name: &str) -> String {
         let path_dir = PathBuf::from("/path-dir");
+        if !std::env::split_paths(&self.environment.get_env_path()).any(|p| p == path_dir) {
+            let env_path = self.environment.get_env_path();
+            self.environment.set_env_path(&format!(
+                "{}{}{}",
+                env_path,
+                SYS_PATH_DELIMITER,
+                path_dir.to_string_lossy()
+            ));
+        }
         if !self.environment.get_system_path_dirs().contains(&path_dir) {
             self.environment.add_path_dir(path_dir);
         }
@@ -149,10 +158,8 @@ impl PluginBuilder {
         let file_text = self.file.to_json_text();
         let bytes = file_text.into_bytes();
         let checksum = dprint_cli_core::checksums::get_sha256_checksum(&bytes);
-        self.environment.add_remote_file(
-            self.url.as_ref().expect("Need to set a url before building."),
-            bytes,
-        );
+        self.environment
+            .add_remote_file(self.url.as_ref().expect("Need to set a url before building."), bytes);
         checksum
     }
 
@@ -185,6 +192,13 @@ impl PluginBuilder {
         self.file.windows().add_env_path(value);
         self.file.linux().add_env_path(value);
         self.file.mac().add_env_path(value);
+        self
+    }
+
+    pub fn add_env_var<'a>(&'a mut self, key: &str, value: &str) -> &'a mut PluginBuilder {
+        self.file.windows().add_env_var(key, value);
+        self.file.linux().add_env_var(key, value);
+        self.file.mac().add_env_var(key, value);
         self
     }
 

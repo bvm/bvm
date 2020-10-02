@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::environment::{Environment, PATH_SEPARATOR};
-use crate::plugins::{get_plugin_dir_relative_local_user_data, BinaryEnvironment};
+use crate::plugins::{get_plugin_dir, get_plugin_dir_relative_local_user_data, BinaryEnvironment};
 use crate::types::{BinaryName, CommandName, NameSelector, Version, VersionSelector};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
@@ -21,8 +21,6 @@ pub struct PluginsManifest {
     pub(super) binaries: HashMap<BinaryIdentifier, BinaryManifestItem>,
     /// Changes to the environment that need to be made.
     pub(super) pending_env_changes: PendingEnvironmentChanges,
-    /// Current binary paths.
-    pub(super) binary_paths: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -34,9 +32,9 @@ pub(super) struct PendingEnvironmentChanges {
 
 impl PendingEnvironmentChanges {
     pub fn mark_for_adding(&mut self, identifier: BinaryIdentifier) {
-        // always remove and always insert so its more reliable
-        self.removed.remove(&identifier);
-        self.added.insert(identifier.clone());
+        // don't bother removing from self.removed as it allows
+        // figuring out the reverse in get-post-env-changes
+        self.added.insert(identifier);
     }
 
     pub fn mark_for_removal(&mut self, identifier: BinaryIdentifier) {
@@ -99,6 +97,14 @@ impl BinaryManifestItem {
             .and_then(|e| e.paths.as_ref())
             .map(|p| p.clone())
             .unwrap_or(Vec::new())
+    }
+
+    pub fn get_env_variables(&self) -> HashMap<String, String> {
+        self.environment
+            .as_ref()
+            .and_then(|e| e.variables.as_ref())
+            .map(|p| p.clone())
+            .unwrap_or(HashMap::new())
     }
 }
 
@@ -185,20 +191,28 @@ impl GlobalVersionsMap {
     }
 
     pub(super) fn get(&self, command_name: &CommandName) -> Option<GlobalBinaryLocation> {
-        self.0.get(command_name.as_str()).map(|value| {
-            if value == PATH_GLOBAL_VERSION_VALUE {
-                GlobalBinaryLocation::Path
-            } else if value.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
-                GlobalBinaryLocation::Bvm(BinaryIdentifier(value[IDENTIFIER_GLOBAL_PREFIX.len()..].to_string()))
-            } else {
-                // todo: don't panic and improve this
-                panic!("Unknown value: {}", value);
-            }
-        })
+        self.0
+            .get(command_name.as_str())
+            .map(|value| self.value_to_location(&value))
     }
 
     pub(super) fn remove(&mut self, command_name: &CommandName) {
         self.0.remove(command_name.as_str());
+    }
+
+    pub(super) fn get_locations(&self) -> Vec<GlobalBinaryLocation> {
+        self.0.iter().map(|(_, value)| self.value_to_location(value)).collect()
+    }
+
+    fn value_to_location(&self, value: &str) -> GlobalBinaryLocation {
+        if value == PATH_GLOBAL_VERSION_VALUE {
+            GlobalBinaryLocation::Path
+        } else if value.starts_with(IDENTIFIER_GLOBAL_PREFIX) {
+            GlobalBinaryLocation::Bvm(BinaryIdentifier(value[IDENTIFIER_GLOBAL_PREFIX.len()..].to_string()))
+        } else {
+            // todo: don't panic and improve this
+            panic!("Unknown value: {}", value);
+        }
     }
 }
 
@@ -212,7 +226,6 @@ impl PluginsManifest {
                 added: HashSet::new(),
                 removed: HashSet::new(),
             },
-            binary_paths: Vec::new(),
         }
     }
 
@@ -261,7 +274,8 @@ impl PluginsManifest {
     fn get_binary_env_paths(&self, identifier: &BinaryIdentifier) -> Vec<String> {
         if let Some(binary) = self.get_binary(&identifier) {
             let bin_dir = get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
-            binary.get_env_paths()
+            binary
+                .get_env_paths()
                 .into_iter()
                 .map(|path| format!("{}{}{}", bin_dir.to_string_lossy(), PATH_SEPARATOR, path))
                 .collect()
@@ -270,10 +284,73 @@ impl PluginsManifest {
         }
     }
 
+    pub fn get_pending_added_env_variables(&self, environment: &impl Environment) -> HashMap<String, String> {
+        self.get_change_variables(environment, self.pending_env_changes.added.iter())
+    }
+
+    pub fn get_pending_removed_env_variables(&self, environment: &impl Environment) -> HashMap<String, String> {
+        self.get_change_variables(environment, self.pending_env_changes.removed.iter())
+    }
+
+    fn get_change_variables<'a>(
+        &self,
+        environment: &impl Environment,
+        changes: impl Iterator<Item = &'a BinaryIdentifier>,
+    ) -> HashMap<String, String> {
+        let mut result = HashMap::new();
+        for identifier in changes {
+            result.extend(self.get_binary_env_vars(environment, &identifier));
+        }
+        result
+    }
+
+    fn get_binary_env_vars(
+        &self,
+        environment: &impl Environment,
+        identifier: &BinaryIdentifier,
+    ) -> HashMap<String, String> {
+        if let Some(binary) = self.get_binary(&identifier) {
+            let bin_dir = get_plugin_dir(environment, &binary.name, &binary.version);
+            binary
+                .get_env_variables()
+                .into_iter()
+                .map(|(key, value)| {
+                    (
+                        key,
+                        if cfg!(target_os = "windows") {
+                            value.replace("%BVM_CURRENT_BINARY_DIR%", &bin_dir.to_string_lossy())
+                        } else {
+                            // todo: make this resilient
+                            value.replace("$BVM_CURRENT_BINARY_DIR", &bin_dir.to_string_lossy())
+                        },
+                    )
+                })
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    }
+
     // binary environment paths
 
-    pub fn get_bin_env_paths(&self) -> &Vec<String> {
-        &self.binary_paths
+    pub fn get_env_paths(&self) -> Vec<String> {
+        let mut result = Vec::new();
+        for location in self.global_versions.get_locations() {
+            if let Some(identifier) = location.to_identifier_option() {
+                result.extend(self.get_binary_env_paths(&identifier));
+            }
+        }
+        result
+    }
+
+    pub fn get_env_vars(&self, environment: &impl Environment) -> HashMap<String, String> {
+        let mut result = HashMap::new();
+        for location in self.global_versions.get_locations() {
+            if let Some(identifier) = location.to_identifier_option() {
+                result.extend(self.get_binary_env_vars(environment, &identifier));
+            }
+        }
+        result
     }
 
     // binary

@@ -9,6 +9,7 @@ use super::Environment;
 
 #[derive(Clone)]
 pub struct TestEnvironment {
+    // todo: single arc and mutex...
     is_verbose: Arc<Mutex<bool>>,
     ignore_shell_commands: Arc<Mutex<bool>>,
     cwd: Arc<Mutex<String>>,
@@ -19,10 +20,15 @@ pub struct TestEnvironment {
     remote_files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     deleted_directories: Arc<Mutex<Vec<PathBuf>>>,
     path_dirs: Arc<Mutex<Vec<PathBuf>>>,
+    #[cfg(target_os = "windows")]
+    sys_env_variables: Arc<Mutex<HashMap<String, String>>>,
+    env_variables: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl TestEnvironment {
     pub fn new() -> TestEnvironment {
+        let mut env_variables = HashMap::new();
+        env_variables.insert("PATH".to_string(), "/data/shims".to_string());
         TestEnvironment {
             is_verbose: Arc::new(Mutex::new(false)),
             ignore_shell_commands: Arc::new(Mutex::new(false)),
@@ -34,6 +40,9 @@ impl TestEnvironment {
             remote_files: Arc::new(Mutex::new(HashMap::new())),
             deleted_directories: Arc::new(Mutex::new(Vec::new())),
             path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims")])),
+            #[cfg(target_os = "windows")]
+            sys_env_variables: Arc::new(Mutex::new(HashMap::new())),
+            env_variables: Arc::new(Mutex::new(env_variables)),
         }
     }
 
@@ -52,6 +61,21 @@ impl TestEnvironment {
 
     pub fn take_run_shell_commands(&self) -> Vec<(String, String)> {
         self.run_shell_commands.lock().unwrap().drain(..).collect()
+    }
+
+    pub fn get_sys_env_variables(&self) -> Vec<(String, String)> {
+        #[cfg(target_os = "windows")]
+        let mut items = self
+            .sys_env_variables
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect::<Vec<_>>();
+        #[cfg(not(target_os = "windows"))]
+        let mut items = Vec::<(String, String)>::new();
+        items.sort();
+        items
     }
 
     pub fn add_remote_file(&self, path: &str, bytes: Vec<u8>) {
@@ -77,6 +101,26 @@ impl TestEnvironment {
     pub fn add_path_dir(&self, dir: PathBuf) {
         let mut path_dirs = self.path_dirs.lock().unwrap();
         path_dirs.push(dir);
+    }
+
+    pub fn get_system_path_dirs(&self) -> Vec<PathBuf> {
+        self.path_dirs.lock().unwrap().clone()
+    }
+
+    pub fn set_env_path(&self, new_path: &str) {
+        let mut env_variables = self.env_variables.lock().unwrap();
+        let env_path = env_variables.get_mut("PATH").unwrap();
+        *env_path = new_path.to_string();
+    }
+
+    pub fn set_env_var(&self, key: &str, value: &str) {
+        let mut env_variables = self.env_variables.lock().unwrap();
+        env_variables.insert(key.to_string(), value.to_string());
+    }
+
+    pub fn remove_env_var(&self, key: &str) {
+        let mut env_variables = self.env_variables.lock().unwrap();
+        env_variables.remove(&key.to_string());
     }
 }
 
@@ -194,8 +238,9 @@ impl Environment for TestEnvironment {
         Ok(true)
     }
 
-    fn get_system_path_dirs(&self) -> Vec<PathBuf> {
-        self.path_dirs.lock().unwrap().clone()
+    fn get_env_var(&self, key: &str) -> Option<String> {
+        let env_vars = self.env_variables.lock().unwrap();
+        env_vars.get(&key.to_string()).as_ref().map(|key| key.to_string())
     }
 
     #[cfg(windows)]
@@ -226,6 +271,20 @@ impl Environment for TestEnvironment {
         if let Some(pos) = path_dirs.iter().position(|p| p == &directory_path) {
             path_dirs.remove(pos);
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn set_env_variable(&self, key: String, value: String) -> Result<(), ErrBox> {
+        let mut sys_env_variables = self.sys_env_variables.lock().unwrap();
+        sys_env_variables.insert(key, value);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn remove_env_variable(&self, key: &str) -> Result<(), ErrBox> {
+        let mut sys_env_variables = self.sys_env_variables.lock().unwrap();
+        sys_env_variables.remove(key);
         Ok(())
     }
 

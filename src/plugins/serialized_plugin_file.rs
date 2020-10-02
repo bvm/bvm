@@ -1,4 +1,5 @@
 use serde::{self, Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::types::Version;
 use crate::CommandName;
@@ -37,6 +38,8 @@ pub struct PlatformInfo {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryEnvironment {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variables: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<String>>,
 }

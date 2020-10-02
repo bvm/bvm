@@ -3,15 +3,12 @@ use std::path::PathBuf;
 use crate::environment::Environment;
 use crate::types::CommandName;
 
-pub fn get_path_executable_path(
-    environment: &impl Environment,
-    command_name: &CommandName,
-) -> Option<PathBuf> {
+pub fn get_path_executable_path(environment: &impl Environment, command_name: &CommandName) -> Option<PathBuf> {
     let shim_dir = super::get_shim_dir(environment);
     let command_name = command_name.as_str().to_lowercase();
     let executable_file_names = get_executable_file_names(&command_name);
 
-    for path_dir in environment.get_system_path_dirs() {
+    for path_dir in std::env::split_paths(&environment.get_env_path()) {
         if path_dir == shim_dir {
             continue;
         }

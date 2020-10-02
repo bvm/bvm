@@ -1,5 +1,6 @@
 use crate::plugins::{BinaryEnvironment, PlatformInfo, PlatformInfoCommand, SerializedPluginFile};
 use crate::types::{CommandName, Version};
+use std::collections::HashMap;
 
 pub struct PluginFileBuilder {
     file: SerializedPluginFile,
@@ -172,11 +173,7 @@ impl PlatformInfoBuilder {
     }
 
     pub fn add_env_path<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        if self.info.environment.is_none() {
-            self.info.environment = Some(BinaryEnvironment {
-                paths: Some(Vec::new()),
-            });
-        }
+        self.ensure_environment();
         self.info
             .environment
             .as_mut()
@@ -186,5 +183,27 @@ impl PlatformInfoBuilder {
             .unwrap()
             .push(value.to_string());
         self
+    }
+
+    pub fn add_env_var<'a>(&'a mut self, key: &str, value: &str) -> &'a mut PlatformInfoBuilder {
+        self.ensure_environment();
+        self.info
+            .environment
+            .as_mut()
+            .unwrap()
+            .variables
+            .as_mut()
+            .unwrap()
+            .insert(key.to_string(), value.to_string());
+        self
+    }
+
+    fn ensure_environment(&mut self) {
+        if self.info.environment.is_none() {
+            self.info.environment = Some(BinaryEnvironment {
+                paths: Some(Vec::new()),
+                variables: Some(HashMap::new()),
+            });
+        }
     }
 }

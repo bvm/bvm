@@ -145,9 +145,14 @@ impl Environment for RealEnvironment {
         }
     }
 
-    fn get_system_path_dirs(&self) -> Vec<PathBuf> {
-        log_verbose!(self, "Getting system path directories.");
-        super::common::get_system_path_dirs()
+    fn get_env_var(&self, key: &str) -> Option<String> {
+        log_verbose!(self, "Getting the {} environment variable.", key);
+
+        if let Some(path) = std::env::var_os(&key) {
+            Some(path.to_string_lossy().to_string())
+        } else {
+            None
+        }
     }
 
     #[cfg(windows)]
@@ -203,6 +208,29 @@ impl Environment for RealEnvironment {
         if was_removed {
             env.set_value("Path", &paths.join(";"))?;
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn set_env_variable(&self, key: String, value: String) -> Result<(), ErrBox> {
+        use winreg::{enums::*, RegKey};
+        log_verbose!(self, "Setting '{}' environment variable.", key);
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (env, _) = hkcu.create_subkey("Environment")?;
+        env.set_value(key, &value)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn remove_env_variable(&self, key: &str) -> Result<(), ErrBox> {
+        use winreg::{enums::*, RegKey};
+        log_verbose!(self, "Removing '{}' environment variable.", key);
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let (env, _) = hkcu.create_subkey("Environment")?;
+
+        env.delete_value(key.to_string())?;
         Ok(())
     }
 

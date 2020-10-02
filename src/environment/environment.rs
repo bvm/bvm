@@ -33,8 +33,12 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     /// Data that is specific to a user across machines.
     fn get_user_data_dir(&self) -> PathBuf;
     fn get_time_secs(&self) -> u64;
-    /// Gets the directories in the path environment variable.
-    fn get_system_path_dirs(&self) -> Vec<PathBuf>;
+    /// Gets the specified environment variable.
+    fn get_env_var(&self, key: &str) -> Option<String>;
+    /// Gets the environment path variable.
+    fn get_env_path(&self) -> String {
+        self.get_env_var("PATH").unwrap_or(String::new())
+    }
     /// Ensures the provided directory to be on the system path environment variable.
     #[cfg(windows)]
     fn ensure_system_path(&self, directory_path: &str) -> Result<(), ErrBox>;
@@ -43,6 +47,10 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn ensure_system_path_pre(&self, directory_path: &str) -> Result<(), ErrBox>;
     #[cfg(windows)]
     fn remove_system_path(&self, directory_path: &str) -> Result<(), ErrBox>;
+    #[cfg(windows)]
+    fn set_env_variable(&self, key: String, value: String) -> Result<(), ErrBox>;
+    #[cfg(windows)]
+    fn remove_env_variable(&self, key: &str) -> Result<(), ErrBox>;
     fn run_shell_command(&self, cwd: &Path, command: &str) -> Result<(), ErrBox>;
     fn exit(&self, code: i32) -> Result<(), ErrBox>;
     fn is_verbose(&self) -> bool;

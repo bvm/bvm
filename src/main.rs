@@ -17,7 +17,7 @@ mod registry;
 mod utils;
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use arg_parser::*;
@@ -687,10 +687,14 @@ fn handle_shell_command<TEnvironment: Environment>(
     command: ShellSubCommand,
 ) -> Result<(), ErrBox> {
     match command {
-        ShellSubCommand::GetNewPath(command) => handle_shell_get_new_path_command(environment, command),
-        ShellSubCommand::ClearPendingChanges => handle_shell_clear_pending_env_changes_command(environment),
+        ShellSubCommand::GetPendingEnvChanges => handle_shell_get_pending_env_changes(environment),
+        ShellSubCommand::ClearPendingEnvChanges => handle_shell_clear_pending_env_changes_command(environment),
         ShellSubCommand::GetPaths => handle_shell_get_paths_command(environment),
-        ShellSubCommand::GetExecEnvPath(command) => handle_shell_get_exec_env_path_command(environment, command),
+        ShellSubCommand::GetEnvVars => handle_shell_get_env_vars_command(environment),
+        ShellSubCommand::GetExecEnvChanges(command) => handle_shell_get_exec_env_changes_command(environment, command),
+        ShellSubCommand::GetPostExecEnvChanges(command) => {
+            handle_shell_get_post_exec_env_changes_command(environment, command)
+        }
         ShellSubCommand::GetExecCommandPath(command) => {
             handle_shell_get_exec_command_path_command(environment, command)
         }
@@ -702,17 +706,53 @@ fn handle_shell_command<TEnvironment: Environment>(
     }
 }
 
-fn handle_shell_get_new_path_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    command: ShellGetNewPathCommand,
-) -> Result<(), ErrBox> {
+fn handle_shell_get_pending_env_changes<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let plugin_manifest = PluginsManifest::load(environment);
-    let new_path =
-        plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest, &command.current_sys_path);
-
-    environment.log(&new_path);
+    output_pending_env_changes(environment, &plugin_manifest);
 
     Ok(())
+}
+
+fn output_pending_env_changes<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    plugin_manifest: &PluginsManifest,
+) {
+    let added_env_vars = plugin_manifest.get_pending_added_env_variables(environment);
+    let removed_env_vars = plugin_manifest.get_pending_removed_env_variables(environment);
+    let old_path = environment.get_env_path();
+    let new_path = plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest);
+
+    output_env_changes(environment, &added_env_vars, &removed_env_vars, &old_path, &new_path);
+}
+
+fn output_env_changes<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    added_env_vars: &HashMap<String, String>,
+    removed_env_vars: &HashMap<String, String>,
+    old_path: &str,
+    new_path: &str,
+) {
+    // removed
+    let removed_keys = removed_env_vars.iter().map(|(key, _)| key);
+    // sort to create some determinism for testing
+    #[cfg(test)]
+    let mut removed_keys = removed_keys.collect::<Vec<_>>();
+    #[cfg(test)]
+    removed_keys.sort();
+
+    for key in removed_keys {
+        if !added_env_vars.contains_key(key) {
+            output_unset_env_var(environment, key);
+        }
+    }
+
+    // added
+    output_set_env_vars(environment, added_env_vars.iter());
+
+    // path
+    if new_path.trim_matches(';') != old_path.trim_matches(';') {
+        output_set_env_var(environment, "PATH", &new_path);
+    }
 }
 
 fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
@@ -729,7 +769,7 @@ fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvi
     let plugin_manifest = PluginsManifest::load(environment);
     let local_data_dir = environment.get_local_user_data_dir();
     let path_text = plugin_manifest
-        .get_bin_env_paths()
+        .get_env_paths()
         .iter()
         .map(|path| local_data_dir.join(path).to_string_lossy().to_string())
         .collect::<Vec<_>>()
@@ -740,10 +780,83 @@ fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvi
     Ok(())
 }
 
-fn handle_shell_get_exec_env_path_command<TEnvironment: Environment>(
+fn handle_shell_get_env_vars_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+    let plugin_manifest = PluginsManifest::load(environment);
+    output_set_env_vars(environment, plugin_manifest.get_env_vars(environment).iter());
+
+    Ok(())
+}
+
+fn output_set_env_vars<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellGetExecEnvPathCommand,
+    vars: impl Iterator<Item = (&'a String, &'a String)>,
+) {
+    // for determinism when testing
+    #[cfg(test)]
+    let vars = {
+        let mut vars = vars.collect::<Vec<_>>();
+        vars.sort();
+        vars
+    };
+
+    for (key, value) in vars {
+        output_set_env_var(environment, key, value);
+    }
+}
+
+fn output_set_env_var<TEnvironment: Environment>(environment: &TEnvironment, key: &str, value: &str) {
+    if cfg!(target_os = "windows") {
+        environment.log(&format!("SET {}={}", key, value))
+    } else {
+        environment.log("ADD");
+        environment.log(&key);
+        environment.log(&value);
+    }
+}
+
+fn output_unset_env_var<TEnvironment: Environment>(environment: &TEnvironment, key: &str) {
+    if cfg!(target_os = "windows") {
+        environment.log(&format!("SET {}=", key));
+    } else {
+        environment.log("REMOVE");
+        environment.log(&key);
+    }
+}
+
+fn handle_shell_get_exec_env_changes_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellExecEnvChangesCommand,
 ) -> Result<(), ErrBox> {
+    let plugin_manifest = get_manifest_for_exec_env_changes(environment, &command)?;
+
+    // output the pending environment changes
+    output_pending_env_changes(environment, &plugin_manifest);
+
+    Ok(())
+}
+
+fn handle_shell_get_post_exec_env_changes_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: ShellExecEnvChangesCommand,
+) -> Result<(), ErrBox> {
+    // similar to the exec-env-changes command, but does the opposite
+    let plugin_manifest = get_manifest_for_exec_env_changes(environment, &command)?;
+
+    let added_env_vars = plugin_manifest.get_pending_added_env_variables(environment);
+    let removed_env_vars = plugin_manifest.get_pending_removed_env_variables(environment);
+    let old_path = environment.get_env_path();
+    let new_path = plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest);
+
+    // swap the order
+    output_env_changes(environment, &removed_env_vars, &added_env_vars, &new_path, &old_path);
+
+    Ok(())
+}
+
+fn get_manifest_for_exec_env_changes<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: &ShellExecEnvChangesCommand,
+) -> Result<PluginsManifest, ErrBox> {
     // prevent the environment from running any shell commands
     environment.ignore_shell_commands();
     // load ensuring the changes here won't affect the system state
@@ -765,16 +878,8 @@ fn handle_shell_get_exec_env_path_command<TEnvironment: Environment>(
         plugins.use_global_version(command_name.clone(), location.clone())?;
     }
 
-    // now get the new path based on doing the "use", but don't save state to the system
-    let new_path = plugin_helpers::get_env_path_from_pending_env_changes(
-        environment,
-        &plugins.manifest,
-        &command.current_sys_path,
-    );
-
-    environment.log(&new_path);
-
-    Ok(())
+    // do not save the plugins, we just want to return a manifest that has the changes above
+    Ok(plugins.manifest)
 }
 
 fn handle_shell_get_exec_command_path_command<TEnvironment: Environment>(
@@ -931,6 +1036,28 @@ mod test {
     use crate::test_builders::{EnvironmentBuilder, PluginDownloadType};
     use dprint_cli_core::types::ErrBox;
 
+    macro_rules! assert_logs {
+        ($environment:expr, []) => {
+            let logged_messages = $environment.take_logged_messages();
+            assert_eq!(logged_messages, Vec::<String>::new());
+        };
+        ($environment:expr, $messages:expr) => {
+            let logged_messages = $environment.take_logged_messages();
+            assert_eq!(logged_messages, $messages);
+        };
+    }
+
+    macro_rules! assert_logs_errors {
+        ($environment:expr, []) => {
+            let errors = $environment.take_logged_errors();
+            assert_eq!(errors, Vec::<String>::new());
+        };
+        ($environment:expr, $errors:expr) => {
+            let errors = $environment.take_logged_errors();
+            assert_eq!(errors, $errors);
+        };
+    }
+
     macro_rules! assert_has_path {
         ($environment:expr, $path:expr) => {
             assert_eq!($environment.path_exists(&PathBuf::from($path)), true);
@@ -946,14 +1073,94 @@ mod test {
     macro_rules! assert_resolves_name {
         ($environment:expr, $name:expr, $binary_path:expr) => {
             run_cli(vec!["resolve", $name], &$environment).await.unwrap();
-            let logged_messages = $environment.take_logged_messages();
-            assert_eq!(logged_messages, vec![$binary_path.clone()]);
+            assert_logs!($environment, [$binary_path.clone()]);
         };
     }
 
     macro_rules! assert_resolves {
         ($environment:expr, $binary_path:expr) => {
             assert_resolves_name!($environment, "name", $binary_path)
+        };
+    }
+
+    macro_rules! assert_get_paths {
+        ($environment:expr, []) => {
+            assert_get_paths!($environment, Vec::<String>::new());
+        };
+        ($environment:expr, $paths:expr) => {
+            run_cli(vec!["hidden-shell", "get-paths"], &$environment)
+                .await
+                .unwrap();
+            let paths_text = $paths.join(SYS_PATH_DELIMITER);
+            assert_logs!($environment, [paths_text]);
+        };
+    }
+
+    macro_rules! assert_get_env_vars {
+        ($environment:expr, [$(($key:expr, $value:expr)),*]) => {
+            run_cli(vec!["hidden-shell", "get-env-vars"], &$environment)
+                .await
+                .unwrap();
+
+            #[allow(unused_mut)]
+            let mut expected_logs = Vec::<String>::new();
+            if cfg!(target_os="windows") {
+                $(
+                    expected_logs.push(format!("SET {}={}", $key, $value));
+                )*
+            } else {
+                $(
+                    expected_logs.push("ADD".to_string());
+                    expected_logs.push($key.to_string());
+                    expected_logs.push($value.to_string());
+                )*
+            }
+            assert_logs!($environment, expected_logs);
+        };
+    }
+
+    macro_rules! assert_get_pending_env_changes {
+        ($environment:expr, [$(($key:expr, $value:expr)),*], [$($remove_key:expr),*], $new_path:expr) => {
+            run_cli(vec!["hidden-shell", "get-pending-env-changes"], &$environment)
+                .await
+                .unwrap();
+            assert_logged_env_changes!($environment, [$(($key, $value)),*], [$($remove_key),*], $new_path);
+        };
+    }
+
+    macro_rules! assert_logged_env_changes {
+        ($environment:expr, [$(($key:expr, $value:expr)),*], [$($remove_key:expr),*], $new_path:expr) => {
+            let mut expected_logs = Vec::<String>::new();
+            $(
+                if cfg!(target_os="windows") {
+                    expected_logs.push(format!("SET {}=", $remove_key));
+                } else {
+                    expected_logs.push("REMOVE".to_string());
+                    expected_logs.push($remove_key.to_string());
+                }
+            )*
+
+            $(
+                if cfg!(target_os="windows") {
+                    expected_logs.push(format!("SET {}={}", $key, $value));
+                } else {
+                    expected_logs.push("ADD".to_string());
+                    expected_logs.push($key.to_string());
+                    expected_logs.push($value.to_string());
+                }
+            )*
+
+            if !$new_path.is_empty() {
+                if cfg!(target_os="windows") {
+                    expected_logs.push(format!("SET PATH={}", $new_path));
+                } else {
+                    expected_logs.push("ADD".to_string());
+                    expected_logs.push("PATH".to_string());
+                    expected_logs.push($new_path.to_string());
+                }
+            }
+
+            assert_logs!($environment, expected_logs);
         };
     }
 
@@ -965,8 +1172,7 @@ mod test {
             )
             .await
             .unwrap();
-            let logged_messages = $environment.take_logged_messages();
-            assert_eq!(logged_messages, vec![$binary_path.clone()]);
+            assert_logs!($environment, vec![$binary_path.clone()]);
         };
     }
 
@@ -978,26 +1184,7 @@ mod test {
             )
             .await
             .unwrap();
-            let logged_messages = $environment.take_logged_messages();
-            assert_eq!(logged_messages, vec![$result.to_string()]);
-        };
-    }
-
-    macro_rules! assert_exec_env_path {
-        ($environment:expr, $name:expr, $version:expr, $existing_path:expr, $path:expr) => {
-            run_cli(
-                vec![
-                    "hidden-shell",
-                    "get-exec-env-path",
-                    $name,
-                    $version,
-                    &$existing_path,
-                ],
-                &$environment,
-            )
-            .await
-            .unwrap();
-            assert_eq!($environment.take_logged_messages(), [$path]);
+            assert_logs!($environment, [$result.to_string()]);
         };
     }
 
@@ -1011,16 +1198,14 @@ mod test {
     async fn should_output_version() {
         let environment = TestEnvironment::new();
         run_cli(vec!["--version"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, [format!("bvm {}", env!("CARGO_PKG_VERSION"))]);
+        assert_logs!(environment, [format!("bvm {}", env!("CARGO_PKG_VERSION"))]);
     }
 
     #[tokio::test]
     async fn should_init() {
         let environment = TestEnvironment::new();
         run_cli(vec!["init"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, ["Created .bvmrc.json"]);
+        assert_logs!(environment, ["Created .bvmrc.json"]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from(".bvmrc.json")).unwrap(),
             "{\n  \"binaries\": [\n  ]\n}\n"
@@ -1046,8 +1231,7 @@ mod test {
 
         // install the package
         install_url!(environment, "http://localhost/package.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         // check setup was correct
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1074,9 +1258,8 @@ mod test {
 
         // install the package
         install_url!(environment, "http://localhost/package.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 1.0.0...",
                 "Installed. Run `bvm use name 1.0.0` to use it on the path as 'name'."
@@ -1113,14 +1296,12 @@ mod test {
 
         // install the first package
         install_url!(environment, "http://localhost/package.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0...",]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0...",]);
 
         // now install the second
         install_url!(environment, "http://localhost/package2.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 2.0.0...",
                 "Installed. Run `bvm use name 2.0.0` to use it on the path as 'name'."
@@ -1136,15 +1317,13 @@ mod test {
         run_cli(vec!["install", "--use", "http://localhost/package3.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 3.0.0...",]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 3.0.0...",]);
         assert_resolves!(&environment, third_binary_path);
 
         // install the fourth package
         install_url!(environment, "http://localhost/package4.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 4.0.0...",
                 "Installed. Run `bvm use name 4.0.0` to use it on the path as 'name', 'name-second'."
@@ -1156,9 +1335,8 @@ mod test {
         run_cli(vec!["install", "--use", "http://localhost/package4.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             ["Already installed. Provide the `--force` flag to reinstall."]
         );
         assert_resolves!(&environment, fourth_binary_path);
@@ -1171,8 +1349,7 @@ mod test {
         )
         .await
         .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 4.0.0...",]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 4.0.0...",]);
         assert_resolves!(&environment, fourth_binary_path);
         assert_resolves_name!(&environment, "name-second", fourth_binary_path_second);
     }
@@ -1187,8 +1364,7 @@ mod test {
 
         // install and check setup
         install_url!(environment, "http://localhost/package.json");
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0...",]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0...",]);
         assert_has_path!(environment, &binary_path);
         assert_has_path!(environment, &get_shim_path("name"));
 
@@ -1219,8 +1395,8 @@ mod test {
         run_cli(vec!["install", "--use", "http://localhost/package2.json"], &environment)
             .await
             .unwrap();
-        assert_eq!(
-            environment.take_logged_errors(),
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner2/name 2.0.0...",
                 concat!(
@@ -1248,10 +1424,7 @@ mod test {
         let environment = builder.build();
 
         install_url!(environment, "http://localhost/package.json");
-        assert_eq!(
-            environment.take_logged_errors(),
-            ["Extracting archive for owner/name 1.0.0..."]
-        );
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
             environment.take_run_shell_commands(),
             [
@@ -1279,8 +1452,7 @@ mod test {
         // move to the correct dir, then try again
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1310,21 +1482,18 @@ mod test {
         // run the install command in the correct directory
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
 
         // now try to resolve the binary
         assert_resolves!(environment, second_binary_path);
 
         // try reinstalling, it should not output anything
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors.len(), 0);
+        assert_logs_errors!(environment, []);
 
         // try reinstalling, but provide --force
         run_cli(vec!["install", "--force"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
 
         // go up a directory and it should resolve to the previously set global
         environment.set_cwd("/");
@@ -1333,8 +1502,7 @@ mod test {
         // go back and provide --use
         environment.set_cwd("/project");
         run_cli(vec!["install", "--use"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors.len(), 0);
+        assert_logs_errors!(environment, []);
 
         // go up a directory and it should use the path from the config globally now
         environment.set_cwd("/");
@@ -1352,8 +1520,7 @@ mod test {
         // run the install command in the correct directory
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         // now try to resolve the binary
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1379,8 +1546,7 @@ mod test {
         // run the install command in the correct directory
         environment.set_cwd("/project");
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         let logged_shell_commands = environment.take_run_shell_commands();
         assert_eq!(
             logged_shell_commands,
@@ -1403,8 +1569,7 @@ mod test {
         environment.set_cwd("/project");
 
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
     }
 
     #[tokio::test]
@@ -1419,8 +1584,7 @@ mod test {
         environment.set_cwd("/project");
 
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
     }
 
     #[tokio::test]
@@ -1468,7 +1632,7 @@ mod test {
         install_url!(environment, "http://localhost/package2.json");
         environment.clear_logs();
         run_cli(vec!["install"], &environment).await.unwrap();
-        assert_eq!(environment.take_logged_errors().is_empty(), true);
+        assert_logs_errors!(environment, []);
         assert_resolves!(environment, get_binary_path("owner", "name", "1.1.0"));
     }
 
@@ -1489,7 +1653,7 @@ mod test {
 
         // should not install because 1.1 is the same as ^1.1 in a config file
         run_cli(vec!["install"], &environment).await.unwrap();
-        assert_eq!(environment.take_logged_errors().is_empty(), true);
+        assert_logs_errors!(environment, []);
         assert_resolves!(environment, get_binary_path("owner", "name", "1.3.0"));
     }
 
@@ -1508,8 +1672,7 @@ mod test {
         install_url!(environment, "http://localhost/package2.json");
         environment.clear_logs();
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_resolves!(environment, get_binary_path("owner", "name", "1.0.0"));
     }
 
@@ -1630,7 +1793,7 @@ mod test {
     async fn list_command_with_no_installs() {
         let environment = TestEnvironment::new();
         run_cli(vec!["list"], &environment).await.unwrap();
-        assert_eq!(environment.take_logged_messages().len(), 0);
+        assert_logs!(environment, []);
     }
 
     #[tokio::test]
@@ -1653,8 +1816,8 @@ mod test {
 
         // check list
         run_cli(vec!["list"], &environment).await.unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
+        assert_logs!(
+            environment,
             ["david/c 2.1.1\nowner/b 2.0.0\nowner/name 1.0.0\nowner/name 2.0.0"]
         );
     }
@@ -1739,8 +1902,8 @@ mod test {
 
         // now try to use it
         run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
-        assert_eq!(
-            environment.take_logged_errors(),
+        assert_logs_errors!(
+            environment,
             [concat!(
                 "Updated globally used version of 'name', but local version remains using version specified ",
                 "in the current working directory's config file. If you wish to change the local version, ",
@@ -1839,8 +2002,7 @@ mod test {
 
         // install
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         // clear the url cache
         run_cli(vec!["clear-url-cache"], &environment).await.unwrap();
@@ -1848,13 +2010,11 @@ mod test {
         // ensure it still resolves, but it will error
         let binary_path = get_binary_path("owner", "name", "1.0.0");
         assert_resolves!(environment, binary_path);
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global 'name'."]);
+        assert_logs_errors!(environment, ["[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global 'name'."]);
 
         // install again, but it shouldn't install because already installed
         run_cli(vec!["install"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors.len(), 0);
+        assert_logs_errors!(environment, []);
 
         // should resolve without error now
         let binary_path = get_binary_path("owner", "name", "1.0.0");
@@ -1899,23 +2059,23 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            vec!["Associated binaries:", "* owner/name - Some description."]
+        assert_logs!(
+            environment,
+            ["Associated binaries:", "* owner/name - Some description."]
         );
         run_cli(vec!["registry", "add", "http://localhost/registry.json"], &environment)
             .await
             .unwrap(); // add twice
-        assert_eq!(
-            environment.take_logged_messages(),
-            vec!["Associated binaries:", "* owner/name - Some description."]
+        assert_logs!(
+            environment,
+            ["Associated binaries:", "* owner/name - Some description."]
         );
         run_cli(vec!["registry", "add", "http://localhost/registry2.json"], &environment)
             .await
             .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            vec![
+        assert_logs!(
+            environment,
+            [
                 "Associated binaries:",
                 "* owner/name - Some description.",
                 "\nWARNING! This may be ok, but the 'owner/name' binary was already associated to the following url(s): http://localhost/registry.json -- They are now all associated and binary selection will go through each registry to find a matching version."
@@ -1924,13 +2084,12 @@ mod test {
         run_cli(vec!["registry", "add", "http://localhost/registry3.json"], &environment)
             .await
             .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            vec!["Associated binaries:", "* owner2/name2 - Some description."]
+        assert_logs!(
+            environment,
+            ["Associated binaries:", "* owner2/name2 - Some description."]
         );
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, ["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
+        assert_logs!(environment, ["owner/name - http://localhost/registry.json\nowner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]);
         run_cli(
             vec!["registry", "remove", "http://localhost/registry.json"],
             &environment,
@@ -1944,9 +2103,8 @@ mod test {
         .await
         .unwrap(); // remove twice should silently ignore
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(
-            logged_messages,
+        assert_logs!(
+            environment,
             ["owner/name - http://localhost/registry2.json\nowner2/name2 - http://localhost/registry3.json"]
         );
         run_cli(
@@ -1956,8 +2114,7 @@ mod test {
         .await
         .unwrap();
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, vec!["owner2/name2 - http://localhost/registry3.json"]);
+        assert_logs!(environment, ["owner2/name2 - http://localhost/registry3.json"]);
         run_cli(
             vec!["registry", "remove", "http://localhost/registry3.json"],
             &environment,
@@ -1965,8 +2122,7 @@ mod test {
         .await
         .unwrap();
         run_cli(vec!["registry", "list"], &environment).await.unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages.len(), 0);
+        assert_logs!(environment, []);
     }
 
     #[tokio::test]
@@ -2004,20 +2160,18 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(
-            environment.take_logged_messages(),
+        assert_logs!(
+            environment,
             vec!["Associated binaries:", "* owner/name - Some description."]
         );
 
         run_cli(vec!["install", "name", "1.0.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         // install latest when only specifying major
         run_cli(vec!["install", "name", "1"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 1.1.0...",
                 "Installed. Run `bvm use name 1.1.0` to use it on the path as 'name'.",
@@ -2026,9 +2180,8 @@ mod test {
 
         // install latest patch when specifying minor
         run_cli(vec!["install", "name", "1.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 1.0.1...",
                 "Installed. Run `bvm use name 1.0.1` to use it on the path as 'name'.",
@@ -2041,9 +2194,8 @@ mod test {
 
         // install when specifying caret
         run_cli(vec!["install", "name", "^1.0.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 1.1.0...",
                 "Installed. Run `bvm use name 1.1.0` to use it on the path as 'name'.",
@@ -2052,9 +2204,8 @@ mod test {
 
         // install when specifying tilde
         run_cli(vec!["install", "name", "~1.0.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for owner/name 1.0.1...",
                 "Installed. Run `bvm use name 1.0.1` to use it on the path as 'name'.",
@@ -2100,16 +2251,15 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(
-            environment.take_logged_messages(),
-            vec!["Associated binaries:", "* other/name - Some description."]
+        assert_logs!(
+            environment,
+            ["Associated binaries:", "* other/name - Some description."]
         );
 
         // and install
         run_cli(vec!["install", "name", "1"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(
-            logged_errors,
+        assert_logs_errors!(
+            environment,
             [
                 "Extracting archive for other/name 1.0.0...",
                 "Installed. Run `bvm use other/name 1.0.0` to use it on the path as 'name'.",
@@ -2160,8 +2310,7 @@ mod test {
         environment.clear_logs();
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.1..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.1..."]);
     }
 
     #[tokio::test]
@@ -2196,8 +2345,7 @@ mod test {
         environment.clear_logs();
 
         run_cli(vec!["install", "name"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0-beta..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0-beta..."]);
     }
 
     #[tokio::test]
@@ -2291,22 +2439,29 @@ mod test {
     }
 
     #[tokio::test]
-    async fn binary_has_environment_variable() {
+    async fn binary_has_environment_path_and_variable() {
         let builder = EnvironmentBuilder::new();
         builder.add_binary_to_path("name");
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
         plugin_builder.add_env_path("dir");
+        plugin_builder.add_env_var("test", "1");
+        #[cfg(target_os = "windows")]
+        plugin_builder.add_env_var("other", "%BVM_CURRENT_BINARY_DIR%\\dir");
+        #[cfg(not(target_os = "windows"))]
+        plugin_builder.add_env_var("other", "$BVM_CURRENT_BINARY_DIR/dir");
         plugin_builder.download_type(PluginDownloadType::Zip);
         plugin_builder.build();
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
         plugin_builder.add_env_path("dir2");
         plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
+        plugin_builder.add_env_var("test", "2");
         plugin_builder.download_type(PluginDownloadType::TarGz);
         plugin_builder.build();
         builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "3.0.0");
         let environment = builder.build();
+        let original_path = environment.get_env_path();
 
         install_url!(environment, "http://localhost/package.json");
         install_url!(environment, "http://localhost/package2.json");
@@ -2331,26 +2486,15 @@ mod test {
             "/local-data/binaries/owner/name/2.0.0/other/path"
         };
 
-        // should have updated the environment with the new path
-        run_cli(
-            vec![
-                "hidden-shell",
-                "get-new-path",
-                &format!("exiting/path{0}other/path", SYS_PATH_DELIMITER),
-            ],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!(
-                "exiting/path{0}other/path{0}{1}",
-                SYS_PATH_DELIMITER, first_path_str
-            )]
+        // check pending environment state
+        assert_get_pending_env_changes!(
+            environment,
+            [("other", first_path_str), ("test", "1")],
+            [],
+            format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str)
         );
 
-        // only windows will have updated the system path
+        // only windows will have updated the environment path and variables
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
@@ -2360,73 +2504,56 @@ mod test {
                     PathBuf::from(&first_path_str)
                 ]
             );
+            assert_eq!(
+                environment.get_sys_env_variables(),
+                [
+                    ("other".to_string(), first_path_str.to_string()),
+                    ("test".to_string(), "1".to_string())
+                ]
+            );
+        } else {
+            assert_eq!(environment.get_sys_env_variables(), []);
         }
 
-        // should output correctly when ends with delimiter
-        run_cli(
-            vec!["hidden-shell", "get-new-path", &format!("test{}", SYS_PATH_DELIMITER)],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!("test{0}{1}", SYS_PATH_DELIMITER, first_path_str)]
+        // should output correctly when the path ends with delimiter
+        environment.set_env_path(&format!("{}{}", original_path, SYS_PATH_DELIMITER));
+        assert_get_pending_env_changes!(
+            environment,
+            [("other", first_path_str), ("test", "1")],
+            [],
+            format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str)
         );
 
-        // clear the pending changes
-        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
-            .await
-            .unwrap();
+        // update with the current environment settings
+        update_with_pending_env_changes(&environment).await;
 
-        // now the path should return as-is
-        run_cli(vec!["hidden-shell", "get-new-path", "test"], &environment)
-            .await
-            .unwrap();
-        assert_eq!(environment.take_logged_messages(), ["test"]);
+        // now this should output nothing
+        assert_get_pending_env_changes!(environment, [], [], "");
 
-        // ensure this exists in get-paths
-        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
-        assert_eq!(environment.take_logged_messages(), [first_path_str]);
+        // ensure this exists in get-paths and get-env-vars
+        assert_get_paths!(environment, [first_path_str]);
+        assert_get_env_vars!(environment, [("other", first_path_str), ("test", "1")]);
 
         // now switch
         run_cli(vec!["use", "name", "2.0.0"], &environment).await.unwrap();
 
-        // get the new path based on the old one
-        run_cli(
-            vec![
-                "hidden-shell",
-                "get-new-path",
-                &format!("exiting/path{0}other/path{0}{1}", SYS_PATH_DELIMITER, first_path_str),
-            ],
-            &environment,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!(
-                "exiting/path{0}other/path{0}{1}{0}{2}",
-                SYS_PATH_DELIMITER, second_path_str1, second_path_str2
-            )]
+        // check pending environment state
+        assert_get_pending_env_changes!(
+            environment,
+            [("test", "2")],
+            ["other"],
+            format!(
+                "{0}{1}{2}{1}{3}",
+                original_path, SYS_PATH_DELIMITER, second_path_str1, second_path_str2
+            )
         );
 
-        // clear the pending changes
-        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
-            .await
-            .unwrap();
+        // update with the current environment settings
+        update_with_pending_env_changes(&environment).await;
 
-        // ensure the paths exist in get-paths now
-        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
-
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!(
-                "{}{}{}",
-                second_path_str1, SYS_PATH_DELIMITER, second_path_str2
-            )]
-        );
+        // ensure the paths exist in get-paths now and env-vars in get-env-vars
+        assert_get_paths!(environment, [second_path_str1, second_path_str2]);
+        assert_get_env_vars!(environment, [("test", "2")]);
 
         if cfg!(target_os = "windows") {
             assert_eq!(
@@ -2438,67 +2565,42 @@ mod test {
                     PathBuf::from(&second_path_str2)
                 ]
             );
+            assert_eq!(
+                environment.get_sys_env_variables(),
+                [("test".to_string(), "2".to_string())]
+            );
         }
 
         // now switch
         run_cli(vec!["use", "name", "3.0.0"], &environment).await.unwrap();
 
-        // get the new path based on the old one
-        run_cli(
-            vec![
-                "hidden-shell",
-                "get-new-path",
-                &format!(
-                    "exiting/path{0}other/path{0}{1}{0}{2}",
-                    SYS_PATH_DELIMITER, second_path_str1, second_path_str2
-                ),
-            ],
-            &environment,
-        )
-        .await
-        .unwrap();
+        // check pending environment state
+        assert_get_pending_env_changes!(environment, [], ["test"], original_path);
 
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!("exiting/path{0}other/path", SYS_PATH_DELIMITER)]
-        );
+        // update with the current environment settings
+        update_with_pending_env_changes(&environment).await;
 
-        // clear the pending changes
-        run_cli(vec!["hidden-shell", "clear-pending-changes"], &environment)
-            .await
-            .unwrap();
-
-        // ensure the paths is empty
-        run_cli(vec!["hidden-shell", "get-paths"], &environment).await.unwrap();
-        assert_eq!(environment.take_logged_messages(), [""]);
+        // ensure all pending environment changes are empty
+        assert_get_paths!(environment, []);
+        assert_get_pending_env_changes!(environment, [], [], "");
 
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
                 [PathBuf::from("/data/shims"), PathBuf::from("/path-dir")]
             );
+            assert_eq!(environment.get_sys_env_variables(), []);
         }
 
         // use the path version then go back to the first
         run_cli(vec!["use", "name", "path"], &environment).await.unwrap();
         run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
 
-        run_cli(
-            vec![
-                "hidden-shell",
-                "get-new-path",
-                &format!("exiting/path{0}other/path", SYS_PATH_DELIMITER),
-            ],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            environment.take_logged_messages(),
-            [format!(
-                "exiting/path{0}other/path{0}{1}",
-                SYS_PATH_DELIMITER, first_path_str
-            )]
+        assert_get_pending_env_changes!(
+            environment,
+            [("other", first_path_str), ("test", "1")],
+            [],
+            format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str)
         );
     }
 
@@ -2514,8 +2616,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
             environment
                 .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
@@ -2552,8 +2653,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
             environment
                 .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
@@ -2623,12 +2723,10 @@ mod test {
         environment.clear_logs();
 
         run_cli(vec!["add", "owner/name", "1.0.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
 
         run_cli(vec!["add", "other"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/other 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/other 2.0.0..."]);
 
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
@@ -2654,8 +2752,7 @@ mod test {
 
         // now say to use ~1.0 and it should replace that in the file
         run_cli(vec!["add", "other", "~1.0"], &environment).await.unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/other 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/other 1.0.0..."]);
 
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
@@ -2751,8 +2848,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 1.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
             format!(
@@ -2790,8 +2886,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
             format!(
@@ -2837,8 +2932,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
             format!(
@@ -2884,8 +2978,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment)
             .await
             .unwrap();
-        let logged_errors = environment.take_logged_errors();
-        assert_eq!(logged_errors, ["Extracting archive for owner/name 2.0.0..."]);
+        assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
             environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
             format!(
@@ -2919,6 +3012,7 @@ mod test {
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0");
         plugin_builder.add_env_path("dir");
+        plugin_builder.add_env_var("test", "1");
         plugin_builder.download_type(PluginDownloadType::Zip);
         plugin_builder.build();
         let mut plugin_builder =
@@ -2926,9 +3020,11 @@ mod test {
         plugin_builder.add_env_path("dir2");
         plugin_builder.on_use("command"); // should not execute
         plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
+        plugin_builder.add_env_var("test", "2");
         plugin_builder.download_type(PluginDownloadType::TarGz);
         plugin_builder.build();
         let environment = builder.build();
+        let original_path = environment.get_env_path();
 
         install_url!(environment, "http://localhost/package.json");
         install_url!(environment, "http://localhost/package2.json");
@@ -2950,14 +3046,20 @@ mod test {
             "/local-data/binaries/owner/name/2.0.0/other/path"
         };
 
-        // should get the environment path for the provided version
-        assert_exec_env_path!(
-            environment,
-            "name",
-            "1",
-            format!("exiting/path{0}other/path", SYS_PATH_DELIMITER),
-            format!("exiting/path{0}other/path{0}{1}", SYS_PATH_DELIMITER, first_path_str)
-        );
+        // should get the environment changes for the provided version
+        run_cli(vec!["hidden-shell", "get-exec-env-changes", "name", "1"], &environment)
+            .await
+            .unwrap();
+        let first_bin_env_path = format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str);
+        assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
+
+        run_cli(
+            vec!["hidden-shell", "get-post-exec-env-changes", "name", "1"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [], ["test"], original_path);
 
         // the path should remain the same
         if cfg!(target_os = "windows") {
@@ -2965,23 +3067,64 @@ mod test {
                 environment.get_system_path_dirs(),
                 [PathBuf::from("/data/shims"), PathBuf::from("/path-dir"),]
             );
+            assert_eq!(environment.get_sys_env_variables().is_empty(), true);
         }
 
         // test executing the currently used binary
         run_cli(vec!["use", "name", "1.0.0"], &environment).await.unwrap();
-        assert_exec_env_path!(environment, "name", "1.0.0", first_path_str, first_path_str);
+        update_with_pending_env_changes(&environment).await;
+
+        run_cli(
+            vec!["hidden-shell", "get-exec-env-changes", "name", "1.0.0"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [("test", 1)], [], "");
+        run_cli(
+            vec!["hidden-shell", "get-post-exec-env-changes", "name", "1.0.0"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [("test", 1)], [], "");
 
         // test executing binaries with different paths
-        assert_exec_env_path!(
+        run_cli(vec!["hidden-shell", "get-exec-env-changes", "name", "^2"], &environment)
+            .await
+            .unwrap();
+        assert_logged_env_changes!(
             environment,
-            "name",
-            "^2",
-            first_path_str,
-            format!("{0}{1}{2}", second_path_str1, SYS_PATH_DELIMITER, second_path_str2)
+            [("test", "2")],
+            [],
+            format!(
+                "{1}{0}{2}{0}{3}",
+                SYS_PATH_DELIMITER, original_path, second_path_str1, second_path_str2
+            )
         );
+        run_cli(
+            vec!["hidden-shell", "get-post-exec-env-changes", "name", "^2"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
 
         // test getting the one on the path
-        assert_exec_env_path!(environment, "name", "path", first_path_str, "");
+        run_cli(
+            vec!["hidden-shell", "get-exec-env-changes", "name", "path"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [], ["test"], original_path);
+        run_cli(
+            vec!["hidden-shell", "get-post-exec-env-changes", "name", "path"],
+            &environment,
+        )
+        .await
+        .unwrap();
+        assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
     }
 
     #[tokio::test]
@@ -3038,8 +3181,7 @@ mod test {
         run_cli(vec!["hidden-shell", "has-command", "name", "1"], &environment)
             .await
             .unwrap();
-        let logged_messages = environment.take_logged_messages();
-        assert_eq!(logged_messages, vec!["false"]);
+        assert_logs!(environment, ["false"]);
     }
 
     #[cfg(target_os = "windows")]
@@ -3145,6 +3287,25 @@ mod test {
         } else {
             format!("/local-data/binaries/{}/{}/{}/{1}-second", owner, name, version)
         }
+    }
+
+    async fn update_with_pending_env_changes(environment: &TestEnvironment) {
+        use super::PluginsManifest;
+        let plugin_manifest = PluginsManifest::load(environment);
+
+        for (key, _) in plugin_manifest.get_pending_removed_env_variables(environment) {
+            environment.remove_env_var(&key);
+        }
+
+        for (key, value) in plugin_manifest.get_pending_added_env_variables(environment) {
+            environment.set_env_var(&key, &value);
+        }
+        let new_path = super::plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest);
+        environment.set_env_path(&new_path);
+
+        run_cli(vec!["hidden-shell", "clear-pending-env-changes"], &environment)
+            .await
+            .unwrap();
     }
 
     async fn run_cli(args: Vec<&str>, environment: &TestEnvironment) -> Result<(), ErrBox> {

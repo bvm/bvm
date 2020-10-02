@@ -80,26 +80,23 @@ pub struct AddCommand {
 }
 
 pub enum ShellSubCommand {
-    GetNewPath(ShellGetNewPathCommand),
-    GetExecEnvPath(ShellGetExecEnvPathCommand),
+    GetExecEnvChanges(ShellExecEnvChangesCommand),
+    GetPostExecEnvChanges(ShellExecEnvChangesCommand),
     GetExecCommandPath(ShellGetExecCommandPathCommand),
     HasCommand(ShellHasCommandCommand),
-    ClearPendingChanges,
+    GetPendingEnvChanges,
+    ClearPendingEnvChanges,
     GetPaths,
+    GetEnvVars,
     #[cfg(target_os = "windows")]
     WindowsInstall(ShellWindowsInstallCommand),
     #[cfg(target_os = "windows")]
     WindowsUninstall(ShellWindowsUninstallCommand),
 }
 
-pub struct ShellGetNewPathCommand {
-    pub current_sys_path: String,
-}
-
-pub struct ShellGetExecEnvPathCommand {
+pub struct ShellExecEnvChangesCommand {
     pub name_selector: NameSelector,
     pub version_selector: PathOrVersionSelector,
-    pub current_sys_path: String,
 }
 
 pub struct ShellGetExecCommandPathCommand {
@@ -248,23 +245,29 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         }
     } else if matches.is_present("hidden-shell") {
         let matches = matches.subcommand_matches("hidden-shell").unwrap();
-        if matches.is_present("get-new-path") {
-            let matches = matches.subcommand_matches("get-new-path").unwrap();
-            SubCommand::Shell(ShellSubCommand::GetNewPath(ShellGetNewPathCommand {
-                current_sys_path: matches.value_of("current_sys_path").map(String::from).unwrap(),
-            }))
-        } else if matches.is_present("clear-pending-changes") {
-            SubCommand::Shell(ShellSubCommand::ClearPendingChanges)
+        if matches.is_present("get-pending-env-changes") {
+            SubCommand::Shell(ShellSubCommand::GetPendingEnvChanges)
+        } else if matches.is_present("clear-pending-env-changes") {
+            SubCommand::Shell(ShellSubCommand::ClearPendingEnvChanges)
         } else if matches.is_present("get-paths") {
             SubCommand::Shell(ShellSubCommand::GetPaths)
-        } else if matches.is_present("get-exec-env-path") {
-            let matches = matches.subcommand_matches("get-exec-env-path").unwrap();
-            SubCommand::Shell(ShellSubCommand::GetExecEnvPath(ShellGetExecEnvPathCommand {
+        } else if matches.is_present("get-env-vars") {
+            SubCommand::Shell(ShellSubCommand::GetEnvVars)
+        } else if matches.is_present("get-exec-env-changes") {
+            let matches = matches.subcommand_matches("get-exec-env-changes").unwrap();
+            SubCommand::Shell(ShellSubCommand::GetExecEnvChanges(ShellExecEnvChangesCommand {
                 name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
                 version_selector: PathOrVersionSelector::parse(
                     &matches.value_of("version").map(String::from).unwrap(),
                 )?,
-                current_sys_path: matches.value_of("current_sys_path").map(String::from).unwrap(),
+            }))
+        } else if matches.is_present("get-post-exec-env-changes") {
+            let matches = matches.subcommand_matches("get-post-exec-env-changes").unwrap();
+            SubCommand::Shell(ShellSubCommand::GetPostExecEnvChanges(ShellExecEnvChangesCommand {
+                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(
+                    &matches.value_of("version").map(String::from).unwrap(),
+                )?,
             }))
         } else if matches.is_present("get-exec-command-path") {
             let matches = matches.subcommand_matches("get-exec-command-path").unwrap();
@@ -470,21 +473,19 @@ ARGS:
             SubCommand::with_name("hidden-shell")
                 .setting(AppSettings::Hidden)
                 .subcommand(
-                    SubCommand::with_name("get-new-path")
-                        .arg(
-                            Arg::with_name("current_sys_path")
-                                .takes_value(true)
-                                .required(true)
-                        )
+                    SubCommand::with_name("get-pending-env-changes")
                 )
                 .subcommand(
-                    SubCommand::with_name("clear-pending-changes")
+                    SubCommand::with_name("clear-pending-env-changes")
                 )
                 .subcommand(
                     SubCommand::with_name("get-paths")
                 )
                 .subcommand(
-                    SubCommand::with_name("get-exec-env-path")
+                    SubCommand::with_name("get-env-vars")
+                )
+                .subcommand(
+                    SubCommand::with_name("get-exec-env-changes")
                         .arg(
                             Arg::with_name("binary_name")
                                 .takes_value(true)
@@ -495,8 +496,16 @@ ARGS:
                                 .takes_value(true)
                                 .required(true)
                         )
+                )
+                .subcommand(
+                    SubCommand::with_name("get-post-exec-env-changes")
                         .arg(
-                            Arg::with_name("current_sys_path")
+                            Arg::with_name("binary_name")
+                                .takes_value(true)
+                                .required(true)
+                        )
+                        .arg(
+                            Arg::with_name("version")
                                 .takes_value(true)
                                 .required(true)
                         )
