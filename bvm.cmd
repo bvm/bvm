@@ -78,7 +78,7 @@ FOR /F "delims=" %%F in ('bvm-bin hidden-shell get-exec-env-changes "%bvm_exec_n
 %bvm_exec_exe_path% %bvm_exec_args%
 SET bvm_exit_code=%ERRORLEVEL%
 
-REM Run the post environment changes
+REM Run the post environment changes (todo: figure out how to use a sub shell here so this isn't necessary)
 FOR /F "delims=" %%F in ('bvm-bin hidden-shell get-post-exec-env-changes "%bvm_exec_name%" "%bvm_exec_version%"') do (
   %%F
 )

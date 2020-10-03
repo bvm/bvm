@@ -12,7 +12,7 @@ pub(super) fn create_shim(environment: &impl Environment, command_name: &Command
         &file_path,
         &format!(
             r#"#!/bin/sh
-exe_path=$(bvm-bin resolve {})
+exe_path=$($BVM_INSTALL_DIR/bin/bvm-bin resolve {})
 "$exe_path" "$@""#,
             command_name.as_str()
         ),
