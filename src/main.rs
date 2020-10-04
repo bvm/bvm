@@ -52,7 +52,6 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
     match args.sub_command {
         SubCommand::Help(text) => environment.log(&text),
         SubCommand::Version => environment.log(&format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))),
-        SubCommand::Resolve(command) => handle_resolve_command(environment, command)?,
         SubCommand::Install(command) => handle_install_command(environment, command).await?,
         SubCommand::InstallUrl(command) => handle_install_url_command(environment, command).await?,
         SubCommand::Uninstall(command) => handle_uninstall_command(environment, command)?,
@@ -63,40 +62,8 @@ async fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<St
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command).await?,
         SubCommand::Add(command) => handle_add_command(environment, command).await?,
-        SubCommand::Shell(command) => handle_shell_command(environment, command)?,
+        SubCommand::Hidden(command) => handle_hidden_command(environment, command)?,
     }
-
-    Ok(())
-}
-
-fn handle_resolve_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    resolve_command: ResolveCommand,
-) -> Result<(), ErrBox> {
-    let plugin_manifest = PluginsManifest::load(environment);
-    let command_name = CommandName::from_string(resolve_command.binary_name);
-    let info = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?;
-    let executable_path = if let Some(info) = info {
-        if let Some(executable_path) = info.executable_path {
-            Some(executable_path.clone())
-        } else {
-            if info.had_uninstalled_binary {
-                environment.log_error(&format!(
-                    "[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global '{}'.",
-                    command_name
-                ));
-            }
-            None
-        }
-    } else {
-        None
-    };
-    let executable_path = match executable_path {
-        Some(path) => path,
-        None => plugin_helpers::get_global_binary_file_name(environment, &plugin_manifest, &command_name)?,
-    };
-
-    environment.log(&executable_path.to_string_lossy());
 
     Ok(())
 }
@@ -180,17 +147,15 @@ async fn handle_install_url_command<TEnvironment: Environment>(
             .map(|identifier| identifier.clone())
             .unwrap();
         let command_names = plugins.manifest.get_binary(&identifier).unwrap().get_command_names();
-        for command_name in command_names {
-            let is_command_in_config_file =
-                get_is_command_in_config_file(environment, &plugins.manifest, &command_name);
+
+        for command_name in command_names.iter() {
             plugins.use_global_version(
                 command_name.clone(),
                 plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
             )?;
-            if is_command_in_config_file {
-                display_command_in_config_file_warning(environment, &command_name);
-            }
         }
+
+        display_commands_in_config_file_warning_if_necessary(environment, &plugins.manifest, &command_names);
     }
 
     plugins.save()?;
@@ -243,11 +208,12 @@ async fn handle_install_url_command<TEnvironment: Environment>(
                             binary_name
                                 .display_toggled_owner(!plugins.manifest.binary_name_has_same_owner(&binary_name)),
                             version,
-                            command_names
-                                .into_iter()
-                                .map(|c| format!("'{}'", c))
-                                .collect::<Vec<_>>()
-                                .join(", "),
+                            utils::sentence_join(
+                                &command_names
+                                    .into_iter()
+                                    .map(|c| format!("'{}'", c))
+                                    .collect::<Vec<_>>()
+                            ),
                         ));
                     }
                 }
@@ -446,13 +412,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
         &use_command.version_selector,
     )?;
 
-    for command_name in command_names {
-        let is_command_in_config_file = get_is_command_in_config_file(environment, &plugins.manifest, &command_name);
-
-        if is_command_in_config_file {
-            display_command_in_config_file_warning(environment, &command_name);
-        }
-
+    for command_name in command_names.iter() {
         match &use_command.version_selector {
             PathOrVersionSelector::Path => {
                 if utils::get_path_executable_path(environment, &command_name).is_none() {
@@ -469,6 +429,8 @@ fn handle_use_binary_command<TEnvironment: Environment>(
         plugins.use_global_version(command_name.clone(), location.clone())?;
     }
 
+    display_commands_in_config_file_warning_if_necessary(environment, &plugins.manifest, &command_names);
+
     plugins.save()?;
 
     Ok(())
@@ -481,19 +443,30 @@ fn get_is_command_in_config_file(
 ) -> bool {
     let result = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name);
     match result {
-        Ok(result) => result.map(|info| info.executable_path).flatten().is_some(),
+        Ok(result) => result.map(|info| info.binary_info).flatten().is_some(),
         Err(_) => false,
     }
 }
 
-fn display_command_in_config_file_warning(environment: &impl Environment, command_name: &CommandName) {
+fn display_commands_in_config_file_warning_if_necessary(environment: &impl Environment, plugin_manifest: &PluginsManifest, command_names: &Vec<CommandName>) {
+    let command_names = command_names.iter()
+        .filter(|n| get_is_command_in_config_file(environment, &plugin_manifest, &n))
+        .map(|n| n.clone())
+        .collect::<Vec<_>>();
+
+    if command_names.is_empty() {
+        return;
+    }
+
     let message = format!(
         concat!(
-            "Updated globally used version of '{}', but local version remains using version specified ",
-            "in the current working directory's config file. If you wish to change the local version, ",
+            "Updated globally used {0} of {2}, but local {0} {1} using version specified ",
+            "in the current working directory's config file. If you wish to change the local {0}, ",
             "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
         ),
-        command_name
+        if command_names.len() == 1 { "version" } else { "versions" },
+        if command_names.len() == 1 { "remains" } else { "remain" },
+        utils::sentence_join(&command_names.iter().map(|n| format!("'{}'", n)).collect::<Vec<_>>()),
     );
     environment.log_error(&message);
 }
@@ -682,31 +655,73 @@ fn handle_registry_list_command<TEnvironment: Environment>(environment: &TEnviro
     Ok(())
 }
 
-fn handle_shell_command<TEnvironment: Environment>(
+fn handle_hidden_command<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellSubCommand,
+    command: HiddenSubCommand,
 ) -> Result<(), ErrBox> {
     match command {
-        ShellSubCommand::GetPendingEnvChanges => handle_shell_get_pending_env_changes(environment),
-        ShellSubCommand::ClearPendingEnvChanges => handle_shell_clear_pending_env_changes_command(environment),
-        ShellSubCommand::GetPaths => handle_shell_get_paths_command(environment),
-        ShellSubCommand::GetEnvVars => handle_shell_get_env_vars_command(environment),
-        ShellSubCommand::GetExecEnvChanges(command) => handle_shell_get_exec_env_changes_command(environment, command),
-        ShellSubCommand::GetPostExecEnvChanges(command) => {
-            handle_shell_get_post_exec_env_changes_command(environment, command)
+        HiddenSubCommand::ResolveCommand(command) => handle_hidden_resolve_command_command(environment, command),
+        HiddenSubCommand::GetPendingEnvChanges => handle_hidden_get_pending_env_changes(environment),
+        HiddenSubCommand::ClearPendingEnvChanges => handle_hidden_clear_pending_env_changes_command(environment),
+        HiddenSubCommand::GetPaths => handle_hidden_get_paths_command(environment),
+        HiddenSubCommand::GetEnvVars => handle_hidden_get_env_vars_command(environment),
+        HiddenSubCommand::GetExecEnvChanges(command) => handle_hidden_get_exec_env_changes_command(environment, command),
+        HiddenSubCommand::GetExecCommandPath(command) => {
+            handle_hidden_get_exec_command_path_command(environment, command)
         }
-        ShellSubCommand::GetExecCommandPath(command) => {
-            handle_shell_get_exec_command_path_command(environment, command)
-        }
-        ShellSubCommand::HasCommand(command) => handle_shell_has_command(environment, command),
+        HiddenSubCommand::HasCommand(command) => handle_hidden_has_command(environment, command),
+        #[cfg(not(target_os = "windows"))]
+        HiddenSubCommand::UnixInstall => handle_hidden_unix_install_command(environment),
         #[cfg(target_os = "windows")]
-        ShellSubCommand::WindowsInstall(command) => handle_shell_windows_install_command(environment, command),
+        HiddenSubCommand::WindowsInstall(command) => handle_hidden_windows_install_command(environment, command),
         #[cfg(target_os = "windows")]
-        ShellSubCommand::WindowsUninstall(command) => handle_shell_windows_uninstall_command(environment, command),
+        HiddenSubCommand::WindowsUninstall(command) => handle_hidden_windows_uninstall_command(environment, command),
     }
 }
 
-fn handle_shell_get_pending_env_changes<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+fn handle_hidden_resolve_command_command<TEnvironment: Environment>(environment: &TEnvironment, command: HiddenResolveCommand) -> Result<(), ErrBox> {
+    let plugin_manifest = PluginsManifest::load(environment);
+    let command_name = command.command_name;
+    let info = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?;
+    let binary_info = if let Some(info) = info {
+        if let Some(binary_info) = info.binary_info {
+            Some(binary_info)
+        } else {
+            if info.had_uninstalled_binary {
+                environment.log_error(&format!(
+                    "[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global '{}'.",
+                    command_name
+                ));
+            }
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(binary_info) = binary_info {
+        let identifier = binary_info.binary.get_identifier();
+        let executable_path = binary_info.executable_path;
+        let command_names = binary_info.binary.get_command_names();
+
+        let mut plugins = PluginsMut::from_manifest_disallow_write(environment, plugin_manifest);
+        for command_name in command_names {
+            plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+        }
+
+        output_pending_env_changes(environment, &plugins.manifest);
+        environment.log("EXEC");
+        environment.log(&executable_path.to_string_lossy());
+    } else {
+        let global_exe_path = plugin_helpers::get_global_binary_file_path(environment, &plugin_manifest, &command_name)?;
+        environment.log("EXEC");
+        environment.log(&global_exe_path.to_string_lossy());
+    }
+
+    Ok(())
+}
+
+fn handle_hidden_get_pending_env_changes<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let plugin_manifest = PluginsManifest::load(environment);
     output_pending_env_changes(environment, &plugin_manifest);
 
@@ -755,7 +770,7 @@ fn output_env_changes<TEnvironment: Environment>(
     }
 }
 
-fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
+fn handle_hidden_clear_pending_env_changes_command<TEnvironment: Environment>(
     environment: &TEnvironment,
 ) -> Result<(), ErrBox> {
     let mut plugins = PluginsMut::load(environment);
@@ -765,7 +780,7 @@ fn handle_shell_clear_pending_env_changes_command<TEnvironment: Environment>(
     Ok(())
 }
 
-fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+fn handle_hidden_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let plugin_manifest = PluginsManifest::load(environment);
     let local_data_dir = environment.get_local_user_data_dir();
     let path_text = plugin_manifest
@@ -780,7 +795,7 @@ fn handle_shell_get_paths_command<TEnvironment: Environment>(environment: &TEnvi
     Ok(())
 }
 
-fn handle_shell_get_env_vars_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+fn handle_hidden_get_env_vars_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let plugin_manifest = PluginsManifest::load(environment);
     output_set_env_vars(environment, plugin_manifest.get_env_vars(environment).iter());
 
@@ -823,9 +838,9 @@ fn output_unset_env_var<TEnvironment: Environment>(environment: &TEnvironment, k
     }
 }
 
-fn handle_shell_get_exec_env_changes_command<TEnvironment: Environment>(
+fn handle_hidden_get_exec_env_changes_command<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellExecEnvChangesCommand,
+    command: HiddenExecEnvChangesCommand,
 ) -> Result<(), ErrBox> {
     let plugin_manifest = get_manifest_for_exec_env_changes(environment, &command)?;
 
@@ -835,27 +850,9 @@ fn handle_shell_get_exec_env_changes_command<TEnvironment: Environment>(
     Ok(())
 }
 
-fn handle_shell_get_post_exec_env_changes_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    command: ShellExecEnvChangesCommand,
-) -> Result<(), ErrBox> {
-    // similar to the exec-env-changes command, but does the opposite
-    let plugin_manifest = get_manifest_for_exec_env_changes(environment, &command)?;
-
-    let added_env_vars = plugin_manifest.get_pending_added_env_variables(environment);
-    let removed_env_vars = plugin_manifest.get_pending_removed_env_variables(environment);
-    let old_path = environment.get_env_path();
-    let new_path = plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest);
-
-    // swap the order
-    output_env_changes(environment, &removed_env_vars, &added_env_vars, &new_path, &old_path);
-
-    Ok(())
-}
-
 fn get_manifest_for_exec_env_changes<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: &ShellExecEnvChangesCommand,
+    command: &HiddenExecEnvChangesCommand,
 ) -> Result<PluginsManifest, ErrBox> {
     // load ensuring the changes here won't affect the system state
     let mut plugins = PluginsMut::load_disallow_write(environment);
@@ -880,9 +877,9 @@ fn get_manifest_for_exec_env_changes<TEnvironment: Environment>(
     Ok(plugins.manifest)
 }
 
-fn handle_shell_get_exec_command_path_command<TEnvironment: Environment>(
+fn handle_hidden_get_exec_command_path_command<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellGetExecCommandPathCommand,
+    command: HiddenGetExecCommandPathCommand,
 ) -> Result<(), ErrBox> {
     let exec_path = match &command.version_selector {
         PathOrVersionSelector::Path => {
@@ -920,9 +917,9 @@ fn handle_shell_get_exec_command_path_command<TEnvironment: Environment>(
     Ok(())
 }
 
-fn handle_shell_has_command<TEnvironment: Environment>(
+fn handle_hidden_has_command<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellHasCommandCommand,
+    command: HiddenHasCommandCommand,
 ) -> Result<(), ErrBox> {
     let command_name = match command.command_name {
         Some(command_name) => command_name,
@@ -943,21 +940,30 @@ fn handle_shell_has_command<TEnvironment: Environment>(
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn handle_shell_windows_install_command<TEnvironment: Environment>(
-    environment: &TEnvironment,
-    command: ShellWindowsInstallCommand,
-) -> Result<(), ErrBox> {
-    let data_dir = environment.get_user_data_dir();
-    environment.ensure_system_path_pre(&PathBuf::from(&command.install_path).to_string_lossy())?;
-    environment.ensure_system_path_pre(&PathBuf::from(data_dir).join("shims").to_string_lossy())?;
+#[cfg(not(target_os = "windows"))]
+fn handle_hidden_unix_install_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
+    recreate_shims(environment)?;
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
-fn handle_shell_windows_uninstall_command<TEnvironment: Environment>(
+fn handle_hidden_windows_install_command<TEnvironment: Environment>(
     environment: &TEnvironment,
-    command: ShellWindowsUninstallCommand,
+    command: HiddenWindowsInstallCommand,
+) -> Result<(), ErrBox> {
+    let data_dir = environment.get_user_data_dir();
+
+    environment.ensure_system_path_pre(&PathBuf::from(&command.install_path).to_string_lossy())?;
+    environment.ensure_system_path_pre(&PathBuf::from(data_dir).join("shims").to_string_lossy())?;
+    recreate_shims(environment)?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn handle_hidden_windows_uninstall_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: HiddenWindowsUninstallCommand,
 ) -> Result<(), ErrBox> {
     let data_dir = environment.get_user_data_dir();
     environment.remove_system_path(&PathBuf::from(&command.install_path).to_string_lossy())?;
@@ -965,19 +971,36 @@ fn handle_shell_windows_uninstall_command<TEnvironment: Environment>(
     Ok(())
 }
 
-struct ConfigFileExecutableInfo {
-    executable_path: Option<PathBuf>,
+fn recreate_shims(environment: &impl Environment) -> Result<(), ErrBox> {
+    let shim_dir = utils::get_shim_dir(environment);
+    environment.remove_dir_all(&shim_dir)?;
+    environment.create_dir_all(&shim_dir)?;
+    let plugin_manifest = PluginsManifest::load(environment);
+    let command_names = plugin_manifest.get_all_command_names();
+    for command_name in command_names.iter() {
+        plugins::create_shim(environment, command_name)?;
+    }
+    Ok(())
+}
+
+struct ConfigFileExecutableInfo<'a> {
+    binary_info: Option<ConfigFileBinaryInfo<'a>>,
     had_uninstalled_binary: bool,
 }
 
-fn get_executable_path_from_config_file<TEnvironment: Environment>(
+struct ConfigFileBinaryInfo<'a> {
+    executable_path: PathBuf,
+    binary: &'a plugins::BinaryManifestItem,
+}
+
+fn get_executable_path_from_config_file<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
-    plugin_manifest: &PluginsManifest,
+    plugin_manifest: &'a PluginsManifest,
     command_name: &CommandName,
-) -> Result<Option<ConfigFileExecutableInfo>, ErrBox> {
+) -> Result<Option<ConfigFileExecutableInfo<'a>>, ErrBox> {
     Ok(if let Some((_, config_file)) = get_config_file(environment)? {
         let mut had_uninstalled_binary = false;
-        let mut executable_path = None;
+        let mut binary_info = None;
 
         for config_binary in config_file.binaries.iter() {
             let binary =
@@ -986,7 +1009,13 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
                 for command in binary.commands.iter() {
                     if &command.name == command_name {
                         let plugin_cache_dir = plugins::get_plugin_dir(environment, &binary.name, &binary.version);
-                        executable_path = Some(plugin_cache_dir.join(&command.path));
+                        let executable_path = plugin_cache_dir.join(&command.path);
+
+                        binary_info = Some(ConfigFileBinaryInfo {
+                            binary,
+                            executable_path,
+                        });
+
                         break;
                     }
                 }
@@ -996,7 +1025,7 @@ fn get_executable_path_from_config_file<TEnvironment: Environment>(
         }
 
         Some(ConfigFileExecutableInfo {
-            executable_path,
+            binary_info,
             had_uninstalled_binary,
         })
     } else {
@@ -1070,8 +1099,8 @@ mod test {
 
     macro_rules! assert_resolves_name {
         ($environment:expr, $name:expr, $binary_path:expr) => {
-            run_cli(vec!["resolve", $name], &$environment).await.unwrap();
-            assert_logs!($environment, [$binary_path.clone()]);
+            run_cli(vec!["hidden", "resolve-command", $name], &$environment).await.unwrap();
+            assert_logs!($environment, ["EXEC".to_string(), $binary_path.clone()]);
         };
     }
 
@@ -1086,7 +1115,7 @@ mod test {
             assert_get_paths!($environment, Vec::<String>::new());
         };
         ($environment:expr, $paths:expr) => {
-            run_cli(vec!["hidden-shell", "get-paths"], &$environment)
+            run_cli(vec!["hidden", "get-paths"], &$environment)
                 .await
                 .unwrap();
             let paths_text = $paths.join(SYS_PATH_DELIMITER);
@@ -1096,7 +1125,7 @@ mod test {
 
     macro_rules! assert_get_env_vars {
         ($environment:expr, [$(($key:expr, $value:expr)),*]) => {
-            run_cli(vec!["hidden-shell", "get-env-vars"], &$environment)
+            run_cli(vec!["hidden", "get-env-vars"], &$environment)
                 .await
                 .unwrap();
 
@@ -1119,7 +1148,7 @@ mod test {
 
     macro_rules! assert_get_pending_env_changes {
         ($environment:expr, [$(($key:expr, $value:expr)),*], [$($remove_key:expr),*], $new_path:expr) => {
-            run_cli(vec!["hidden-shell", "get-pending-env-changes"], &$environment)
+            run_cli(vec!["hidden", "get-pending-env-changes"], &$environment)
                 .await
                 .unwrap();
             assert_logged_env_changes!($environment, [$(($key, $value)),*], [$($remove_key),*], $new_path);
@@ -1165,7 +1194,7 @@ mod test {
     macro_rules! assert_exec_command_path {
         ($environment:expr, $name:expr, $version:expr, $command:expr, $binary_path:expr) => {
             run_cli(
-                vec!["hidden-shell", "get-exec-command-path", $name, $version, $command],
+                vec!["hidden", "get-exec-command-path", $name, $version, $command],
                 &$environment,
             )
             .await
@@ -1177,7 +1206,7 @@ mod test {
     macro_rules! assert_has_command {
         ($environment:expr, $name:expr, $version:expr, $command:expr, $result:expr) => {
             run_cli(
-                vec!["hidden-shell", "has-command", $name, $version, $command],
+                vec!["hidden", "has-command", $name, $version, $command],
                 &$environment,
             )
             .await
@@ -1324,7 +1353,7 @@ mod test {
             environment,
             [
                 "Extracting archive for owner/name 4.0.0...",
-                "Installed. Run `bvm use name 4.0.0` to use it on the path as 'name', 'name-second'."
+                "Installed. Run `bvm use name 4.0.0` to use it on the path as 'name' and 'name-second'."
             ]
         );
         assert_resolves!(&environment, third_binary_path);
@@ -3067,19 +3096,11 @@ mod test {
         };
 
         // should get the environment changes for the provided version
-        run_cli(vec!["hidden-shell", "get-exec-env-changes", "name", "1"], &environment)
+        run_cli(vec!["hidden", "get-exec-env-changes", "name", "1"], &environment)
             .await
             .unwrap();
         let first_bin_env_path = format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str);
         assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
-
-        run_cli(
-            vec!["hidden-shell", "get-post-exec-env-changes", "name", "1"],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_logged_env_changes!(environment, [], ["test"], original_path);
 
         // the path should remain the same
         if cfg!(target_os = "windows") {
@@ -3095,14 +3116,7 @@ mod test {
         update_with_pending_env_changes(&environment).await;
 
         run_cli(
-            vec!["hidden-shell", "get-exec-env-changes", "name", "1.0.0"],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_logged_env_changes!(environment, [("test", 1)], [], "");
-        run_cli(
-            vec!["hidden-shell", "get-post-exec-env-changes", "name", "1.0.0"],
+            vec!["hidden", "get-exec-env-changes", "name", "1.0.0"],
             &environment,
         )
         .await
@@ -3110,7 +3124,7 @@ mod test {
         assert_logged_env_changes!(environment, [("test", 1)], [], "");
 
         // test executing binaries with different paths
-        run_cli(vec!["hidden-shell", "get-exec-env-changes", "name", "^2"], &environment)
+        run_cli(vec!["hidden", "get-exec-env-changes", "name", "^2"], &environment)
             .await
             .unwrap();
         assert_logged_env_changes!(
@@ -3122,29 +3136,15 @@ mod test {
                 SYS_PATH_DELIMITER, original_path, second_path_str1, second_path_str2
             )
         );
-        run_cli(
-            vec!["hidden-shell", "get-post-exec-env-changes", "name", "^2"],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
 
         // test getting the one on the path
         run_cli(
-            vec!["hidden-shell", "get-exec-env-changes", "name", "path"],
+            vec!["hidden", "get-exec-env-changes", "name", "path"],
             &environment,
         )
         .await
         .unwrap();
         assert_logged_env_changes!(environment, [], ["test"], original_path);
-        run_cli(
-            vec!["hidden-shell", "get-post-exec-env-changes", "name", "path"],
-            &environment,
-        )
-        .await
-        .unwrap();
-        assert_logged_env_changes!(environment, [("test", "1")], [], first_bin_env_path);
     }
 
     #[tokio::test]
@@ -3178,7 +3178,7 @@ mod test {
         assert_exec_command_path!(environment, "other", "*", "other", fourth_binary_path);
         assert_exec_command_path!(environment, "other", "*", "other-second", fourth_binary_path_second);
         let err_message = run_cli(
-            vec!["hidden-shell", "get-exec-command-path", "other", "*", "something"],
+            vec!["hidden", "get-exec-command-path", "other", "*", "something"],
             &environment,
         )
         .await
@@ -3198,10 +3198,73 @@ mod test {
         assert_has_command!(environment, "other", "*", "other-second2", false);
 
         // check when missing last argument
-        run_cli(vec!["hidden-shell", "has-command", "name", "1"], &environment)
+        run_cli(vec!["hidden", "has-command", "name", "1"], &environment)
             .await
             .unwrap();
         assert_logs!(environment, ["false"]);
+    }
+
+    #[tokio::test]
+    async fn hidden_resolve_command() {
+        let first_binary_path = get_binary_path("owner", "name", "1.0.0");
+        let builder = EnvironmentBuilder::new();
+        let first_path_str = if cfg!(target_os = "windows") {
+            "/local-data\\binaries\\owner\\name\\1.0.0\\dir"
+        } else {
+            "/local-data/binaries/owner/name/1.0.0/dir"
+        };
+        builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "1.0.0")
+            .download_type(PluginDownloadType::Zip)
+            .add_env_var("test", "1")
+            .add_env_path("dir")
+            .build();
+        builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0")
+            .download_type(PluginDownloadType::Zip)
+            .add_env_var("other", "1")
+            .build();
+        builder
+            .create_bvmrc_builder()
+            .path("/.bvmrc.json")
+            .add_binary_path("http://localhost/package.json")
+            .build();
+        let environment = builder.build();
+        install_url!(environment, "http://localhost/package2.json");
+        install_url!(environment, "http://localhost/package.json");
+        environment.clear_logs();
+
+        run_cli(vec!["hidden", "resolve-command", "name"], &environment)
+            .await
+            .unwrap();
+
+        let mut expected_logs = get_env_change_logs(&[("test", "1")], &["other"], &format!("/data/shims{}{}", SYS_PATH_DELIMITER, &first_path_str));
+        expected_logs.push("EXEC".to_string());
+        expected_logs.push(first_binary_path);
+        assert_eq!(environment.take_logged_messages(), expected_logs);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[tokio::test]
+    async fn unix_install_command() {
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
+
+        install_url!(environment, "http://localhost/package1.json");
+        environment.clear_logs();
+
+        let shim_path = PathBuf::from(get_shim_path("name"));
+        assert_eq!(environment.path_exists(&shim_path), true);
+
+        environment.remove_file(&shim_path).unwrap();
+        run_cli(
+            vec!["hidden", "unix-install"],
+            &environment,
+        )
+        .await
+        .unwrap();
+
+        // should have recreated the shim
+        assert_eq!(environment.path_exists(&shim_path), true);
     }
 
     #[cfg(target_os = "windows")]
@@ -3210,7 +3273,7 @@ mod test {
         let environment = TestEnvironment::new();
         environment.remove_system_path("/data/shims").unwrap();
         run_cli(
-            vec!["hidden-shell", "windows-install", "C:\\test\\install\\dir\\bin"],
+            vec!["hidden", "windows-install", "C:\\test\\install\\dir\\bin"],
             &environment,
         )
         .await
@@ -3227,12 +3290,22 @@ mod test {
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn windows_install_command_existing_paths_installs() {
-        let environment = TestEnvironment::new();
+        let builder = EnvironmentBuilder::new();
+        builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
+        let environment = builder.build();
+
+        install_url!(environment, "http://localhost/package1.json");
+        environment.clear_logs();
+
+        let shim_path = PathBuf::from(get_shim_path("name"));
+        assert_eq!(environment.path_exists(&shim_path), true);
+
+        environment.remove_file(&shim_path).unwrap();
         environment.remove_system_path("/data/shims").unwrap();
         environment.ensure_system_path_pre("/data\\shims").unwrap();
         environment.ensure_system_path_pre("/other-dir").unwrap();
         run_cli(
-            vec!["hidden-shell", "windows-install", "C:\\test\\install\\dir\\bin"],
+            vec!["hidden", "windows-install", "C:\\test\\install\\dir\\bin"],
             &environment,
         )
         .await
@@ -3242,9 +3315,11 @@ mod test {
             [
                 PathBuf::from("/data\\shims"),
                 PathBuf::from("C:\\test\\install\\dir\\bin"),
-                PathBuf::from("/other-dir"),
+                PathBuf::from("/other-dir")
             ]
         );
+        // should have recreated the shim
+        assert_eq!(environment.path_exists(&shim_path), true);
     }
 
     #[cfg(target_os = "windows")]
@@ -3258,12 +3333,46 @@ mod test {
             .ensure_system_path_pre("C:\\test\\install\\dir\\bin")
             .unwrap();
         run_cli(
-            vec!["hidden-shell", "windows-uninstall", "C:\\test\\install\\dir\\bin"],
+            vec!["hidden", "windows-uninstall", "C:\\test\\install\\dir\\bin"],
             &environment,
         )
         .await
         .unwrap();
         assert_eq!(environment.get_system_path_dirs(), [PathBuf::from("/other-dir")]);
+    }
+
+    fn get_env_change_logs(added: &[(&str, &str)], removed: &[&str], new_path: &str) -> Vec<String> {
+        let mut expected_logs = Vec::new();
+        for remove_key in removed {
+            if cfg!(target_os="windows") {
+                expected_logs.push(format!("SET {}=", remove_key));
+            } else {
+                expected_logs.push("REMOVE".to_string());
+                expected_logs.push(remove_key.to_string());
+            }
+        }
+
+        for (key, value) in added {
+            if cfg!(target_os="windows") {
+                expected_logs.push(format!("SET {}={}", key, value));
+            } else {
+                expected_logs.push("ADD".to_string());
+                expected_logs.push(key.to_string());
+                expected_logs.push(value.to_string());
+            }
+        }
+
+        if !new_path.is_empty() {
+            if cfg!(target_os="windows") {
+                expected_logs.push(format!("SET PATH={}", new_path));
+            } else {
+                expected_logs.push("ADD".to_string());
+                expected_logs.push("PATH".to_string());
+                expected_logs.push(new_path.to_string());
+            }
+        }
+
+        expected_logs
     }
 
     fn get_shim_path(name: &str) -> String {
@@ -3323,7 +3432,7 @@ mod test {
         let new_path = super::plugin_helpers::get_env_path_from_pending_env_changes(environment, &plugin_manifest);
         environment.set_env_path(&new_path);
 
-        run_cli(vec!["hidden-shell", "clear-pending-env-changes"], &environment)
+        run_cli(vec!["hidden", "clear-pending-env-changes"], &environment)
             .await
             .unwrap();
     }

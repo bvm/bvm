@@ -120,7 +120,7 @@ pub fn get_latest_binary<'a>(binaries: &Vec<&'a BinaryManifestItem>) -> Option<&
     latest_binary
 }
 
-pub fn get_global_binary_file_name(
+pub fn get_global_binary_file_path(
     environment: &impl Environment,
     plugin_manifest: &PluginsManifest,
     command_name: &CommandName,

@@ -59,7 +59,7 @@ if (Get-Command Expand-Archive -ErrorAction SilentlyContinue) {
 
 Remove-Item $BvmZip
 
-Start-Process -FilePath "$BinDir\bvm-bin" -ArgumentList "hidden-shell","windows-install","`"$BinDir`""
+Start-Process -FilePath "$BinDir\bvm-bin" -ArgumentList "hidden","windows-install","`"$BinDir`""
 
 $Env:Path = "$env:APPDATA\bvm\shims;" + $Env:Path
 $Env:Path = "$BinDir;" + $Env:Path

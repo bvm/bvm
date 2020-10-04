@@ -40,6 +40,14 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         PluginsMut::new(environment.clone(), false)
     }
 
+    pub fn from_manifest_disallow_write(environment: &TEnvironment, manifest: PluginsManifest) -> Self {
+        PluginsMut {
+            environment: environment.clone(),
+            manifest,
+            allow_write: false,
+        }
+    }
+
     // general
 
     pub async fn setup_plugin<'a>(&'a mut self, plugin_file: &PluginFile) -> Result<&'a BinaryManifestItem, ErrBox> {

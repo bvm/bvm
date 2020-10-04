@@ -10,7 +10,6 @@ pub struct CliArgs {
 }
 
 pub enum SubCommand {
-    Resolve(ResolveCommand),
     Use,
     UseBinary(UseBinaryCommand),
     List,
@@ -22,12 +21,8 @@ pub enum SubCommand {
     Version,
     Init,
     ClearUrlCache,
-    Shell(ShellSubCommand),
+    Hidden(HiddenSubCommand),
     Help(String),
-}
-
-pub struct ResolveCommand {
-    pub binary_name: String,
 }
 
 pub struct UseBinaryCommand {
@@ -79,54 +74,60 @@ pub struct AddCommand {
     pub url_or_name: UrlOrName,
 }
 
-pub enum ShellSubCommand {
-    GetExecEnvChanges(ShellExecEnvChangesCommand),
-    GetPostExecEnvChanges(ShellExecEnvChangesCommand),
-    GetExecCommandPath(ShellGetExecCommandPathCommand),
-    HasCommand(ShellHasCommandCommand),
+pub enum HiddenSubCommand {
+    ResolveCommand(HiddenResolveCommand),
+    GetExecEnvChanges(HiddenExecEnvChangesCommand),
+    GetExecCommandPath(HiddenGetExecCommandPathCommand),
+    HasCommand(HiddenHasCommandCommand),
     GetPendingEnvChanges,
     ClearPendingEnvChanges,
     GetPaths,
     GetEnvVars,
+    #[cfg(not(target_os = "windows"))]
+    UnixInstall,
     #[cfg(target_os = "windows")]
-    WindowsInstall(ShellWindowsInstallCommand),
+    WindowsInstall(HiddenWindowsInstallCommand),
     #[cfg(target_os = "windows")]
-    WindowsUninstall(ShellWindowsUninstallCommand),
+    WindowsUninstall(HiddenWindowsUninstallCommand),
 }
 
-pub struct ShellExecEnvChangesCommand {
+pub struct HiddenResolveCommand {
+    pub command_name: CommandName,
+}
+
+pub struct HiddenExecEnvChangesCommand {
     pub name_selector: NameSelector,
     pub version_selector: PathOrVersionSelector,
 }
 
-pub struct ShellGetExecCommandPathCommand {
+pub struct HiddenGetExecCommandPathCommand {
     pub name_selector: NameSelector,
     pub version_selector: PathOrVersionSelector,
     pub command_name: CommandName,
 }
 
-pub struct ShellHasCommandCommand {
+pub struct HiddenHasCommandCommand {
     pub name_selector: NameSelector,
     pub version_selector: PathOrVersionSelector,
     pub command_name: Option<CommandName>,
 }
 
 #[cfg(target_os = "windows")]
-pub struct ShellWindowsInstallCommand {
+pub struct HiddenWindowsInstallCommand {
     pub install_path: String,
 }
 
 #[cfg(target_os = "windows")]
-pub struct ShellWindowsUninstallCommand {
+pub struct HiddenWindowsUninstallCommand {
     pub install_path: String,
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     // need to do this to bypass
-    if args.get(1).map(|s| s.as_str()) == Some("hidden-shell") && args.get(2).map(|s| s.as_str()) == Some("has-command")
+    if args.get(1).map(|s| s.as_str()) == Some("hidden") && args.get(2).map(|s| s.as_str()) == Some("has-command")
     {
         return Ok(CliArgs {
-            sub_command: SubCommand::Shell(ShellSubCommand::HasCommand(ShellHasCommandCommand {
+            sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
                 name_selector: parse_name_selector(args.get(3).map(String::from).unwrap()),
                 version_selector: PathOrVersionSelector::parse(&args.get(4).map(String::from).unwrap())?,
                 command_name: args
@@ -144,11 +145,60 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     };
 
     // todo: use a match statement
-    let sub_command = if matches.is_present("resolve") {
-        let resolve_matches = matches.subcommand_matches("resolve").unwrap();
-        SubCommand::Resolve(ResolveCommand {
-            binary_name: resolve_matches.value_of("binary_name").map(String::from).unwrap(),
-        })
+    let sub_command = if matches.is_present("hidden") {
+        let matches = matches.subcommand_matches("hidden").unwrap();
+        if matches.is_present("resolve-command") {
+            let matches = matches.subcommand_matches("resolve-command").unwrap();
+            SubCommand::Hidden(HiddenSubCommand::ResolveCommand(HiddenResolveCommand {
+                command_name: CommandName::from_string(matches.value_of("command_name").map(String::from).unwrap()),
+            }))
+        } else if matches.is_present("get-pending-env-changes") {
+            SubCommand::Hidden(HiddenSubCommand::GetPendingEnvChanges)
+        } else if matches.is_present("clear-pending-env-changes") {
+            SubCommand::Hidden(HiddenSubCommand::ClearPendingEnvChanges)
+        } else if matches.is_present("get-paths") {
+            SubCommand::Hidden(HiddenSubCommand::GetPaths)
+        } else if matches.is_present("get-env-vars") {
+            SubCommand::Hidden(HiddenSubCommand::GetEnvVars)
+        } else if matches.is_present("get-exec-env-changes") {
+            let matches = matches.subcommand_matches("get-exec-env-changes").unwrap();
+            SubCommand::Hidden(HiddenSubCommand::GetExecEnvChanges(HiddenExecEnvChangesCommand {
+                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(
+                    &matches.value_of("version").map(String::from).unwrap(),
+                )?,
+            }))
+        } else if matches.is_present("get-exec-command-path") {
+            let matches = matches.subcommand_matches("get-exec-command-path").unwrap();
+            SubCommand::Hidden(HiddenSubCommand::GetExecCommandPath(HiddenGetExecCommandPathCommand {
+                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
+                version_selector: PathOrVersionSelector::parse(
+                    &matches.value_of("version").map(String::from).unwrap(),
+                )?,
+                command_name: CommandName::from_string(matches.value_of("command_name").map(String::from).unwrap()),
+            }))
+        } else {
+            #[cfg(not(target_os = "windows"))]
+            if matches.is_present("unix-install") {
+                SubCommand::Hidden(HiddenSubCommand::UnixInstall)
+            } else {
+                unreachable!();
+            }
+            #[cfg(target_os = "windows")]
+            if matches.is_present("windows-install") {
+                let matches = matches.subcommand_matches("windows-install").unwrap();
+                SubCommand::Hidden(HiddenSubCommand::WindowsInstall(HiddenWindowsInstallCommand {
+                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
+                }))
+            } else if matches.is_present("windows-uninstall") {
+                let matches = matches.subcommand_matches("windows-uninstall").unwrap();
+                SubCommand::Hidden(HiddenSubCommand::WindowsUninstall(HiddenWindowsUninstallCommand {
+                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
+                }))
+            } else {
+                unreachable!();
+            }
+        }
     } else if matches.is_present("version") {
         SubCommand::Version
     } else if matches.is_present("install") {
@@ -242,59 +292,6 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             SubCommand::Add(AddCommand {
                 url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url_or_name)),
             })
-        }
-    } else if matches.is_present("hidden-shell") {
-        let matches = matches.subcommand_matches("hidden-shell").unwrap();
-        if matches.is_present("get-pending-env-changes") {
-            SubCommand::Shell(ShellSubCommand::GetPendingEnvChanges)
-        } else if matches.is_present("clear-pending-env-changes") {
-            SubCommand::Shell(ShellSubCommand::ClearPendingEnvChanges)
-        } else if matches.is_present("get-paths") {
-            SubCommand::Shell(ShellSubCommand::GetPaths)
-        } else if matches.is_present("get-env-vars") {
-            SubCommand::Shell(ShellSubCommand::GetEnvVars)
-        } else if matches.is_present("get-exec-env-changes") {
-            let matches = matches.subcommand_matches("get-exec-env-changes").unwrap();
-            SubCommand::Shell(ShellSubCommand::GetExecEnvChanges(ShellExecEnvChangesCommand {
-                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(
-                    &matches.value_of("version").map(String::from).unwrap(),
-                )?,
-            }))
-        } else if matches.is_present("get-post-exec-env-changes") {
-            let matches = matches.subcommand_matches("get-post-exec-env-changes").unwrap();
-            SubCommand::Shell(ShellSubCommand::GetPostExecEnvChanges(ShellExecEnvChangesCommand {
-                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(
-                    &matches.value_of("version").map(String::from).unwrap(),
-                )?,
-            }))
-        } else if matches.is_present("get-exec-command-path") {
-            let matches = matches.subcommand_matches("get-exec-command-path").unwrap();
-            SubCommand::Shell(ShellSubCommand::GetExecCommandPath(ShellGetExecCommandPathCommand {
-                name_selector: parse_name_selector(matches.value_of("binary_name").map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(
-                    &matches.value_of("version").map(String::from).unwrap(),
-                )?,
-                command_name: CommandName::from_string(matches.value_of("command_name").map(String::from).unwrap()),
-            }))
-        } else {
-            #[cfg(target_os = "windows")]
-            if matches.is_present("windows-install") {
-                let matches = matches.subcommand_matches("windows-install").unwrap();
-                SubCommand::Shell(ShellSubCommand::WindowsInstall(ShellWindowsInstallCommand {
-                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
-                }))
-            } else if matches.is_present("windows-uninstall") {
-                let matches = matches.subcommand_matches("windows-uninstall").unwrap();
-                SubCommand::Shell(ShellSubCommand::WindowsUninstall(ShellWindowsUninstallCommand {
-                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
-                }))
-            } else {
-                unreachable!();
-            }
-            #[cfg(unix)]
-            unreachable!();
         }
     } else {
         SubCommand::Help({
@@ -429,16 +426,6 @@ ARGS:
                         .required(false),
                 )
         )
-        .subcommand(
-            SubCommand::with_name("resolve")
-                .about("Outputs the binary path according to the current working directory.")
-                .arg(
-                    Arg::with_name("binary_name")
-                        .help("The binary name to resolve.")
-                        .takes_value(true)
-                        .required(true),
-                ),
-        )
         .subcommand(SubCommand::with_name("clear-url-cache").about("Clears the cache of downloaded urls. Does not remove any installed binaries."))
         .subcommand(
             SubCommand::with_name("registry")
@@ -470,8 +457,16 @@ ARGS:
                 )
         )
         .subcommand(
-            SubCommand::with_name("hidden-shell")
+            SubCommand::with_name("hidden")
                 .setting(AppSettings::Hidden)
+                .subcommand(
+                    SubCommand::with_name("resolve-command")
+                        .arg(
+                            Arg::with_name("command_name")
+                                .takes_value(true)
+                                .required(true),
+                        ),
+                )
                 .subcommand(
                     SubCommand::with_name("get-pending-env-changes")
                 )
@@ -486,19 +481,6 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("get-exec-env-changes")
-                        .arg(
-                            Arg::with_name("binary_name")
-                                .takes_value(true)
-                                .required(true)
-                        )
-                        .arg(
-                            Arg::with_name("version")
-                                .takes_value(true)
-                                .required(true)
-                        )
-                )
-                .subcommand(
-                    SubCommand::with_name("get-post-exec-env-changes")
                         .arg(
                             Arg::with_name("binary_name")
                                 .takes_value(true)
@@ -527,6 +509,9 @@ ARGS:
                                 .takes_value(true)
                                 .required(true)
                         )
+                )
+                .subcommand(
+                    SubCommand::with_name("unix-install")
                 )
                 .subcommand(
                     SubCommand::with_name("windows-install")

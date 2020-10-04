@@ -108,18 +108,6 @@ bvm exec node 14 npm -v
 bvm exec nodejs/node ~8.2 -v
 ```
 
-### `bvm resolve <command-name>`
-
-Resolves the executable path of the specified command name based on the current working directory.
-
-This command is used by the created shell/batch files (shims) to tell how to resolve the file.
-
-```
-# Example
-bvm resolve deno
-# on windows, outputs something like: C:\Users\YourUserName\AppData\Local\bvm\binaries\denoland\deno\1.3.1\deno.exe
-```
-
 ### `bvm clear-url-cache`
 
 Clears any cached urls.

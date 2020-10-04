@@ -6,14 +6,15 @@ use crate::types::CommandName;
 use crate::utils;
 
 #[cfg(unix)]
-pub(super) fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
+pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
     let file_path = get_shim_path(environment, command_name);
     environment.write_file_text(
         &file_path,
         &format!(
             r#"#!/bin/sh
-exe_path=$($BVM_INSTALL_DIR/bin/bvm-bin resolve {})
-"$exe_path" "$@""#,
+. $BVM_INSTALL_DIR/bin/bvm
+bvm exec-command {} "$@"
+"#,
             command_name.as_str()
         ),
     )?;
@@ -24,7 +25,7 @@ exe_path=$($BVM_INSTALL_DIR/bin/bvm-bin resolve {})
 }
 
 #[cfg(target_os = "windows")]
-pub(super) fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
+pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
     // https://stackoverflow.com/a/6362922/188246
     // todo: needs to handle when this fails to find the binary or something
     let file_path = get_shim_path(environment, command_name);
@@ -32,10 +33,8 @@ pub(super) fn create_shim(environment: &impl Environment, command_name: &Command
         &file_path,
         &format!(
             r#"@ECHO OFF
-FOR /F "tokens=* USEBACKQ" %%F IN (`bvm-bin resolve {}`) DO (
-  SET exe_path=%%F
-)
-"%exe_path%" %*"#,
+bvm exec-command {} %*
+"#,
             command_name.as_str()
         ),
     )

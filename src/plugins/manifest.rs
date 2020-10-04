@@ -436,12 +436,6 @@ impl PluginsManifest {
         false
     }
 
-    pub fn get_environment_paths(&self, identifier: &BinaryIdentifier) -> Vec<String> {
-        self.get_binary(identifier)
-            .map(|b| b.get_env_paths())
-            .unwrap_or(Vec::new())
-    }
-
     pub fn has_environment_changes(&self, identifier: &BinaryIdentifier) -> bool {
         if let Some(binary) = self.get_binary(identifier) {
             !binary.get_env_paths().is_empty() || !binary.get_env_variables().is_empty()
@@ -460,6 +454,14 @@ impl PluginsManifest {
             }
         }
         result
+    }
+
+    pub fn get_all_command_names(&self) -> HashSet<CommandName> {
+        let mut command_names = HashSet::new();
+        for binary in self.binaries.values() {
+            command_names.extend(binary.get_command_names());
+        }
+        command_names
     }
 }
 

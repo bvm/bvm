@@ -9,3 +9,4 @@ pub use get_plugin_dir::*;
 pub use manifest::*;
 pub use plugins_mut::*;
 pub use serialized_plugin_file::*;
+pub use setup::create_shim;
