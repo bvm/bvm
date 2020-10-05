@@ -21,6 +21,3 @@ fi
 # todo: use bvm_install_dir here (need to update get_shim_dir.rs)
 PATH="$HOME/.bvm/shims:$PATH"
 export PATH
-
-# export the function to sub shells (does not work in sh, only bash)
-export -f bvm
