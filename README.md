@@ -91,7 +91,7 @@ bvm use denoland/deno 1.3.2
 bvm use name-stealer/deno 2.0.0
 bvm use deno 1
 bvm use deno 1.0
-bvm use deno ^1.1
+bvm use deno "^1.1.3"
 bvm use deno ~1.1
 ```
 
@@ -112,7 +112,7 @@ Executes the version of the matching binary.
 # Examples
 bvm exec deno 1.3.1 -V
 bvm exec deno path -v
-bvm exec node ^12.1 -v
+bvm exec node "^12.1.1" -v
 bvm exec node 14 npm -v
 bvm exec nodejs/node ~8.2 -v
 ```
@@ -174,7 +174,7 @@ Installs the specified binary and version based on the first matching version in
 bvm install deno 1.3.3
 bvm install deno 1
 bvm install deno 1.3
-bvm install deno ^1.3
+bvm install deno "^1.3.1"
 bvm install --use node 14.9.0
 ```
 

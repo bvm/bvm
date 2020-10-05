@@ -74,13 +74,13 @@ GOTO end
 REM Prevent changing the environment for this command
 SETLOCAL
 
-REM Format: bvm exec [name-selector] [version-selector] [command-name] [...args]
+REM Format: bvm exec [name-selector] [version-selector] <command-name> [...args]
+REM Note: Version may include a caret "^1.1.2" so it seems it needs to be referenced directly here
 SET bvm_exec_name=%2
-SET bvm_exec_version=%3
 SET bvm_exec_command=%4
 
 REM Get if it has the command name
-FOR /F "tokens=*" %%F IN ('bvm-bin hidden has-command "%bvm_exec_name%" "%bvm_exec_version%" "%bvm_exec_command%"') DO (
+FOR /F "tokens=*" %%F IN ('bvm-bin hidden has-command "%bvm_exec_name%" "%~3" "%bvm_exec_command%"') DO (
   SET bvm_exec_has_command=%%F
 )
 
@@ -91,6 +91,20 @@ IF [%bvm_exec_has_command%] == [] (
 )
 
 IF "%bvm_exec_has_command%" == "false" SET bvm_exec_command="%bvm_exec_name%"
+
+REM Get the path of the executable
+FOR /F "tokens=*" %%F IN ('bvm-bin hidden get-exec-command-path "%bvm_exec_name%" "%~3" "%bvm_exec_command%"') DO (
+  SET bvm_exec_exe_path="%%F"
+)
+IF [%bvm_exec_exe_path%] == [] (
+  SET bvm_exit_code=1
+  GOTO end
+)
+
+REM Run the environment changes
+FOR /F "delims=" %%F in ('bvm-bin hidden get-exec-env-changes "%bvm_exec_name%" "%~3"') do (
+  %%F
+)
 
 REM Remove the already captured args
 SHIFT
@@ -106,20 +120,6 @@ IF [%1]==[] GOTO after_exec_args_loop
 SET bvm_exec_args=%bvm_exec_args% %1
 GOTO exec_args_loop
 :after_exec_args_loop
-
-REM Get the path of the executable
-FOR /F "tokens=*" %%F IN ('bvm-bin hidden get-exec-command-path "%bvm_exec_name%" "%bvm_exec_version%" "%bvm_exec_command%"') DO (
-  SET bvm_exec_exe_path="%%F"
-)
-IF [%bvm_exec_exe_path%] == [] (
-  SET bvm_exit_code=1
-  GOTO end
-)
-
-REM Run the environment changes
-FOR /F "delims=" %%F in ('bvm-bin hidden get-exec-env-changes "%bvm_exec_name%" "%bvm_exec_version%"') do (
-  %%F
-)
 
 REM Execute
 %bvm_exec_exe_path% %bvm_exec_args%
