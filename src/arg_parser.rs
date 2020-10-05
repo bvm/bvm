@@ -86,9 +86,9 @@ pub enum HiddenSubCommand {
     #[cfg(not(target_os = "windows"))]
     UnixInstall,
     #[cfg(target_os = "windows")]
-    WindowsInstall(HiddenWindowsInstallCommand),
+    WindowsInstall,
     #[cfg(target_os = "windows")]
-    WindowsUninstall(HiddenWindowsUninstallCommand),
+    WindowsUninstall,
 }
 
 pub struct HiddenResolveCommand {
@@ -112,20 +112,9 @@ pub struct HiddenHasCommandCommand {
     pub command_name: Option<CommandName>,
 }
 
-#[cfg(target_os = "windows")]
-pub struct HiddenWindowsInstallCommand {
-    pub install_path: String,
-}
-
-#[cfg(target_os = "windows")]
-pub struct HiddenWindowsUninstallCommand {
-    pub install_path: String,
-}
-
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     // need to do this to bypass
-    if args.get(1).map(|s| s.as_str()) == Some("hidden") && args.get(2).map(|s| s.as_str()) == Some("has-command")
-    {
+    if args.get(1).map(|s| s.as_str()) == Some("hidden") && args.get(2).map(|s| s.as_str()) == Some("has-command") {
         return Ok(CliArgs {
             sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
                 name_selector: parse_name_selector(args.get(3).map(String::from).unwrap()),
@@ -186,15 +175,9 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             }
             #[cfg(target_os = "windows")]
             if matches.is_present("windows-install") {
-                let matches = matches.subcommand_matches("windows-install").unwrap();
-                SubCommand::Hidden(HiddenSubCommand::WindowsInstall(HiddenWindowsInstallCommand {
-                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
-                }))
+                SubCommand::Hidden(HiddenSubCommand::WindowsInstall)
             } else if matches.is_present("windows-uninstall") {
-                let matches = matches.subcommand_matches("windows-uninstall").unwrap();
-                SubCommand::Hidden(HiddenSubCommand::WindowsUninstall(HiddenWindowsUninstallCommand {
-                    install_path: matches.value_of("install-dir").map(String::from).unwrap(),
-                }))
+                SubCommand::Hidden(HiddenSubCommand::WindowsUninstall)
             } else {
                 unreachable!();
             }
@@ -515,19 +498,9 @@ ARGS:
                 )
                 .subcommand(
                     SubCommand::with_name("windows-install")
-                        .arg(
-                            Arg::with_name("install-dir")
-                                .takes_value(true)
-                                .required(true)
-                        )
                 )
                 .subcommand(
                     SubCommand::with_name("windows-uninstall")
-                        .arg(
-                            Arg::with_name("install-dir")
-                                .takes_value(true)
-                                .required(true)
-                        )
                 )
         )
         .arg(

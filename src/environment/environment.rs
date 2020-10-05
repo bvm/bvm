@@ -31,6 +31,7 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn get_local_user_data_dir(&self) -> PathBuf;
     /// Data that is specific to a user across machines.
     fn get_user_data_dir(&self) -> PathBuf;
+    fn get_user_home_dir(&self) -> PathBuf;
     fn get_time_secs(&self) -> u64;
     /// Gets the specified environment variable.
     fn get_env_var(&self, key: &str) -> Option<String>;

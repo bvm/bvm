@@ -26,7 +26,7 @@ Section
     File ..\bvm.cmd
     SetOutPath $INSTDIR
 
-    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-install "$INSTDIR\bin"'
+    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-install'
     Pop $0
 
     WriteUninstaller $INSTDIR\uninstall.exe
@@ -44,7 +44,7 @@ Section "Uninstall"
 
     !insertmacro KillBvmProcess
 
-    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-uninstall "$INSTDIR\bin"'
+    nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-uninstall'
 
     Delete $INSTDIR\uninstall.exe
     Delete $INSTDIR\bin\bvm-bin.exe

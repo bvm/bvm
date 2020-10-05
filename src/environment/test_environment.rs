@@ -321,6 +321,10 @@ impl Environment for TestEnvironment {
         PathBuf::from("/data")
     }
 
+    fn get_user_home_dir(&self) -> PathBuf {
+        PathBuf::from("/.bvm")
+    }
+
     fn get_time_secs(&self) -> u64 {
         123456
     }

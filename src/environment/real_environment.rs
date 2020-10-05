@@ -138,6 +138,11 @@ impl Environment for RealEnvironment {
         }
     }
 
+    fn get_user_home_dir(&self) -> PathBuf {
+        log_verbose!(self, "Getting user home directory.");
+        get_home_dir()
+    }
+
     fn get_env_var(&self, key: &str) -> Option<String> {
         log_verbose!(self, "Getting the {} environment variable.", key);
 
