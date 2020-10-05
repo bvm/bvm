@@ -26,6 +26,7 @@ Install by running a script based on your environment:
 - Windows
   - [Installer](https://github.com/dsherret/bvm/releases/latest/download/bvm-x86_64-pc-windows-msvc-installer.exe)
   - Or install via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
+  - Note: Powershell support is incomplete. Follow [#28](https://github.com/bvm/bvm/issues/28) for updates.
 
 ## CI
 
@@ -40,9 +41,12 @@ Installs a binary at the specified manifest file.
 
 ```
 # Examples
+
 bvm install https://bvm.land/deno/1.3.2.json
+
 # optionally specify a checksum
 bvm install https://bvm.land/deno/1.3.2.json@6444d03bbb4e8b0a7966f406ab0a6d190581c205291d0e082bc9a57dd8498e97
+
 # if a previous installation is on the path, use this one instead
 bvm install --use https://bvm.land/deno/1.3.1.json
 ```
@@ -279,39 +283,64 @@ At the moment, it looks like this:
   "schemaVersion": 1,
   "name": "deno",
   "owner": "denoland",
-  "version": "1.3.1",
   "description": "A secure JavaScript and TypeScript runtime.",
+  "version": "1.4.4",
   "windows-x86_64": {
-    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-pc-windows-msvc.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.4.4/deno-x86_64-pc-windows-msvc.zip",
     "type": "zip",
-    "checksum": "6ba068e517a55dd33abd60e74c38aa61ef8f45a0774578761be0107fafc3758b",
-    "commands": [{
-      "name": "deno",
-      "path": "deno.exe"
-    }],
+    "checksum": "3013f3dd2f96a6748461de2221e102f58f6b6f8dc392ca89a0968b05a79e1325",
+    "commands": [
+      {
+        "name": "deno",
+        "path": "bin/deno.exe"
+      }
+    ],
     "outputDir": "bin",
-    "onPreInstall": "# run any command pre installation (ex. kill process)",
-    "onPostInstall": "# this is where you can run some commands if necessary to cause additional setup"
+    "environment": {
+      "path": [
+        // Any local paths that should be added to the environment
+        // when this is used or executed.
+      ],
+      "variables": {
+        "DENO_INSTALL_ROOT": "%BVM_CURRENT_BINARY_DIR%"
+      }
+    },
+    "onPreInstall": "", // command to run before installation
+    "onPostInstall": "" // command to run after installation
   },
   "linux-x86_64": {
-    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-unknown-linux-gnu.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.4.4/deno-x86_64-unknown-linux-gnu.zip",
     "type": "zip",
-    "checksum": "ef3a8740bdceab105808c91cfb918c883a23defb6719b9c511e2be30d5bfdc01",
-    "commands": [{
-      "name": "deno",
-      "path": "deno"
-    }],
-    "outputDir": "bin"
+    "checksum": "ce2ad2e51b3b49a4d7844fa26092437eaaa89e90e2df4bf33859b9fb8c89be9c",
+    "commands": [
+      {
+        "name": "deno",
+        "path": "bin/deno"
+      }
+    ],
+    "outputDir": "bin",
+    "environment": {
+      "variables": {
+        "DENO_INSTALL_ROOT": "$BVM_CURRENT_BINARY_DIR"
+      }
+    }
   },
   "darwin-x86_64": {
-    "path": "https://github.com/denoland/deno/releases/download/v1.3.1/deno-x86_64-apple-darwin.zip",
+    "path": "https://github.com/denoland/deno/releases/download/v1.4.4/deno-x86_64-apple-darwin.zip",
     "type": "zip",
-    "checksum": "b1bc5de79b71c3f33d0151486249d088f5f5604126812dc55b1dd21b28704d8a",
-    "commands": [{
-      "name": "deno",
-      "path": "deno"
-    }],
-    "outputDir": "bin"
+    "checksum": "fd8997040dcfc6ef48ef4b05c88b1a8b30362c03ebb552a23a7888bcc60b77a0",
+    "commands": [
+      {
+        "name": "deno",
+        "path": "bin/deno"
+      }
+    ],
+    "outputDir": "bin",
+    "environment": {
+      "variables": {
+        "DENO_INSTALL_ROOT": "$BVM_CURRENT_BINARY_DIR"
+      }
+    }
   }
 }
 ```
