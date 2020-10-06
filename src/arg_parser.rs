@@ -117,8 +117,17 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
     if args.get(1).map(|s| s.as_str()) == Some("hidden") && args.get(2).map(|s| s.as_str()) == Some("has-command") {
         return Ok(CliArgs {
             sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
-                name_selector: parse_name_selector(args.get(3).map(String::from).unwrap()),
-                version_selector: PathOrVersionSelector::parse(&args.get(4).map(String::from).unwrap())?,
+                name_selector: parse_name_selector(
+                    args.get(3)
+                        .map(String::from)
+                        .expect("Expected to have a name selector argument."),
+                ),
+                version_selector: PathOrVersionSelector::parse(
+                    &args
+                        .get(4)
+                        .map(String::from)
+                        .expect("Expected to have a version selector argument."),
+                )?,
                 command_name: args
                     .get(5)
                     .map(String::from)

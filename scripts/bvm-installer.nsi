@@ -24,6 +24,7 @@ Section
     SetOutPath $INSTDIR\bin
     File ..\target\release\bvm-bin.exe
     File ..\bvm.cmd
+    File ..\bvm.ps1
     SetOutPath $INSTDIR
 
     nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-install'
@@ -46,9 +47,10 @@ Section "Uninstall"
 
     nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-uninstall'
 
-    Delete $INSTDIR\uninstall.exe
     Delete $INSTDIR\bin\bvm-bin.exe
     Delete $INSTDIR\bin\bvm.cmd
+    Delete $INSTDIR\bin\bvm.ps1
+    Delete $INSTDIR\uninstall.exe
     RMDir $INSTDIR\bin
     RMDir $INSTDIR
 

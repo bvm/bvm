@@ -23,10 +23,9 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 Install by running a script based on your environment:
 
 - Shell (Mac, Linux, WSL): `curl -fsSL https://bvm.land/install.sh | sh`
-- Windows
+- Cmd, Powershell (Windows):
   - [Installer](https://github.com/dsherret/bvm/releases/latest/download/bvm-x86_64-pc-windows-msvc-installer.exe)
-  - Or install via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
-  - Note: Powershell support is incomplete. Follow [#28](https://github.com/bvm/bvm/issues/28) for updates.
+  - Or via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
 
 ## CI
 

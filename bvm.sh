@@ -121,6 +121,10 @@ bvm()
   then
     local pending_changes
     pending_changes=$($bvm_bin hidden get-pending-env-changes)
-    bvm_handle_env_messages "$pending_changes" || { return $?; }
+    if [ ! -z "$pending_changes" ]
+    then
+      bvm_handle_env_messages "$pending_changes" || { return $?; }
+      $bvm_bin hidden clear-pending-env-changes || { return $?; }
+    fi
   fi
 }

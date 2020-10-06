@@ -7,7 +7,8 @@ use crate::utils;
 
 #[cfg(unix)]
 pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
-    let file_path = get_shim_path(environment, command_name);
+    let shim_dir = utils::get_shim_dir(environment);
+    let file_path = path.join(command_name);
     environment.write_file_text(
         &file_path,
         &format!(
@@ -26,24 +27,37 @@ bvm exec-command {} "$@"
 
 #[cfg(target_os = "windows")]
 pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
-    // https://stackoverflow.com/a/6362922/188246
-    // todo: needs to handle when this fails to find the binary or something
-    let file_path = get_shim_path(environment, command_name);
+    let shim_dir = utils::get_shim_dir(environment);
     environment.write_file_text(
-        &file_path,
+        &shim_dir.join(format!("{}.bat", command_name.as_str())),
         &format!(
             r#"@ECHO OFF
 bvm exec-command {} %*
 "#,
             command_name.as_str()
         ),
-    )
+    )?;
+    environment.write_file_text(
+        &shim_dir.join(format!("{}.ps1", command_name.as_str())),
+        &format!(
+            r#"#!/usr/bin/env pwsh
+. bvm exec-command {} $args
+"#,
+            command_name.as_str()
+        ),
+    )?;
+    Ok(())
 }
 
-pub fn get_shim_path(environment: &impl Environment, command_name: &CommandName) -> PathBuf {
+pub fn get_shim_paths(environment: &impl Environment, command_name: &CommandName) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
     let shim_dir = utils::get_shim_dir(environment);
     #[cfg(target_os = "windows")]
-    return shim_dir.join(format!("{}.bat", command_name.as_str()));
+    {
+        paths.push(shim_dir.join(format!("{}.bat", command_name.as_str())));
+        paths.push(shim_dir.join(format!("{}.ps1", command_name.as_str())));
+    }
     #[cfg(unix)]
-    return shim_dir.join(format!("{}", command_name.as_str()));
+    path.push(shim_dir.join(format!("{}", command_name.as_str())));
+    paths
 }

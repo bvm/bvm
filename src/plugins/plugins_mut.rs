@@ -3,7 +3,7 @@ use dprint_cli_core::types::ErrBox;
 
 use super::helpers;
 use super::manifest::get_manifest_file_path;
-use super::setup::{get_plugin_file, get_shim_path, setup_plugin, PluginFile};
+use super::setup::{get_plugin_file, get_shim_paths, setup_plugin, PluginFile};
 use super::{BinaryIdentifier, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
 use crate::configuration::ConfigFileBinary;
 use crate::environment::Environment;
@@ -210,8 +210,9 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         // check if this is the last binary with this command. If so, delete the shim
         for command_name in previous_global_command_names.iter() {
             if !self.manifest.has_binary_with_command(&command_name) {
-                self.environment
-                    .remove_file(&get_shim_path(&self.environment, &command_name))?;
+                for shim_path in get_shim_paths(&self.environment, &command_name) {
+                    self.environment.remove_file(&shim_path)?;
+                }
             }
         }
         Ok(())
