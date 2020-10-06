@@ -265,16 +265,49 @@ Uses all the binaries in the current configuration files globally on the path.
 
 Generally it's not necessary to ever use this command as this happens automatically being in the current directory.
 
-## Redirect Service
+## bvm.land
 
-The website https://bvm.land is a redirect service. If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release:
+The website https://bvm.land is not required to use with bvm, but it provides some services that makes publishing binaries a little easier.
+
+### Redirect Service
+
+If you publish a _bvm.json_ file as a GitHub release asset (not recommended yet, due to this being a proof of concept) then you can use `https://bvm.land` to redirect to your release.
 
 1. `https://bvm.land/<owner>/<name>/<release-tag>.json` -> `https://github.com/<owner>/<name>/releases/download/<release-tag>/bvm.json`
 2. `https://bvm.land/<name>/<release-tag>.json` -> `https://github.com/<name>/<name>/releases/download/<release-tag>/bvm.json`
 
 Example: `https://bvm.land/dprint/0.9.1.json`
 
-Note: Automatic creation of `registry.json` files will come in the future. Follow [#38](https://github.com/bvm/bvm/issues/38) for updates.
+### Automatic registry file creation
+
+The bvm.land server will create _registry.json_ files when requested. These files can then be used with the `bvm registry` sub command.
+
+To cause the server to update a registry file, make a `GET` request to `https://bvm.land/refresh-registry/<owner>/<repo-name>`. After a few minutes, you should have a registry file created at either of the two endpoints depending on your repo owner and name:
+
+1. `https://bvm.land/<owner>/<name>/registry.json`
+2. `https://bvm.land/<name>/registry.json`—when `owner` is the same as `name`.
+
+The file will be created based on any releases containing a _bvmrc.json_ file as a release asset as described above.
+
+#### Example GitHub Publish Workflow
+
+In _.github/workflows/publish.yml_:
+
+```
+name: Publish
+
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update registry.json file at https://bvm.land/dprint/registry.json
+      run: curl -s -o /dev/null -v https://bvm.land/refresh-registry/dprint/dprint
+```
+
+This will cause the _registry.json_ file on bvm.land to be updated after clicking "publish" on a GitHub release.
 
 ## Binary manifest file
 
