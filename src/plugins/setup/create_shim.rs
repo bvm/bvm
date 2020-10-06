@@ -8,7 +8,7 @@ use crate::utils;
 #[cfg(unix)]
 pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
-    let file_path = path.join(command_name);
+    let file_path = shim_dir.join(command_name.as_str());
     environment.write_file_text(
         &file_path,
         &format!(
@@ -58,6 +58,6 @@ pub fn get_shim_paths(environment: &impl Environment, command_name: &CommandName
         paths.push(shim_dir.join(format!("{}.ps1", command_name.as_str())));
     }
     #[cfg(unix)]
-    path.push(shim_dir.join(format!("{}", command_name.as_str())));
+    paths.push(shim_dir.join(format!("{}", command_name.as_str())));
     paths
 }
