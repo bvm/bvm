@@ -797,13 +797,7 @@ fn handle_hidden_clear_pending_env_changes_command<TEnvironment: Environment>(
 
 fn handle_hidden_get_paths_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
     let plugin_manifest = PluginsManifest::load(environment);
-    let local_data_dir = environment.get_local_user_data_dir();
-    let path_text = plugin_manifest
-        .get_env_paths()
-        .iter()
-        .map(|path| local_data_dir.join(path).to_string_lossy().to_string())
-        .collect::<Vec<_>>()
-        .join(SYS_PATH_DELIMITER);
+    let path_text = plugin_manifest.get_env_paths(environment).join(SYS_PATH_DELIMITER);
 
     environment.log(&path_text);
 
@@ -2664,6 +2658,53 @@ mod test {
             [("other", first_path_str), ("test", "1")],
             [],
             format!("{}{}{}", original_path, SYS_PATH_DELIMITER, first_path_str)
+        );
+    }
+
+    #[tokio::test]
+    async fn binary_path_var_absolute_and_relative() {
+        let builder = EnvironmentBuilder::new();
+        let mut plugin_builder =
+            builder.create_plugin_builder("http://localhost/package.json", "owner", "name", "4.0.0");
+        #[cfg(target_os = "windows")]
+        plugin_builder.add_env_path("%BVM_CURRENT_BINARY_DIR%\\dir");
+        #[cfg(not(target_os = "windows"))]
+        plugin_builder.add_env_path("$BVM_CURRENT_BINARY_DIR/dir");
+        plugin_builder.add_env_path("/absolute"); // absolute should stay absolute
+        plugin_builder.add_env_path("relative");
+        plugin_builder.download_type(PluginDownloadType::TarGz);
+        plugin_builder.build();
+        let environment = builder.build();
+        let original_path = environment.get_env_path();
+
+        install_url!(environment, "http://localhost/package.json");
+        environment.clear_logs();
+
+        let bin_dir = PathBuf::from(get_binary_dir("owner", "name", "4.0.0"));
+        let first_path = bin_dir.join("dir").to_string_lossy().to_string();
+        let second_path = "/absolute";
+        let third_path = bin_dir.join("relative").to_string_lossy().to_string();
+
+        if cfg!(target_os = "windows") {
+            assert_eq!(
+                environment.get_system_path_dirs(),
+                [
+                    PathBuf::from("/data/shims"),
+                    PathBuf::from(&first_path),
+                    PathBuf::from(&second_path),
+                    PathBuf::from(&third_path),
+                ]
+            );
+        }
+
+        assert_get_pending_env_changes!(
+            environment,
+            [],
+            [],
+            format!(
+                "{1}{0}{2}{0}{3}{0}{4}",
+                SYS_PATH_DELIMITER, original_path, first_path, second_path, third_path
+            )
         );
     }
 

@@ -5,8 +5,8 @@ use std::collections::hash_map::Values;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::environment::{Environment, PATH_SEPARATOR};
-use crate::plugins::{get_plugin_dir, get_plugin_dir_relative_local_user_data, BinaryEnvironment};
+use crate::environment::Environment;
+use crate::plugins::{get_plugin_dir, BinaryEnvironment};
 use crate::types::{BinaryName, CommandName, NameSelector, Version, VersionSelector};
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
@@ -251,29 +251,40 @@ impl PluginsManifest {
 
     // pending environment changes
 
-    pub fn get_relative_pending_added_paths(&self) -> Vec<String> {
-        self.get_change_paths(self.pending_env_changes.added.iter())
+    pub fn get_relative_pending_added_paths(&self, environment: &impl Environment) -> Vec<String> {
+        self.get_change_paths(environment, self.pending_env_changes.added.iter())
     }
 
-    pub fn get_relative_pending_removed_paths(&self) -> Vec<String> {
-        self.get_change_paths(self.pending_env_changes.removed.iter())
+    pub fn get_relative_pending_removed_paths(&self, environment: &impl Environment) -> Vec<String> {
+        self.get_change_paths(environment, self.pending_env_changes.removed.iter())
     }
 
-    fn get_change_paths<'a>(&self, changes: impl Iterator<Item = &'a BinaryIdentifier>) -> Vec<String> {
+    fn get_change_paths<'a>(
+        &self,
+        environment: &impl Environment,
+        changes: impl Iterator<Item = &'a BinaryIdentifier>,
+    ) -> Vec<String> {
         let mut result = Vec::new();
         for identifier in changes {
-            result.extend(self.get_binary_env_paths(&identifier));
+            result.extend(self.get_binary_env_paths(environment, &identifier));
         }
         result
     }
 
-    fn get_binary_env_paths(&self, identifier: &BinaryIdentifier) -> Vec<String> {
+    fn get_binary_env_paths(&self, environment: &impl Environment, identifier: &BinaryIdentifier) -> Vec<String> {
         if let Some(binary) = self.get_binary(&identifier) {
-            let bin_dir = get_plugin_dir_relative_local_user_data(&binary.name, &binary.version);
+            let bin_dir = get_plugin_dir(environment, &binary.name, &binary.version);
             binary
                 .get_env_paths()
                 .into_iter()
-                .map(|path| format!("{}{}{}", bin_dir.to_string_lossy(), PATH_SEPARATOR, path))
+                .map(|path| {
+                    let resolved_value = get_resolved_env_value(&bin_dir, path);
+                    if PathBuf::from(&resolved_value).is_relative() {
+                        bin_dir.join(resolved_value).to_string_lossy().to_string()
+                    } else {
+                        resolved_value
+                    }
+                })
                 .collect()
         } else {
             Vec::new()
@@ -310,17 +321,7 @@ impl PluginsManifest {
             binary
                 .get_env_variables()
                 .into_iter()
-                .map(|(key, value)| {
-                    (
-                        key,
-                        if cfg!(target_os = "windows") {
-                            value.replace("%BVM_CURRENT_BINARY_DIR%", &bin_dir.to_string_lossy())
-                        } else {
-                            // todo: make this resilient
-                            value.replace("$BVM_CURRENT_BINARY_DIR", &bin_dir.to_string_lossy())
-                        },
-                    )
-                })
+                .map(|(key, value)| (key, get_resolved_env_value(&bin_dir, value)))
                 .collect()
         } else {
             HashMap::new()
@@ -329,11 +330,11 @@ impl PluginsManifest {
 
     // binary environment paths
 
-    pub fn get_env_paths(&self) -> Vec<String> {
+    pub fn get_env_paths(&self, environment: &impl Environment) -> Vec<String> {
         let mut result = Vec::new();
         for location in self.global_versions.get_locations() {
             if let Some(identifier) = location.to_identifier_option() {
-                result.extend(self.get_binary_env_paths(&identifier));
+                result.extend(self.get_binary_env_paths(environment, &identifier));
             }
         }
         result
@@ -468,4 +469,13 @@ impl PluginsManifest {
 pub(super) fn get_manifest_file_path(environment: &impl Environment) -> PathBuf {
     let user_data_dir = environment.get_user_data_dir(); // share across domains
     user_data_dir.join("binaries-manifest.json")
+}
+
+fn get_resolved_env_value(bin_dir: &PathBuf, text: String) -> String {
+    if cfg!(target_os = "windows") {
+        text.replace("%BVM_CURRENT_BINARY_DIR%", &bin_dir.to_string_lossy())
+    } else {
+        // todo: make this resilient
+        text.replace("$BVM_CURRENT_BINARY_DIR", &bin_dir.to_string_lossy())
+    }
 }

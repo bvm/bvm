@@ -236,22 +236,19 @@ pub fn get_env_path_from_pending_env_changes<TEnvironment: Environment>(
     environment: &TEnvironment,
     plugin_manifest: &PluginsManifest,
 ) -> String {
-    let local_data_dir = environment.get_local_user_data_dir();
     let mut paths = environment
         .get_env_path()
         .split(&SYS_PATH_DELIMITER)
         .map(String::from)
         .collect::<Vec<_>>();
 
-    for path in plugin_manifest.get_relative_pending_removed_paths() {
-        let path = local_data_dir.join(path).to_string_lossy().to_string();
+    for path in plugin_manifest.get_relative_pending_removed_paths(environment) {
         if let Some(pos) = paths.iter().position(|x| x == &path) {
             paths.remove(pos);
         }
     }
 
-    for path in plugin_manifest.get_relative_pending_added_paths() {
-        let path = local_data_dir.join(path).to_string_lossy().to_string();
+    for path in plugin_manifest.get_relative_pending_added_paths(environment) {
         if !paths.contains(&path) {
             paths.push(path);
         }

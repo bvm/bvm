@@ -294,14 +294,11 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
             // update the environment variables on windows (the environment manifest will be be set on the path on linux shell startup)
             #[cfg(target_os = "windows")]
             {
-                let local_data_dir = self.environment.get_local_user_data_dir();
-                for path in self.manifest.get_relative_pending_removed_paths() {
-                    self.environment
-                        .remove_system_path(&local_data_dir.join(path).to_string_lossy())?;
+                for path in self.manifest.get_relative_pending_removed_paths(&self.environment) {
+                    self.environment.remove_system_path(&path)?;
                 }
-                for path in self.manifest.get_relative_pending_added_paths() {
-                    self.environment
-                        .ensure_system_path(&local_data_dir.join(path).to_string_lossy())?;
+                for path in self.manifest.get_relative_pending_added_paths(&self.environment) {
+                    self.environment.ensure_system_path(&path)?;
                 }
 
                 for (key, _) in self.manifest.get_pending_removed_env_variables(&self.environment) {
