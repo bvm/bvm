@@ -8,15 +8,16 @@ NOTICE: This is a proof of concept. It is not recommended to use it yet as there
 
 ## Goals
 
-1. Seamless version selection based on current working directory.
-2. Replace binary specific version manager tools.
-3. No centralization—all urls and paths.
+1. Replace binary specific version manager tools.
+2. Provide an easy way for binary authors to distribute and have their users manage versions.
+3. Cross platform and provide a good experience in as many shells as possible (**Do not require WSL on Windows**).
+4. Backwards compatibility (once hitting 1.0).
+5. No centralization—use urls and paths.
    - Allows for easily distributing approved binaries within an organization.
-   - Easy for binary authors to distribute their applications.
-4. Support completely different application binaries with the same command name.
-5. Backwards compatibility loading project configuration files (once hitting 1.0)
-6. **Works on Windows without needing WSL.**
-7. Allows working with binaries already on the path (ex. `bvm use deno path`).
+   - Easy for binary authors to distribute their applications as there is no approval delay.
+6. Seamless version selection based on current working directory.
+7. Allow working with binaries already on the path.
+8. Support completely different application binaries with the same command name.
 
 ## Install
 
@@ -90,8 +91,8 @@ bvm use denoland/deno 1.3.2
 bvm use name-stealer/deno 2.0.0
 bvm use deno 1
 bvm use deno 1.0
-bvm use deno "^1.1.3"
-bvm use deno ~1.1
+bvm use deno "^1.1"
+bvm use deno ~1.1.3
 ```
 
 ### `bvm use <name-selector> path`
@@ -113,7 +114,7 @@ bvm exec deno 1.3.1 -V
 bvm exec deno path -v
 bvm exec node "^12.1.1" -v
 bvm exec node 14 npm -v
-bvm exec nodejs/node ~8.2 -v
+bvm exec nodejs/node ~8.2.1 -v
 ```
 
 ### `bvm clear-url-cache`
@@ -272,6 +273,8 @@ The website https://bvm.land is a redirect service. If you publish a _bvm.json_ 
 2. `https://bvm.land/<name>/<release-tag>.json` -> `https://github.com/<name>/<name>/releases/download/<release-tag>/bvm.json`
 
 Example: `https://bvm.land/dprint/0.9.1.json`
+
+Note: Automatic creation of `registry.json` files will come in the future. Follow [#38](https://github.com/bvm/bvm/issues/38) for updates.
 
 ## Binary manifest file
 
