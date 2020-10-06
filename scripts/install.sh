@@ -39,7 +39,7 @@ cd "$bin_dir"
 unzip -o "$exe.zip"
 rm "$exe.zip"
 
-if [ "$target" == "$windows_target" ]
+if [ "$target" = "$windows_target" ]
 then
   "$exe-bin.exe" hidden windows-install
 
