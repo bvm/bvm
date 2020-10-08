@@ -115,6 +115,8 @@ bvm exec deno path -v
 bvm exec node "^12.1.1" -v
 bvm exec node 14 npm -v
 bvm exec nodejs/node ~8.2.1 -v
+bvm exec node 14 npm install -g rimraf
+bvm exec node 14 rimraf dir-to-delete
 ```
 
 ### `bvm clear-url-cache`
