@@ -95,6 +95,21 @@ impl BinaryManifestItem {
             .unwrap_or(Vec::new())
     }
 
+    pub fn get_resolved_env_paths(&self, environment: &impl Environment) -> Vec<PathBuf> {
+        let bin_dir = get_plugin_dir(environment, &self.name, &self.version);
+        self.get_env_paths()
+            .into_iter()
+            .map(|path| {
+                let resolved_value = PathBuf::from(get_resolved_env_value(&bin_dir, path));
+                if resolved_value.is_relative() {
+                    bin_dir.join(resolved_value)
+                } else {
+                    resolved_value
+                }
+            })
+            .collect()
+    }
+
     pub fn get_env_variables(&self) -> HashMap<String, String> {
         self.environment
             .as_ref()
@@ -273,18 +288,10 @@ impl PluginsManifest {
 
     fn get_binary_env_paths(&self, environment: &impl Environment, identifier: &BinaryIdentifier) -> Vec<String> {
         if let Some(binary) = self.get_binary(&identifier) {
-            let bin_dir = get_plugin_dir(environment, &binary.name, &binary.version);
             binary
-                .get_env_paths()
+                .get_resolved_env_paths(environment)
                 .into_iter()
-                .map(|path| {
-                    let resolved_value = get_resolved_env_value(&bin_dir, path);
-                    if PathBuf::from(&resolved_value).is_relative() {
-                        bin_dir.join(resolved_value).to_string_lossy().to_string()
-                    } else {
-                        resolved_value
-                    }
-                })
+                .map(|p| p.to_string_lossy().to_string())
                 .collect()
         } else {
             Vec::new()

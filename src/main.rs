@@ -905,7 +905,7 @@ fn handle_hidden_get_exec_command_path_command<TEnvironment: Environment>(
                 &command.name_selector,
                 &version_selector,
             )?;
-            match plugin_helpers::get_binary_command_exe_path(environment, &binary, &command.command_name) {
+            match plugin_helpers::get_exec_binary_command_exe_path(environment, &binary, &command.command_name) {
                 Some(exe_path) => exe_path,
                 None => {
                     return err!(
@@ -938,13 +938,14 @@ fn handle_hidden_has_command<TEnvironment: Environment>(
         }
     };
     let plugin_manifest = PluginsManifest::load(environment);
-    let command_names = plugin_helpers::get_command_names_for_name_and_path_or_version_selector(
+    let has_command = plugin_helpers::has_command_name_for_exec(
+        environment,
         &plugin_manifest,
         &command.name_selector,
         &command.version_selector,
+        &command_name,
     )?;
 
-    let has_command = command_names.iter().any(|c| c == &command_name);
     environment.log(&format!("{}", has_command));
     Ok(())
 }
@@ -3199,6 +3200,7 @@ mod test {
     async fn get_exec_command_path_and_has_command() {
         let first_binary_path = get_binary_path("owner", "name", "1.0.0");
         let second_binary_path = get_binary_path("owner", "name", "2.0.0");
+        let third_binary_dir_sub_path_dir = PathBuf::from(get_binary_dir("owner", "name", "2.1.0")).join("path-dir");
         let third_binary_path = get_binary_path("owner", "name", "2.1.0");
         let fourth_binary_path = get_binary_path("owner", "other", "1.0.0");
         let fourth_binary_path_second = get_binary_path_second("owner", "other", "1.0.0");
@@ -3208,7 +3210,11 @@ mod test {
         builder.add_binary_to_path("name");
         builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
         builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "2.0.0");
-        builder.create_remote_zip_package("http://localhost/package3.json", "owner", "name", "2.1.0");
+        builder
+            .create_plugin_builder("http://localhost/package3.json", "owner", "name", "2.1.0")
+            .download_type(PluginDownloadType::Zip)
+            .add_env_path("path-dir")
+            .build();
         builder.create_remote_zip_multiple_commands_package("http://localhost/other.json", "owner", "other", "1.0.0");
         let environment = builder.build();
 
@@ -3218,11 +3224,27 @@ mod test {
         install_url!(environment, "http://localhost/other.json");
         environment.clear_logs();
 
+        // create an executable inside the third binary's env path
+        let third_binary_path_command_path =
+            third_binary_dir_sub_path_dir.join(get_executable_file_name("path-command"));
+        environment
+            .write_file_text(&third_binary_path_command_path, "")
+            .unwrap();
+        let third_binary_path_command_path = third_binary_path_command_path.to_string_lossy().to_string();
+
+        // test the exec command
         assert_exec_command_path!(environment, "name", "path", "name", path_binary_path);
         assert_exec_command_path!(environment, "name", "1", "name", first_binary_path);
         assert_exec_command_path!(environment, "name", "2", "name", third_binary_path);
         assert_exec_command_path!(environment, "name", "2.0", "name", second_binary_path);
         assert_exec_command_path!(environment, "name", "^2.0", "name", third_binary_path);
+        assert_exec_command_path!(
+            environment,
+            "name",
+            "2.1.0",
+            "path-command",
+            third_binary_path_command_path
+        );
         assert_exec_command_path!(environment, "other", "*", "other", fourth_binary_path);
         assert_exec_command_path!(environment, "other", "*", "other-second", fourth_binary_path_second);
         let err_message = run_cli(
@@ -3241,6 +3263,7 @@ mod test {
         assert_has_command!(environment, "name", "1", "name", true);
         assert_has_command!(environment, "name", "1", "other", false);
         assert_has_command!(environment, "name", "1", "-v", false);
+        assert_has_command!(environment, "name", "2.1.0", "path-command", true);
         assert_has_command!(environment, "other", "*", "other", true);
         assert_has_command!(environment, "other", "*", "other-second", true);
         assert_has_command!(environment, "other", "*", "other-second2", false);
@@ -3446,6 +3469,14 @@ mod test {
             )
         } else {
             format!("/local-data/binaries/{}/{}/{}/{1}-second", owner, name, version)
+        }
+    }
+
+    fn get_executable_file_name(command_name: &str) -> String {
+        if cfg!(target_os = "windows") {
+            format!("{}.exe", command_name)
+        } else {
+            command_name.to_string()
         }
     }
 

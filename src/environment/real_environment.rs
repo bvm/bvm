@@ -45,7 +45,10 @@ impl Environment for RealEnvironment {
 
     fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox> {
         log_verbose!(self, "Reading file: {}", file_path.display());
-        Ok(fs::read(file_path)?)
+        match fs::read(file_path) {
+            Ok(bytes) => Ok(bytes),
+            Err(err) => err!("Error reading file {}: {}", file_path.display(), err.to_string()),
+        }
     }
 
     fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox> {
@@ -62,8 +65,10 @@ impl Environment for RealEnvironment {
 
     fn remove_file(&self, file_path: &Path) -> Result<(), ErrBox> {
         log_verbose!(self, "Deleting file: {}", file_path.display());
-        fs::remove_file(file_path)?;
-        Ok(())
+        match fs::remove_file(file_path) {
+            Ok(_) => Ok(()),
+            Err(err) => err!("Error deleting file {}: {}", file_path.display(), err.to_string()),
+        }
     }
 
     fn remove_dir_all(&self, dir_path: &Path) -> Result<(), ErrBox> {

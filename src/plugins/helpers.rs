@@ -136,7 +136,7 @@ pub fn get_global_binary_file_path(
             }
             GlobalBinaryLocation::Bvm(identifier) => {
                 if let Some(item) = plugin_manifest.get_binary(&identifier) {
-                    let command_exe_path = get_binary_command_exe_path(environment, &item, command_name)
+                    let command_exe_path = get_exec_binary_command_exe_path(environment, &item, command_name)
                         .expect("Expected to have a command.");
                     Ok(command_exe_path)
                 } else {
@@ -164,16 +164,22 @@ pub fn get_global_binary_file_path(
     }
 }
 
-pub fn get_binary_command_exe_path<TEnvironment: Environment>(
+pub fn get_exec_binary_command_exe_path<TEnvironment: Environment>(
     environment: &TEnvironment,
-    item: &BinaryManifestItem,
+    binary: &BinaryManifestItem,
     command_name: &CommandName,
 ) -> Option<PathBuf> {
-    item.commands
-        .iter()
-        .filter(|c| &c.name == command_name)
-        .next()
-        .map(|command| get_plugin_dir(environment, &item.name, &item.version).join(&command.path))
+    let command = binary.commands.iter().filter(|c| &c.name == command_name).next();
+
+    if let Some(command) = command {
+        Some(get_plugin_dir(environment, &binary.name, &binary.version).join(&command.path))
+    } else {
+        utils::get_command_executable_path_in_dirs(
+            environment,
+            &command_name,
+            binary.get_resolved_env_paths(environment).into_iter(),
+        )
+    }
 }
 
 pub fn get_command_names_for_name_and_path_or_version_selector(
@@ -215,6 +221,29 @@ pub fn get_command_names_for_name_and_path_or_version_selector(
             Ok(binary.get_command_names())
         }
     }
+}
+
+pub fn has_command_name_for_exec<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    plugin_manifest: &PluginsManifest,
+    name_selector: &NameSelector,
+    version_selector: &PathOrVersionSelector,
+    command_name: &CommandName,
+) -> Result<bool, ErrBox> {
+    Ok(match &version_selector {
+        PathOrVersionSelector::Path => {
+            let command_names = get_command_names_for_name_and_path_or_version_selector(
+                plugin_manifest,
+                name_selector,
+                version_selector,
+            )?;
+            command_names.iter().any(|c| c == command_name)
+        }
+        PathOrVersionSelector::Version(version_selector) => {
+            let binary = get_binary_with_name_and_version(&plugin_manifest, &name_selector, &version_selector)?;
+            get_exec_binary_command_exe_path(environment, &binary, &command_name).is_some()
+        }
+    })
 }
 
 pub fn get_global_binary_location_for_name_and_path_or_version_selector(
