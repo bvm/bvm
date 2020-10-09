@@ -1,7 +1,7 @@
 [package]
 name = "bvm"
 description = "Proof of concept"
-version = "0.0.36"
+version = "0.0.37"
 authors = ["David Sherret <dsherret@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -14,7 +14,7 @@ path = "src/main.rs"
 dirs = "3.0.1"
 async-trait = "0.1.30"
 clap = "2.33.0"
-dprint-cli-core = { version = "0.2.1" }
+dprint-cli-core = { version = "0.3.0" }
 jsonc-parser = { version = "0.14.0" }
 flate2 = "1.0.17"
 lazy_static = "1.4.0"

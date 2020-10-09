@@ -6,7 +6,7 @@ use crate::environment::Environment;
 
 // todo: consolidate with code in dprint
 
-pub async fn extract_zip(
+pub fn extract_zip(
     message: &str,
     environment: &impl Environment,
     zip_bytes: &[u8],
@@ -17,39 +17,37 @@ pub async fn extract_zip(
     let mut zip = zip::ZipArchive::new(reader)?;
     let length = zip.len();
 
-    environment
-        .log_action_with_progress(
-            message,
-            move |update_size| -> Result<(), ErrBox> {
-                // todo: consider parallelizing this
-                for i in 0..zip.len() {
-                    update_size(i);
-                    let mut file = zip.by_index(i).unwrap();
-                    let file_name = file.sanitized_name();
-                    let file_path = dir_path.join(&file_name);
+    environment.log_action_with_progress(
+        message,
+        move |update_size| -> Result<(), ErrBox> {
+            // todo: consider parallelizing this
+            for i in 0..zip.len() {
+                update_size(i);
+                let mut file = zip.by_index(i).unwrap();
+                let file_name = file.sanitized_name();
+                let file_path = dir_path.join(&file_name);
 
-                    if !file.is_dir() {
-                        let mut file_bytes = Vec::with_capacity(file.size() as usize);
-                        file.read_to_end(&mut file_bytes)?;
-                        environment.write_file(&file_path, &file_bytes)?;
-                    } else {
-                        environment.create_dir_all(&file_path)?
-                    }
+                if !file.is_dir() {
+                    let mut file_bytes = Vec::with_capacity(file.size() as usize);
+                    file.read_to_end(&mut file_bytes)?;
+                    environment.write_file(&file_path, &file_bytes)?;
+                } else {
+                    environment.create_dir_all(&file_path)?
+                }
 
-                    // Get and Set permissions
-                    #[cfg(unix)]
-                    if environment.is_real() {
-                        use std::fs;
-                        use std::os::unix::fs::PermissionsExt;
+                // Get and Set permissions
+                #[cfg(unix)]
+                if environment.is_real() {
+                    use std::fs;
+                    use std::os::unix::fs::PermissionsExt;
 
-                        if let Some(mode) = file.unix_mode() {
-                            fs::set_permissions(&file_path, fs::Permissions::from_mode(mode))?;
-                        }
+                    if let Some(mode) = file.unix_mode() {
+                        fs::set_permissions(&file_path, fs::Permissions::from_mode(mode))?;
                     }
                 }
-                Ok(())
-            },
-            length,
-        )
-        .await?
+            }
+            Ok(())
+        },
+        length,
+    )
 }

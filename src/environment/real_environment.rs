@@ -1,27 +1,28 @@
 use async_trait::async_trait;
 use dprint_cli_core::types::ErrBox;
-use dprint_cli_core::{download_url, log_action_with_progress, ProgressBars};
+use dprint_cli_core::{download_url, log_action_with_progress, OutputLock, ProgressBars};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use super::Environment;
 
 #[derive(Clone)]
 pub struct RealEnvironment {
-    output_lock: Arc<Mutex<u8>>,
-    progress_bars: Arc<ProgressBars>,
+    output_lock: OutputLock,
+    progress_bars: Option<ProgressBars>,
     is_verbose: bool,
 }
 
 impl RealEnvironment {
     pub fn new(is_verbose: bool) -> Result<RealEnvironment, ErrBox> {
+        let output_lock = OutputLock::new();
+        let progress_bars = ProgressBars::new(&output_lock);
         let environment = RealEnvironment {
-            output_lock: Arc::new(Mutex::new(0)),
-            progress_bars: Arc::new(ProgressBars::new()),
+            output_lock,
+            progress_bars,
             is_verbose,
         };
 
@@ -101,16 +102,16 @@ impl Environment for RealEnvironment {
     }
 
     fn log(&self, text: &str) {
-        let _g = self.output_lock.lock().unwrap();
+        let _g = self.output_lock.unwrap_lock();
         println!("{}", text);
     }
 
     fn log_error(&self, text: &str) {
-        let _g = self.output_lock.lock().unwrap();
+        let _g = self.output_lock.unwrap_lock();
         eprintln!("{}", text);
     }
 
-    async fn log_action_with_progress<
+    fn log_action_with_progress<
         TResult: std::marker::Send + std::marker::Sync,
         TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,
     >(
@@ -118,8 +119,8 @@ impl Environment for RealEnvironment {
         message: &str,
         action: TCreate,
         total_size: usize,
-    ) -> Result<TResult, ErrBox> {
-        log_action_with_progress(&self.progress_bars, message, action, total_size).await
+    ) -> TResult {
+        log_action_with_progress(&self.progress_bars, message, action, total_size)
     }
 
     fn get_local_user_data_dir(&self) -> PathBuf {

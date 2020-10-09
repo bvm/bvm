@@ -1067,9 +1067,11 @@ mod test {
 
     use super::registry;
     use super::run;
-    use crate::environment::{Environment, TestEnvironment, PATH_SEPARATOR, SYS_PATH_DELIMITER};
+    use crate::environment::{Environment, TestEnvironment, SYS_PATH_DELIMITER};
     use crate::test_builders::{EnvironmentBuilder, PluginDownloadType};
     use dprint_cli_core::types::ErrBox;
+
+    pub const PATH_SEPARATOR: &'static str = if cfg!(target_os = "windows") { "\\" } else { "/" };
 
     macro_rules! assert_logs {
         ($environment:expr, []) => {

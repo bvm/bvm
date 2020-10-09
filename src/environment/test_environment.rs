@@ -300,7 +300,7 @@ impl Environment for TestEnvironment {
         self.logged_errors.lock().unwrap().push(String::from(text));
     }
 
-    async fn log_action_with_progress<
+    fn log_action_with_progress<
         TResult: std::marker::Send + std::marker::Sync,
         TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,
     >(
@@ -308,9 +308,9 @@ impl Environment for TestEnvironment {
         message: &str,
         action: TCreate,
         _: usize,
-    ) -> Result<TResult, ErrBox> {
+    ) -> TResult {
         self.log_error(message);
-        Ok(action(Box::new(|_| {})))
+        action(Box::new(|_| {}))
     }
 
     fn get_local_user_data_dir(&self) -> PathBuf {

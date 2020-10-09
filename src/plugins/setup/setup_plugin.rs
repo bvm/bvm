@@ -134,24 +134,18 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
         plugin_cache_dir_path.clone()
     };
     match download_type {
-        DownloadType::Zip => {
-            utils::extract_zip(
-                &format!("Extracting archive for {}...", plugin_file.display(),),
-                environment,
-                &url_file_bytes,
-                &output_dir,
-            )
-            .await?
-        }
-        DownloadType::TarGz => {
-            utils::extract_tar_gz(
-                &format!("Extracting archive for {}...", plugin_file.display(),),
-                environment,
-                &url_file_bytes,
-                &output_dir,
-            )
-            .await?
-        }
+        DownloadType::Zip => utils::extract_zip(
+            &format!("Extracting archive for {}...", plugin_file.display(),),
+            environment,
+            &url_file_bytes,
+            &output_dir,
+        )?,
+        DownloadType::TarGz => utils::extract_tar_gz(
+            &format!("Extracting archive for {}...", plugin_file.display(),),
+            environment,
+            &url_file_bytes,
+            &output_dir,
+        )?,
         DownloadType::Binary => {
             if commands.len() != 1 {
                 return err!("The binary download type must have exactly one command specified.");

@@ -18,7 +18,7 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn log(&self, text: &str);
     fn log_error(&self, text: &str);
     async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox>;
-    async fn log_action_with_progress<
+    fn log_action_with_progress<
         TResult: std::marker::Send + std::marker::Sync,
         TCreate: FnOnce(Box<dyn Fn(usize)>) -> TResult + std::marker::Send + std::marker::Sync,
     >(
@@ -26,7 +26,7 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
         message: &str,
         action: TCreate,
         total_size: usize,
-    ) -> Result<TResult, ErrBox>;
+    ) -> TResult;
     /// Data that is specific to a user on a local machine.
     fn get_local_user_data_dir(&self) -> PathBuf;
     /// Data that is specific to a user across machines.
