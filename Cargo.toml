@@ -25,6 +25,9 @@ semver = "0.10.0"
 url = "2.1.1"
 zip = "0.5.6"
 
+[patch.crates-io]
+crossterm = { git = "https://github.com/dsherret/crossterm", branch = "fixForWhenStdOutRedirected" }
+
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7.0"
 
