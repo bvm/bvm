@@ -3,6 +3,7 @@ use dprint_cli_core::types::ErrBox;
 use dprint_cli_core::{download_url, log_action_with_progress, OutputLock, ProgressBars};
 use std::env;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::SystemTime;
@@ -74,8 +75,16 @@ impl Environment for RealEnvironment {
 
     fn remove_dir_all(&self, dir_path: &Path) -> Result<(), ErrBox> {
         log_verbose!(self, "Deleting directory: {}", dir_path.display());
-        fs::remove_dir_all(dir_path)?;
-        Ok(())
+        match fs::remove_dir_all(dir_path) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                if err.kind() == ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    err!("Error removing directory {}: {}", dir_path.display(), err.to_string())
+                }
+            }
+        }
     }
 
     async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
@@ -83,22 +92,38 @@ impl Environment for RealEnvironment {
         download_url(url, &self.progress_bars).await
     }
 
-    fn path_exists(&self, file_path: &Path) -> bool {
-        log_verbose!(self, "Checking path exists: {}", file_path.display());
-        file_path.exists()
+    fn path_exists(&self, path: &Path) -> bool {
+        log_verbose!(self, "Checking path exists: {}", path.display());
+        path.exists()
     }
 
     fn is_dir_empty(&self, dir_path: &Path) -> Result<bool, ErrBox> {
-        Ok(std::fs::read_dir(dir_path)?.next().is_none())
+        let mut result = match std::fs::read_dir(dir_path) {
+            Ok(result) => result,
+            Err(err) => {
+                return err!(
+                    "Error checking directory empty {}: {}",
+                    dir_path.display(),
+                    err.to_string()
+                )
+            }
+        };
+        Ok(result.next().is_none())
     }
 
     fn create_dir_all(&self, path: &Path) -> Result<(), ErrBox> {
-        fs::create_dir_all(path)?;
-        Ok(())
+        log_verbose!(self, "Creating directory: {}", path.display());
+        match fs::create_dir_all(path) {
+            Ok(_) => Ok(()),
+            Err(err) => err!("Error creating directory {}: {}", path.display(), err.to_string()),
+        }
     }
 
     fn cwd(&self) -> Result<PathBuf, ErrBox> {
-        Ok(env::current_dir()?)
+        match env::current_dir() {
+            Ok(cwd) => Ok(cwd),
+            Err(err) => err!("Error getting current working: {}", err.to_string()),
+        }
     }
 
     fn log(&self, text: &str) {

@@ -160,6 +160,7 @@ pub async fn setup_plugin<'a, TEnvironment: Environment>(
     }
 
     // create the shims after in case the post install fails
+    environment.create_dir_all(&utils::get_shim_dir(environment))?;
     for command in commands {
         create_shim(environment, &command.name)?;
     }
