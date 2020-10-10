@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use dprint_cli_core::types::ErrBox;
 use path_clean::PathClean;
 use std::collections::HashMap;
@@ -146,7 +145,6 @@ impl Drop for TestEnvironment {
     }
 }
 
-#[async_trait]
 impl Environment for TestEnvironment {
     fn is_real(&self) -> bool {
         false
@@ -202,7 +200,7 @@ impl Environment for TestEnvironment {
         Ok(())
     }
 
-    async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
+    fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
         let remote_files = self.remote_files.lock().unwrap();
         match remote_files.get(&String::from(url)) {
             Some(bytes) => Ok(bytes.clone()),

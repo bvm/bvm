@@ -1,6 +1,6 @@
-use async_trait::async_trait;
+use dprint_cli_core::download_url;
+use dprint_cli_core::logging::{log_action_with_progress, Logger, ProgressBars};
 use dprint_cli_core::types::ErrBox;
-use dprint_cli_core::{download_url, log_action_with_progress, OutputLock, ProgressBars};
 use std::env;
 use std::fs;
 use std::io::ErrorKind;
@@ -12,17 +12,17 @@ use super::Environment;
 
 #[derive(Clone)]
 pub struct RealEnvironment {
-    output_lock: OutputLock,
+    logger: Logger,
     progress_bars: Option<ProgressBars>,
     is_verbose: bool,
 }
 
 impl RealEnvironment {
     pub fn new(is_verbose: bool) -> Result<RealEnvironment, ErrBox> {
-        let output_lock = OutputLock::new();
-        let progress_bars = ProgressBars::new(&output_lock);
+        let logger = Logger::new("bvm", /* is silent */ false);
+        let progress_bars = ProgressBars::new(&logger);
         let environment = RealEnvironment {
-            output_lock,
+            logger,
             progress_bars,
             is_verbose,
         };
@@ -34,7 +34,6 @@ impl RealEnvironment {
     }
 }
 
-#[async_trait]
 impl Environment for RealEnvironment {
     fn is_real(&self) -> bool {
         true
@@ -87,9 +86,9 @@ impl Environment for RealEnvironment {
         }
     }
 
-    async fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
+    fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
         log_verbose!(self, "Downloading url: {}", url);
-        download_url(url, &self.progress_bars).await
+        download_url(url, &self.progress_bars)
     }
 
     fn path_exists(&self, path: &Path) -> bool {
@@ -127,13 +126,11 @@ impl Environment for RealEnvironment {
     }
 
     fn log(&self, text: &str) {
-        let _g = self.output_lock.unwrap_lock();
-        println!("{}", text);
+        self.logger.log(text, "bvm");
     }
 
     fn log_error(&self, text: &str) {
-        let _g = self.output_lock.unwrap_lock();
-        eprintln!("{}", text);
+        self.logger.log_err(text, "bvm");
     }
 
     fn log_action_with_progress<

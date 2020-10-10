@@ -50,14 +50,14 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
     // general
 
-    pub async fn setup_plugin<'a>(&'a mut self, plugin_file: &PluginFile) -> Result<&'a BinaryManifestItem, ErrBox> {
-        let item = setup_plugin(&self.environment, plugin_file).await?;
+    pub fn setup_plugin<'a>(&'a mut self, plugin_file: &PluginFile) -> Result<&'a BinaryManifestItem, ErrBox> {
+        let item = setup_plugin(&self.environment, plugin_file)?;
         let identifier = item.get_identifier();
         self.manifest.binaries.insert(identifier.clone(), item);
         Ok(self.manifest.get_binary(&identifier).unwrap())
     }
 
-    pub async fn get_url_install_action(
+    pub fn get_url_install_action(
         &mut self,
         checksum_url: &ChecksumPathOrUrl,
         version_selector: Option<&VersionSelector>,
@@ -66,7 +66,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         // always install the url version for force
         if force_install {
             return Ok(UrlInstallAction::Install(
-                self.get_and_associate_plugin_file(checksum_url).await?,
+                self.get_and_associate_plugin_file(checksum_url)?,
             ));
         }
 
@@ -81,7 +81,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
             }
         }
 
-        let plugin_file = self.get_and_associate_plugin_file(checksum_url).await?;
+        let plugin_file = self.get_and_associate_plugin_file(checksum_url)?;
         let identifier = plugin_file.get_identifier();
 
         self.error_if_identifier_not_matches_version_selector(&identifier, &version_selector)?;
@@ -119,8 +119,8 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         Ok(())
     }
 
-    async fn get_and_associate_plugin_file(&mut self, checksum_url: &ChecksumPathOrUrl) -> Result<PluginFile, ErrBox> {
-        let plugin_file = get_plugin_file(&self.environment, checksum_url).await?;
+    fn get_and_associate_plugin_file(&mut self, checksum_url: &ChecksumPathOrUrl) -> Result<PluginFile, ErrBox> {
+        let plugin_file = get_plugin_file(&self.environment, checksum_url)?;
         // associate the url to the binary identifier
         let identifier = plugin_file.get_identifier();
         self.set_identifier_for_url(&checksum_url, identifier);
@@ -146,12 +146,12 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         })
     }
 
-    pub async fn get_installed_binary_for_config_binary(
+    pub fn get_installed_binary_for_config_binary(
         &mut self,
         config_binary: &ConfigFileBinary,
     ) -> Result<Option<&BinaryManifestItem>, ErrBox> {
         // associate the url to an identifier in order to be able to tell the name
-        self.ensure_url_associated(&config_binary.path).await?;
+        self.ensure_url_associated(&config_binary.path)?;
 
         // now get the binary item based on the config file
         Ok(helpers::get_installed_binary_if_associated_config_file_binary(
@@ -160,10 +160,10 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         ))
     }
 
-    pub async fn ensure_url_associated(&mut self, url: &ChecksumPathOrUrl) -> Result<(), ErrBox> {
+    pub fn ensure_url_associated(&mut self, url: &ChecksumPathOrUrl) -> Result<(), ErrBox> {
         // associate the url to an identifier in order to be able to tell the name
         if self.manifest.get_identifier_from_url(&url).is_none() {
-            self.get_and_associate_plugin_file(&url).await?;
+            self.get_and_associate_plugin_file(&url)?;
         }
         Ok(())
     }

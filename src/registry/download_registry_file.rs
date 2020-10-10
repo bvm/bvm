@@ -53,11 +53,11 @@ impl RegistryVersionInfo {
     }
 }
 
-pub async fn download_registry_file<'a, TEnvironment: Environment>(
+pub fn download_registry_file<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
     url: &str,
 ) -> Result<RegistryFile, ErrBox> {
-    let plugin_file_bytes = environment.download_file(&url).await?;
+    let plugin_file_bytes = environment.download_file(&url)?;
 
     read_registry_file(&plugin_file_bytes)
 }

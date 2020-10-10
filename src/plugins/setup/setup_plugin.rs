@@ -102,14 +102,14 @@ fn get_plugin_platform_info<'a>(platform_info: &'a Option<PlatformInfo>) -> Resu
     }
 }
 
-pub async fn setup_plugin<'a, TEnvironment: Environment>(
+pub fn setup_plugin<'a, TEnvironment: Environment>(
     environment: &TEnvironment,
     plugin_file: &PluginFile,
 ) -> Result<BinaryManifestItem, ErrBox> {
     // download the url's bytes
     let url = plugin_file.get_url()?;
     let download_type = plugin_file.get_download_type()?;
-    let url_file_bytes = environment.download_file(url).await?;
+    let url_file_bytes = environment.download_file(url)?;
     verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
