@@ -1,7 +1,7 @@
 [package]
 name = "bvm"
 description = "Proof of concept"
-version = "0.0.38"
+version = "0.1.0"
 authors = ["David Sherret <dsherret@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 dirs = "3.0.1"
 clap = "2.33.0"
-dprint-cli-core = { version = "0.5.0" }
+dprint-cli-core = { version = "0.5.2" }
 jsonc-parser = { version = "0.14.0" }
 flate2 = "1.0.17"
 lazy_static = "1.4.0"
@@ -24,9 +24,6 @@ serde_json = "1.0"
 semver = "0.10.0"
 url = "2.1.1"
 zip = "0.5.6"
-
-[patch.crates-io]
-crossterm = { git = "https://github.com/dsherret/crossterm", branch = "fixForWhenStdOutRedirected" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7.0"

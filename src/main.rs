@@ -1039,7 +1039,9 @@ fn get_executable_path_from_config_file<'a, TEnvironment: Environment>(
 fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, configuration::ConfigFile), ErrBox> {
     match get_config_file(environment)? {
         Some(config_file) => Ok(config_file),
-        None => return err!("Could not find .bvmrc.json in the current directory or its ancestors. Perhaps created one with `bvm init`?"),
+        None => return err!(
+            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
+        ),
     }
 }
 
@@ -1519,7 +1521,7 @@ mod test {
         let error_text = run_cli(vec!["install"], &environment).err().unwrap().to_string();
         assert_eq!(
             error_text,
-            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps created one with `bvm init`?"
+            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
         );
 
         // move to the correct dir, then try again

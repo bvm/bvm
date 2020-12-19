@@ -2,17 +2,17 @@
 
 A version manager for all binaries.
 
-![Demo using bvm command](demo.gif "Demo using bvm command")
+NOTICE: This is in its early stages. There will likely be many breaking changes.
 
-NOTICE: This is a proof of concept. It is not recommended to use it yet as there will likely be many breaking changes.
+Want to help out on this project? I am working on too many projects and could use some help. See the issues [here](https://github.com/bvm/bvm/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
 
 ## Goals
 
 1. Replace binary specific version manager tools.
 2. Provide an easy way for binary authors to distribute and have their users manage versions.
-3. Cross platform and provide a good experience in as many shells as possible (**Do not require WSL on Windows**).
+3. Cross platform - Provide a good experience in as many shells as possible (**Does not require WSL on Windows**).
 4. Backwards compatibility (once hitting 1.0).
-5. No centralization—use urls and paths.
+5. Distributed—use urls and paths.
    - Allows for easily distributing approved binaries within an organization.
    - Easy for binary authors to distribute their applications as there is no approval delay.
 6. Seamless version selection based on current working directory.
@@ -129,7 +129,7 @@ Adding a registry allows you to more easily install copies of a binary without d
 
 ### `bvm registry add <url>`
 
-Adds or reassociates the registry at the specified url to the local CLI.
+Adds or associates the registry at the specified url to the local CLI.
 
 ```
 # Examples
