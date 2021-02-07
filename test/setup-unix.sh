@@ -5,4 +5,4 @@ cp bvm-init.sh ~/.bvm/bin/bvm-init
 BVM_INSTALL_DIR=$HOME/.bvm
 export BVM_INSTALL_DIR
 . ~/.bvm/bin/bvm-init
-~/.bvm/bin/bvm-bin unix-install
+~/.bvm/bin/bvm-bin hidden unix-install

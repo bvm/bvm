@@ -67,12 +67,10 @@ bvm()
     local bvm_exec_command
     bvm_exec_command=$2
     shift 2
-    local bvm_exec_args
-    bvm_exec_args="$@"
 
     # use a sub shell to prevent exporting variables
     (
-      bvm_handle_env_messages "$($bvm_bin hidden resolve-command "$bvm_exec_command")" $bvm_exec_args || { return $?; }
+      bvm_handle_env_messages "$($bvm_bin hidden resolve-command "$bvm_exec_command")" "$@" || { return $?; }
     )
 
     return $?;
@@ -103,14 +101,12 @@ bvm()
     else
       shift 4
     fi
-    local bvm_exec_args
-    bvm_exec_args="$@"
 
     # use a sub shell to prevent exporting variables
     (
       bvm_handle_env_messages "$($bvm_bin hidden get-exec-env-changes "$bvm_exec_name" "$bvm_exec_version")" || { return $?; }
 
-      $bvm_executable_path $bvm_exec_args
+      $bvm_executable_path "$@"
     )
     return $?
   fi
