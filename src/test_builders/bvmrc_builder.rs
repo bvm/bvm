@@ -97,7 +97,7 @@ impl BvmrcBuilder {
             }
         }
         writer.push_str("\n  ]\n}\n");
-        let file_path = PathBuf::from(self.path.clone().unwrap_or("/project/.bvmrc.json".to_string()));
+        let file_path = PathBuf::from(self.path.clone().unwrap_or("/project/bvm.json".to_string()));
         self.environment.write_file_text(&file_path, &writer).unwrap();
     }
 }

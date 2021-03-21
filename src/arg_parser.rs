@@ -402,10 +402,10 @@ ARGS:
                 ),
         )
         .subcommand(SubCommand::with_name("list").about("Output a list of installed binary versions."))
-        .subcommand(SubCommand::with_name("init").about("Creates an empty .bvmrc.json file in the current directory."))
+        .subcommand(SubCommand::with_name("init").about("Creates an empty bvm.json file in the current directory."))
         .subcommand(
             SubCommand::with_name("add")
-                .about("Programmatically adds a binary to the .bvmrc.json file.")
+                .about("Programmatically adds a binary to the bvm.json file.")
                 .arg(
                     Arg::with_name("url_or_name")
                         .help("The url or name of the binary.")

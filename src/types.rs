@@ -59,7 +59,11 @@ pub struct Version {
 
 impl Version {
     pub fn parse(text: &str) -> Result<Version, ErrBox> {
-        let sem_ver = SemVersion::parse(text)?;
+        let sem_ver = match SemVersion::parse(text) {
+            Ok(version) => version,
+            Err(err) => return err!("Error parsing version to format `x.x.x`. {}", err.to_string()),
+        };
+
         Ok(Version {
             full_text: text.to_string(),
             sem_ver,

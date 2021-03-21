@@ -462,7 +462,7 @@ fn display_commands_in_config_file_warning_if_necessary(
         concat!(
             "Updated globally used {0} of {2}, but local {0} {1} using version specified ",
             "in the current working directory's config file. If you wish to change the local {0}, ",
-            "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+            "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
         ),
         if command_names.len() == 1 {
             "version"
@@ -1039,9 +1039,11 @@ fn get_executable_path_from_config_file<'a, TEnvironment: Environment>(
 fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, configuration::ConfigFile), ErrBox> {
     match get_config_file(environment)? {
         Some(config_file) => Ok(config_file),
-        None => return err!(
-            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
-        ),
+        None => {
+            return err!(
+            "Could not find bvm.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
+        )
+        }
     }
 }
 
@@ -1233,9 +1235,9 @@ mod test {
     fn should_init() {
         let environment = TestEnvironment::new();
         run_cli(vec!["init"], &environment).unwrap();
-        assert_logs!(environment, ["Created .bvmrc.json"]);
+        assert_logs!(environment, ["Created bvm.json"]);
         assert_eq!(
-            environment.read_file_text(&PathBuf::from(".bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("bvm.json")).unwrap(),
             "{\n  \"binaries\": [\n  ]\n}\n"
         );
     }
@@ -1243,11 +1245,11 @@ mod test {
     #[test]
     fn should_error_if_init_has_file() {
         let environment = TestEnvironment::new();
-        environment.write_file_text(&PathBuf::from(".bvmrc.json"), "").unwrap();
+        environment.write_file_text(&PathBuf::from("bvm.json"), "").unwrap();
         let error_text = run_cli(vec!["init"], &environment).err().unwrap();
         assert_eq!(
             error_text.to_string(),
-            "A .bvmrc.json file already exists in the current directory."
+            "A bvm.json file already exists in the current directory."
         );
     }
 
@@ -1423,7 +1425,7 @@ mod test {
                 concat!(
                     "Updated globally used version of 'name', but local version remains using version specified ",
                     "in the current working directory's config file. If you wish to change the local version, ",
-                    "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+                    "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
                 )
             ]
         );
@@ -1521,7 +1523,7 @@ mod test {
         let error_text = run_cli(vec!["install"], &environment).err().unwrap().to_string();
         assert_eq!(
             error_text,
-            "Could not find .bvmrc.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
+            "Could not find bvm.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
         );
 
         // move to the correct dir, then try again
@@ -1774,16 +1776,13 @@ mod test {
         let environment = TestEnvironment::new();
         environment
             .write_file_text(
-                &PathBuf::from("/.bvmrc.json"),
+                &PathBuf::from("/bvm.json"),
                 r#"{"test": "", "binaries": ["http://localhost/package.json"]}"#,
             )
             .unwrap();
 
         let error_message = run_cli(vec!["install"], &environment).err().unwrap();
-        assert_eq!(
-            error_message.to_string(),
-            "Error reading /.bvmrc.json: Unknown key 'test'"
-        );
+        assert_eq!(error_message.to_string(), "Error reading /bvm.json: Unknown key 'test'");
     }
 
     #[test]
@@ -1974,7 +1973,7 @@ mod test {
             [concat!(
                 "Updated globally used version of 'name', but local version remains using version specified ",
                 "in the current working directory's config file. If you wish to change the local version, ",
-                "then update your configuration file (check the cwd and ancestor directories for a .bvmrc.json file)."
+                "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
             )]
         );
 
@@ -2656,9 +2655,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
-            environment
-                .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
-                .unwrap(),
+            environment.read_file_text(&PathBuf::from("/project/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2691,9 +2688,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
-            environment
-                .read_file_text(&PathBuf::from("/project/.bvmrc.json"))
-                .unwrap(),
+            environment.read_file_text(&PathBuf::from("/project/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2747,7 +2742,7 @@ mod test {
                 },
             ],
         );
-        builder.create_bvmrc_builder().path("/.bvmrc.json").build();
+        builder.create_bvmrc_builder().path("/bvm.json").build();
         let environment = builder.build();
 
         run_cli(vec!["registry", "add", "http://localhost/registry1.json"], &environment).unwrap();
@@ -2761,7 +2756,7 @@ mod test {
         assert_logs_errors!(environment, ["Extracting archive for owner/other 2.0.0..."]);
 
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2787,7 +2782,7 @@ mod test {
         assert_logs_errors!(environment, ["Extracting archive for owner/other 1.0.0..."]);
 
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2832,7 +2827,7 @@ mod test {
         );
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_path("http://localhost/package.json")
             .build();
         let environment = builder.build();
@@ -2845,7 +2840,7 @@ mod test {
 
         // should replace it
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2869,7 +2864,7 @@ mod test {
         let checksum = builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_path("http://localhost/package.json")
             .build();
         let environment = builder.build();
@@ -2878,7 +2873,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 1.0.0..."]);
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2904,7 +2899,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_object("http://localhost/package1.json", None, None)
             .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
             .add_binary_object("http://localhost/final.json", None, Some("1"))
@@ -2914,7 +2909,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2948,7 +2943,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
             .add_binary_object("http://localhost/package1.json", None, None)
             .add_binary_object("http://localhost/final.json", None, Some("1"))
@@ -2958,7 +2953,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -2992,7 +2987,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/final.json", "owner", "final", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_object("http://localhost/other.json", None, Some("~1.0.0"))
             .add_binary_object("http://localhost/final.json", None, Some("1"))
             .add_binary_object("http://localhost/package1.json", None, None)
@@ -3002,7 +2997,7 @@ mod test {
         run_cli(vec!["add", "http://localhost/package2.json"], &environment).unwrap();
         assert_logs_errors!(environment, ["Extracting archive for owner/name 2.0.0..."]);
         assert_eq!(
-            environment.read_file_text(&PathBuf::from("/.bvmrc.json")).unwrap(),
+            environment.read_file_text(&PathBuf::from("/bvm.json")).unwrap(),
             format!(
                 r#"{{
   "binaries": [
@@ -3203,7 +3198,7 @@ mod test {
             .build();
         builder
             .create_bvmrc_builder()
-            .path("/.bvmrc.json")
+            .path("/bvm.json")
             .add_binary_path("http://localhost/package.json")
             .build();
         let environment = builder.build();

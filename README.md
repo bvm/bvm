@@ -187,7 +187,7 @@ bvm install --use node 14.9.0
 ### Setup
 
 1. Run `bvm init` in the project's root directory.
-2. Open up the created _.bvmrc.json_ file and specify the paths to the binary manifest files.
+2. Open up the created _bvm.json_ file and specify the paths to the binary manifest files.
    ```jsonc
    {
      // optional commands to run on pre and post install
@@ -215,18 +215,18 @@ bvm install --use node 14.9.0
 
 ### `bvm init`
 
-Creates an empty `.bvmrc.json` file in the current directory.
+Creates an empty `bvm.json` file in the current directory.
 
 ### `bvm install`
 
-Downloads & installs the binaries in the current `.bvmrc.json` configuration file and associates them on the path with bvm if not previously done.
+Downloads & installs the binaries in the current `bvm.json` configuration file and associates them on the path with bvm if not previously done.
 
 - Provide the `--use` flag to also use all the binaries in the configuration file on the path when outside this directory.
 - Provide the `--force` flag to force an install of everything even if already installed or has a matching version.
 
 ### `bvm add [url]`
 
-Adds the specified binary at the specified url to a project's `.bvmrc.json` file based on the current directory. Installs if necessary.
+Adds the specified binary at the specified url to a project's `bvm.json` file based on the current directory. Installs if necessary.
 
 #### Example
 

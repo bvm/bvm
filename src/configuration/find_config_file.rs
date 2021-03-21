@@ -19,7 +19,7 @@ pub fn find_config_file(environment: &impl Environment) -> Result<Option<PathBuf
     Ok(None)
 }
 
-pub const CONFIG_FILE_NAME: &'static str = ".bvmrc.json";
+pub const CONFIG_FILE_NAME: &'static str = "bvm.json";
 
 fn get_config_file_in_dir(environment: &impl Environment, dir: &Path) -> Option<PathBuf> {
     let config_path = dir.join(CONFIG_FILE_NAME);
