@@ -289,7 +289,7 @@ To cause the server to update a registry file, make a `GET` request to `https://
 1. `https://bvm.land/<owner>/<name>/registry.json`
 2. `https://bvm.land/<name>/registry.json`—when `owner` is the same as `name`.
 
-The file will be created based on any releases containing a _bvmrc.json_ file as a release asset as described above.
+The file will be created based on any releases containing a _bvm.json_ file as a release asset as described above.
 
 #### Example GitHub Publish Workflow
 
