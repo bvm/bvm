@@ -75,7 +75,7 @@ function restore_env {
 if ($args[0] -eq "exec-command") {
   # Format: bvm exec-command [command-name] [...args]
   $command_name = $args[1]
-  $exec_args = $args[2]
+  $exec_args = $args[2..$args.Length]
   $env_messages=((bvm-bin hidden resolve-command $command_name) | Out-String)
   $should_snapshot_env=(has_env_changes $env_messages)
   if ($should_snapshot_env -eq 1) { $env_snapshot=(snapshot_env) }
