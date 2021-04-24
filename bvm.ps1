@@ -4,7 +4,7 @@ function bvm_handle_env_messages {
   param(
     [string]
     $messages_text,
-    [string[]]
+    [object[]]
     $exec_args
   )
 
@@ -14,7 +14,7 @@ function bvm_handle_env_messages {
         # ignore
     } elseif ($last_was_exec -eq 1) {
       # this item will be the binary to execute
-      . $item $exec_args
+      . $item @exec_args # splat the arguments
       if ($lastexitcode -ne 0) { exit $lastexitcode }
     } elseif ($item -match "^SET ([^\s]+)=(.+)$") {
       # adding env var
@@ -109,13 +109,13 @@ if ($args[0] -eq "exec-command") {
   try {
     bvm_handle_env_messages $env_messages
     $args = $args[$args_start_index..$args.Length]
-    . $executable_path $args
+    . $executable_path @args # splat
     if ($lastexitcode -ne 0) { exit $lastexitcode }
   } finally {
     if ($should_snapshot_env -eq 1) { restore_env $env_snapshot }
   }
 } else {
-  bvm-bin $args
+  bvm-bin @args # splat
 
   if (($args[0] -eq "install") -or ($args[0] -eq "uninstall") -or ($args[0] -eq "use")) {
     bvm_handle_env_messages ((bvm-bin hidden get-pending-env-changes) | Out-String)
