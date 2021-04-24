@@ -20,18 +20,16 @@ pub fn find_config_file(environment: &impl Environment) -> Result<Option<PathBuf
 }
 
 pub const CONFIG_FILE_NAME: &'static str = "bvm.json";
+pub const HIDDEN_CONFIG_FILE_NAME: &'static str = ".bvm.json";
 
 fn get_config_file_in_dir(environment: &impl Environment, dir: &Path) -> Option<PathBuf> {
     let config_path = dir.join(CONFIG_FILE_NAME);
     if environment.path_exists(&config_path) {
         return Some(config_path);
     }
-    // I'm not sure if this complexity should exist. It also slows down file resolution.
-    /*
-    let config_path = dir.join(format!("config/{}", CONFIG_FILE_NAME));
+    let config_path = dir.join(HIDDEN_CONFIG_FILE_NAME);
     if environment.path_exists(&config_path) {
         return Some(config_path);
     }
-    */
     None
 }

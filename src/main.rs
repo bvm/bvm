@@ -462,7 +462,8 @@ fn display_commands_in_config_file_warning_if_necessary(
         concat!(
             "Updated globally used {0} of {2}, but local {0} {1} using version specified ",
             "in the current working directory's config file. If you wish to change the local {0}, ",
-            "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
+            "then update your configuration file (check the cwd and ancestor directories for a ",
+            "bvm configuration file)."
         ),
         if command_names.len() == 1 {
             "version"
@@ -496,6 +497,11 @@ fn handle_init_command<TEnvironment: Environment>(environment: &TEnvironment) ->
         err!(
             "A {} file already exists in the current directory.",
             configuration::CONFIG_FILE_NAME
+        )
+    } else if environment.path_exists(&PathBuf::from(configuration::HIDDEN_CONFIG_FILE_NAME)) {
+        err!(
+            "A {} file already exists in the current directory.",
+            configuration::HIDDEN_CONFIG_FILE_NAME
         )
     } else {
         environment.write_file_text(&config_path, "{\n  \"binaries\": [\n  ]\n}\n")?;
@@ -1040,9 +1046,7 @@ fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, 
     match get_config_file(environment)? {
         Some(config_file) => Ok(config_file),
         None => {
-            return err!(
-            "Could not find bvm.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
-        )
+            err!("Could not find a bvm configuration file in the current directory or its ancestors. Perhaps create one with `bvm init`?")
         }
     }
 }
@@ -1254,6 +1258,17 @@ mod test {
     }
 
     #[test]
+    fn should_error_if_init_has_hidden_file() {
+        let environment = TestEnvironment::new();
+        environment.write_file_text(&PathBuf::from(".bvm.json"), "").unwrap();
+        let error_text = run_cli(vec!["init"], &environment).err().unwrap();
+        assert_eq!(
+            error_text.to_string(),
+            "A .bvm.json file already exists in the current directory."
+        );
+    }
+
+    #[test]
     fn install_url_command_no_path() {
         let builder = EnvironmentBuilder::new();
         builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
@@ -1425,7 +1440,8 @@ mod test {
                 concat!(
                     "Updated globally used version of 'name', but local version remains using version specified ",
                     "in the current working directory's config file. If you wish to change the local version, ",
-                    "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
+                    "then update your configuration file (check the cwd and ancestor directories for a bvm ",
+                    "configuration file)."
                 )
             ]
         );
@@ -1523,7 +1539,7 @@ mod test {
         let error_text = run_cli(vec!["install"], &environment).err().unwrap().to_string();
         assert_eq!(
             error_text,
-            "Could not find bvm.json in the current directory or its ancestors. Perhaps create one with `bvm init`?"
+            "Could not find a bvm configuration file in the current directory or its ancestors. Perhaps create one with `bvm init`?"
         );
 
         // move to the correct dir, then try again
@@ -1973,7 +1989,7 @@ mod test {
             [concat!(
                 "Updated globally used version of 'name', but local version remains using version specified ",
                 "in the current working directory's config file. If you wish to change the local version, ",
-                "then update your configuration file (check the cwd and ancestor directories for a bvm.json file)."
+                "then update your configuration file (check the cwd and ancestor directories for a bvm configuration file)."
             )]
         );
 
@@ -3216,6 +3232,28 @@ mod test {
         expected_logs.push("EXEC".to_string());
         expected_logs.push(first_binary_path);
         assert_eq!(environment.take_logged_messages(), expected_logs);
+    }
+
+    #[test]
+    fn support_hidden_config_file() {
+        let builder = EnvironmentBuilder::new();
+        builder
+            .create_bvmrc_builder()
+            .path("/project/.bvm.json")
+            .add_binary_path("http://localhost/package.json")
+            .build();
+        let first_binary_path = get_binary_path("owner", "name", "1.0.0");
+        builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
+
+        let environment = builder.build();
+
+        // install the package
+        environment.set_cwd("/project");
+        run_cli(vec!["install"], &environment).unwrap();
+        environment.clear_logs();
+
+        // should still resolve to the cwd's binary
+        assert_resolves!(&environment, first_binary_path);
     }
 
     #[cfg(not(target_os = "windows"))]
