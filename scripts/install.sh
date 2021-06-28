@@ -23,6 +23,7 @@ else
 fi
 
 bvm_install="${BVM_INSTALL_DIR:-$HOME/.bvm}"
+BVM_INSTALL_DIR="$bvm_install"
 bin_dir="$bvm_install/bin"
 exe="$bin_dir/bvm"
 
