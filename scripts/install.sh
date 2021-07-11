@@ -3,6 +3,11 @@
 
 set -e
 
+if ! command -v unzip >/dev/null; then
+	echo "Error: unzip is required to install bvm." 1>&2
+	exit 1
+fi
+
 windows_target="x86_64-pc-windows-msvc"
 
 case $(uname -s) in
