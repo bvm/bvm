@@ -17,8 +17,24 @@ pub fn read_plugin_file(file_bytes: &[u8]) -> Result<SerializedPluginFile, ErrBo
                 return err!("The binary owner and name may not contain a forward slash.");
             }
 
+            match file.name {
+                //return err!("");
+                _ if file.name == "bvm" => {
+                    return err!("'bvm' is not allowed to be used as a binary name")
+                }
+
+                _ if file.name.contains("|") => {
+                    return err!("The binary owner and name may not contain a vertical slash.");
+                }
+
+                _ => println!("Passed"),
+            }
+
             Ok(file)
         }
-        Err(err) => err!("Error deserializing binary manifest file. {}", err.to_string()),
+        Err(err) => err!(
+            "Error deserializing binary manifest file. {}",
+            err.to_string()
+        ),
     }
 }
