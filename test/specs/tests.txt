@@ -1,0 +1,7 @@
+deno eval "console.log(""hello"")"
+deno eval "console.log(2 != 3)"
+# ignore: ps
+deno eval -p JSON.stringify({})
+# only: ps
+deno eval -p "JSON.stringify({})"
+deno eval "console.log(Deno.args[0])" lib=""

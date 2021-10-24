@@ -25,11 +25,22 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
         action: TCreate,
         total_size: usize,
     ) -> TResult;
+    /// Attempts to get the local user data dir.
+    fn try_get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox>;
     /// Data that is specific to a user on a local machine.
-    fn get_local_user_data_dir(&self) -> PathBuf;
+    fn get_local_user_data_dir(&self) -> PathBuf {
+        self.try_get_local_user_data_dir().unwrap()
+    }
+    /// Attempts to get the user data dir.
+    fn try_get_user_data_dir(&self) -> Result<PathBuf, ErrBox>;
     /// Data that is specific to a user across machines.
-    fn get_user_data_dir(&self) -> PathBuf;
-    fn get_user_home_dir(&self) -> PathBuf;
+    fn get_user_data_dir(&self) -> PathBuf {
+        self.try_get_user_data_dir().unwrap()
+    }
+    fn try_get_user_home_dir(&self) -> Result<PathBuf, ErrBox>;
+    fn get_user_home_dir(&self) -> PathBuf {
+        self.try_get_user_home_dir().unwrap()
+    }
     fn get_time_secs(&self) -> u64;
     /// Gets the specified environment variable.
     fn get_env_var(&self, key: &str) -> Option<String>;

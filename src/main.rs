@@ -57,6 +57,7 @@ fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<String>)
         SubCommand::List => handle_list_command(environment)?,
         SubCommand::Init => handle_init_command(environment)?,
         SubCommand::ClearUrlCache => handle_clear_url_cache(environment)?,
+        SubCommand::RecreateShims => recreate_shims(environment)?,
         SubCommand::Registry(command) => handle_registry_command(environment, command)?,
         SubCommand::Add(command) => handle_add_command(environment, command)?,
         SubCommand::Hidden(command) => handle_hidden_command(environment, command)?,
@@ -987,20 +988,56 @@ fn handle_hidden_slice_args_command<TEnvironment: Environment>(
     environment: &TEnvironment,
     command: SliceArgsCommand,
 ) -> Result<(), ErrBox> {
-    environment.log(&command.args.iter().skip(command.count).map(|s| {
-        let text = s.replace("\"", "\\\"");
-        let text = if command.delayed_expansion {
-            // escape ! for SETLOCAL EnableDelayedExpansion in batch scripts
-            text.replace("!", "^!")
+    if command.args.len() != 1 {
+        return err!("Expected only 1 argument. Args: {:?}", command.args);
+    }
+
+    let arg = command.args[0].clone();
+
+    let mut count = 0;
+    let mut index = 0;
+    let mut in_quotes = false;
+    let mut found_var = false;
+    for (i, c) in arg.char_indices() {
+        index = i + c.len_utf8();
+
+        if !found_var && c.is_whitespace() {
+            continue;
         } else {
-            text
-        };
-        if text.contains(" ") {
-            format!("\"{}\"", text)
-        } else {
-            text
+            found_var = true;
         }
-    }).collect::<Vec<_>>().join(" "));
+
+        if !in_quotes {
+            if c.is_whitespace() {
+                found_var = false;
+                count += 1;
+                if count == command.count {
+                    break;
+                }
+            } else if c == '\"' {
+                in_quotes = true;
+                continue;
+            }
+        } else {
+            if c == '\"' {
+                in_quotes = false;
+                found_var = false;
+                count += 1;
+                if count == command.count {
+                    break;
+                }
+            }
+        }
+    }
+
+    let text = &arg[index..].trim();
+    let text = if command.delayed_expansion {
+        // escape ! for SETLOCAL EnableDelayedExpansion in batch scripts
+        text.replace("!", "^^!")
+    } else {
+        text.to_string()
+    }.replace("\"", "\"\"");
+    environment.log(&format!("\"{}\"", text));
     Ok(())
 }
 

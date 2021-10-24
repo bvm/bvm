@@ -1,5 +1,7 @@
 #!/usr/bin/env pwsh
 
+$bvm_bin = $PSScriptRoot + "/bvm-bin"
+
 function bvm_handle_env_messages {
   param(
     [string]
@@ -7,13 +9,6 @@ function bvm_handle_env_messages {
     [object[]]
     $exec_args
   )
-
-  # escape double quotes in an argument
-  for ($i=0; $i -lt $exec_args.Length; $i++) {
-    if ((!$exec_args[$i].startsWith("`"")) -and ($exec_args[$i].contains("`""))) {
-        $exec_args[$i] = "`"" + $exec_args[$i].Replace("`"", "`\`"") + "`""
-    }
-  }
 
   $items = $messages_text -split [Environment]::NewLine
   foreach ($item in $items) {
@@ -82,14 +77,20 @@ function restore_env {
 if ($args[0] -eq "exec-command") {
   # Format: bvm exec-command [command-name] [...args]
   $command_name = $args[1]
-  $exec_args = $args[2..$args.Length]
-  $env_messages=((bvm-bin hidden resolve-command $command_name) | Out-String)
-  $should_snapshot_env=(has_env_changes $env_messages)
-  if ($should_snapshot_env -eq 1) { $env_snapshot=(snapshot_env) }
-  try {
-    bvm_handle_env_messages $env_messages $exec_args
-  } finally {
-    if ($should_snapshot_env -eq 1) { restore_env $env_snapshot }
+  $fallback_path = $args[2]
+  $exec_args = $args[3..$args.Length]
+  # todo: windows specific behaviour
+  if (($env:USERNAME -eq "") -or ($env:USERNAME -eq $null)) {
+    . $fallback_path @exec_args # splat the arguments
+  } else {
+    $env_messages=((. $bvm_bin hidden resolve-command $command_name) | Out-String)
+    $should_snapshot_env=(has_env_changes $env_messages)
+    if ($should_snapshot_env -eq 1) { $env_snapshot=(snapshot_env) }
+    try {
+      bvm_handle_env_messages $env_messages $exec_args
+    } finally {
+      if ($should_snapshot_env -eq 1) { restore_env $env_snapshot }
+    }
   }
   if ($lastexitcode -ne 0) { exit $lastexitcode }
 } elseif ($args[0] -eq "exec") {
@@ -99,7 +100,7 @@ if ($args[0] -eq "exec-command") {
   $exec_command = $args[3]
   $args_start_index = 4
 
-  $has_command = ((bvm-bin hidden has-command $exec_name $exec_version $exec_command) | Out-String).trim()
+  $has_command = ((. $bvm_bin hidden has-command $exec_name $exec_version $exec_command) | Out-String).trim()
   if ($lastexitcode -ne 0) { exit $lastexitcode }
 
   if ($has_command -eq "false") {
@@ -107,10 +108,10 @@ if ($args[0] -eq "exec-command") {
      $args_start_index = 3
   }
 
-  $executable_path=((bvm-bin hidden get-exec-command-path $exec_name $exec_version $exec_command) | Out-String).trim()
+  $executable_path=((. $bvm_bin hidden get-exec-command-path $exec_name $exec_version $exec_command) | Out-String).trim()
   if ($lastexitcode -ne 0) { exit $lastexitcode }
 
-  $env_messages=((bvm-bin hidden get-exec-env-changes $exec_name $exec_version) | Out-String)
+  $env_messages=((. $bvm_bin hidden get-exec-env-changes $exec_name $exec_version) | Out-String)
   $should_snapshot_env=(has_env_changes $env_messages)
   if ($should_snapshot_env -eq 1) { $env_snapshot=(snapshot_env) }
   try {
@@ -122,12 +123,12 @@ if ($args[0] -eq "exec-command") {
     if ($should_snapshot_env -eq 1) { restore_env $env_snapshot }
   }
 } else {
-  bvm-bin @args # splat
+  . $bvm_bin @args # splat
 
   if (($args[0] -eq "install") -or ($args[0] -eq "uninstall") -or ($args[0] -eq "use")) {
-    bvm_handle_env_messages ((bvm-bin hidden get-pending-env-changes) | Out-String)
+    bvm_handle_env_messages ((. $bvm_bin hidden get-pending-env-changes) | Out-String)
     if ($lastexitcode -ne 0) { exit $lastexitcode }
-    bvm-bin hidden clear-pending-env-changes
+    . $bvm_bin hidden clear-pending-env-changes
     if ($lastexitcode -ne 0) { exit $lastexitcode }
   }
 }

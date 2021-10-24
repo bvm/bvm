@@ -172,7 +172,11 @@ pub fn get_exec_binary_command_exe_path<TEnvironment: Environment>(
     let command = binary.commands.iter().filter(|c| &c.name == command_name).next();
 
     if let Some(command) = command {
-        Some(get_plugin_dir(environment, &binary.name, &binary.version).join(&command.path))
+        Some(get_plugin_dir(environment, &binary.name, &binary.version).join(if cfg!(windows) {
+            command.path.replace("/", "\\")
+        } else {
+            command.path.clone()
+        }))
     } else {
         utils::get_command_executable_path_in_dirs(
             environment,

@@ -27,8 +27,12 @@ impl RealEnvironment {
             is_verbose,
         };
 
-        environment.create_dir_all(&environment.get_local_user_data_dir())?;
-        environment.create_dir_all(&environment.get_user_data_dir())?;
+        if let Ok(dir) = environment.try_get_local_user_data_dir() {
+            environment.create_dir_all(&dir)?;
+        }
+        if let Ok(dir) = environment.try_get_user_data_dir() {
+            environment.create_dir_all(&dir)?;
+        }
 
         Ok(environment)
     }
@@ -145,28 +149,28 @@ impl Environment for RealEnvironment {
         log_action_with_progress(&self.progress_bars, message, action, total_size)
     }
 
-    fn get_local_user_data_dir(&self) -> PathBuf {
+    fn try_get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting local user data directory.");
         if cfg!(target_os = "windows") {
             // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
-            let dir = dirs::data_local_dir().expect("Could not get local data dir");
-            dir.join("bvm")
+            let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get user's local dir."))?;
+            Ok(dir.join("bvm"))
         } else {
             get_home_dir()
         }
     }
 
-    fn get_user_data_dir(&self) -> PathBuf {
+    fn try_get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user data directory.");
         if cfg!(target_os = "windows") {
-            let dir = dirs::data_dir().expect("Could not get data dir");
-            dir.join("bvm")
+            let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get user's data dir."))?;
+            Ok(dir.join("bvm"))
         } else {
             get_home_dir()
         }
     }
 
-    fn get_user_home_dir(&self) -> PathBuf {
+    fn try_get_user_home_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user home directory.");
         get_home_dir()
     }
@@ -307,7 +311,7 @@ impl Environment for RealEnvironment {
     }
 }
 
-fn get_home_dir() -> PathBuf {
-    let dir = dirs::home_dir().expect("Could not get home data dir");
-    dir.join(".bvm")
+fn get_home_dir() -> Result<PathBuf, ErrBox> {
+    let dir = dirs::home_dir().ok_or_else(|| err_obj!("Could not get user's home directory."))?;
+    Ok(dir.join(".bvm"))
 }

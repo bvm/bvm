@@ -19,8 +19,8 @@ pub fn create_shim(environment: &impl Environment, command_name: &CommandName, c
 "{}" exec-command {} "{}" "$@"
 "#,
             bvm_path.display(),
+            command_name.as_str(),
             command_path.display(),
-            command_name.as_str()
         ),
     )?;
     std::process::Command::new("chmod")
@@ -40,8 +40,8 @@ pub fn create_shim(environment: &impl Environment, command_name: &CommandName, c
 "{}" exec-command {} "{}" %*
 "#,
             bvm_path.with_extension("cmd").display(),
+            command_name.as_str(),
             command_path.display(),
-            command_name.as_str()
         ),
     )?;
     environment.write_file_text(

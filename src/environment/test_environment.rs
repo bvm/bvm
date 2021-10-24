@@ -317,16 +317,16 @@ impl Environment for TestEnvironment {
         action(Box::new(|_| {}))
     }
 
-    fn get_local_user_data_dir(&self) -> PathBuf {
-        PathBuf::from("/local-data")
+    fn try_get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+        Ok(PathBuf::from("/local-data"))
     }
 
-    fn get_user_data_dir(&self) -> PathBuf {
-        PathBuf::from("/data")
+    fn try_get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
+        Ok(PathBuf::from("/data"))
     }
 
-    fn get_user_home_dir(&self) -> PathBuf {
-        PathBuf::from("/.bvm")
+    fn try_get_user_home_dir(&self) -> Result<PathBuf, ErrBox> {
+        Ok(PathBuf::from("/.bvm"))
     }
 
     fn get_time_secs(&self) -> u64 {

@@ -21,6 +21,7 @@ pub enum SubCommand {
     Version,
     Init,
     ClearUrlCache,
+    RecreateShims,
     Hidden(HiddenSubCommand),
     Help(String),
 }
@@ -277,6 +278,8 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         SubCommand::Init
     } else if matches.is_present("clear-url-cache") {
         SubCommand::ClearUrlCache
+    } else if matches.is_present("recreate-shims") {
+        SubCommand::RecreateShims
     } else if matches.is_present("registry") {
         let registry_sub_command = matches.subcommand_matches("registry").unwrap();
         match registry_sub_command.subcommand() {
@@ -444,6 +447,7 @@ ARGS:
                 )
         )
         .subcommand(SubCommand::with_name("clear-url-cache").about("Clears the cache of downloaded urls. Does not remove any installed binaries."))
+        .subcommand(SubCommand::with_name("recreate-shims").about("Recreates all the shims."))
         .subcommand(
             SubCommand::with_name("registry")
                 .about("Commands related to storing urls to binary version registries.")
