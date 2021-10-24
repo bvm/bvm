@@ -56,13 +56,13 @@ jobs:
       run: cargo test --release --locked --all-targets --verbose
 
     # Script test
-    - name: Test Scripts
-      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_debug'
-      shell: cmd
-      run: |
-        ./test/setup-windows.cmd
-        bvm install https://bvm.land/deno/1.15.2.json@affc933ab2513eb554f3188dee15bee19b0c97d171138384d31b611dafe679a2
-        ./test/tests.cmd
+    #- name: Test Scripts
+    #  if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_debug'
+    #  shell: cmd
+    #  run: |
+    #    ./test/setup-windows.cmd
+    #    bvm install https://bvm.land/deno/1.15.2.json@affc933ab2513eb554f3188dee15bee19b0c97d171138384d31b611dafe679a2
+    #    ./test/tests.cmd
 
     # INSTALLER
     - name: Create installer (Windows)

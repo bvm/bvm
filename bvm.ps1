@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 
-$bvm_bin = $PSScriptRoot + "/bvm-bin"
+$bvm_bin = Join-Path -Path $PSScriptRoot -ChildPath "bvm-bin"
 
 function bvm_handle_env_messages {
   param(
@@ -75,19 +75,19 @@ function restore_env {
 }
 
 function process_args {
-  $newArgs = @()
+  $newArgs=@()
   foreach ($arg in $args) {
     if ($arg -is [array]) {
       # collapse back any comma separated arguments to a string
-      $newArgs = $newArgs + ($arg -join ",")
+      $newArgs += $arg -join ","
     } else {
-      $newArgs = $newArgs + $arg
+      $newArgs += $arg
     }
   }
-  return $newArgs
+  return ,$newArgs
 }
 
-$args = process_args @args
+$args=(process_args @args)
 
 if ($args[0] -eq "exec-command") {
   # Format: bvm exec-command [command-name] [...args]
