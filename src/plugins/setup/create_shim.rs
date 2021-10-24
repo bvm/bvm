@@ -1,4 +1,5 @@
 use dprint_cli_core::types::ErrBox;
+use std::path::Path;
 use std::path::PathBuf;
 
 use crate::environment::Environment;
@@ -6,16 +7,19 @@ use crate::types::CommandName;
 use crate::utils;
 
 #[cfg(unix)]
-pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
+pub fn create_shim(environment: &impl Environment, command_name: &CommandName, command_path: &Path) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
     let file_path = shim_dir.join(command_name.as_str());
+    let bvm_path = get_bvm_exec_path(environment)?;
     environment.write_file_text(
         &file_path,
         &format!(
             r#"#!/bin/sh
 . $BVM_INSTALL_DIR/bin/bvm
-bvm exec-command {} "$@"
+"{}" exec-command {} "{}" "$@"
 "#,
+            bvm_path.display(),
+            command_path.display(),
             command_name.as_str()
         ),
     )?;
@@ -26,14 +30,17 @@ bvm exec-command {} "$@"
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_shim(environment: &impl Environment, command_name: &CommandName) -> Result<(), ErrBox> {
+pub fn create_shim(environment: &impl Environment, command_name: &CommandName, command_path: &Path) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
+    let bvm_path = get_bvm_exec_path(environment)?;
     environment.write_file_text(
         &shim_dir.join(format!("{}.bat", command_name.as_str())),
         &format!(
             r#"@ECHO OFF
-bvm exec-command {} %*
+"{}" exec-command {} "{}" %*
 "#,
+            bvm_path.with_extension("cmd").display(),
+            command_path.display(),
             command_name.as_str()
         ),
     )?;
@@ -41,9 +48,11 @@ bvm exec-command {} %*
         &shim_dir.join(format!("{}.ps1", command_name.as_str())),
         &format!(
             r#"#!/usr/bin/env pwsh
-. bvm exec-command {} $args
+. "{}" exec-command {} "{}" $args
 "#,
-            command_name.as_str()
+            bvm_path.with_extension("ps1").display(),
+            command_name.as_str(),
+            command_path.display(),
         ),
     )?;
     Ok(())
@@ -60,4 +69,11 @@ pub fn get_shim_paths(environment: &impl Environment, command_name: &CommandName
     #[cfg(unix)]
     paths.push(shim_dir.join(format!("{}", command_name.as_str())));
     paths
+}
+
+fn get_bvm_exec_path(environment: &impl Environment) -> Result<PathBuf, ErrBox> {
+    match utils::get_path_executable_path(environment, &CommandName::from_string("bvm".to_string())) {
+        Some(path) => Ok(path),
+        None => err!("Could not find bvm executable path for shim."),
+    }
 }

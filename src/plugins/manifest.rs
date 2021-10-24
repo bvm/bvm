@@ -83,7 +83,6 @@ impl BinaryManifestItem {
     }
 
     pub fn get_command_names(&self) -> Vec<CommandName> {
-        // todo: return iterator somehow?
         self.commands.iter().map(|c| c.name.clone()).collect()
     }
 

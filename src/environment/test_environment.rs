@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::environment::SYS_PATH_DELIMITER;
+
 use super::Environment;
 
 #[derive(Clone)]
@@ -26,17 +28,21 @@ pub struct TestEnvironment {
 impl TestEnvironment {
     pub fn new() -> TestEnvironment {
         let mut env_variables = HashMap::new();
-        env_variables.insert("PATH".to_string(), "/data/shims".to_string());
+        env_variables.insert("PATH".to_string(), format!("/data/shims{}/bin", SYS_PATH_DELIMITER));
+        let mut files = HashMap::new();
+        files.insert(PathBuf::from("/bin/bvm.cmd"), Vec::new());
+        files.insert(PathBuf::from("/bin/bvm.ps1"), Vec::new());
+        files.insert(PathBuf::from("/bin/bvm.sh"), Vec::new());
         TestEnvironment {
             is_verbose: Arc::new(Mutex::new(false)),
             cwd: Arc::new(Mutex::new(String::from("/"))),
-            files: Arc::new(Mutex::new(HashMap::new())),
+            files: Arc::new(Mutex::new(files)),
             logged_messages: Arc::new(Mutex::new(Vec::new())),
             logged_errors: Arc::new(Mutex::new(Vec::new())),
             run_shell_commands: Arc::new(Mutex::new(Vec::new())),
             remote_files: Arc::new(Mutex::new(HashMap::new())),
             deleted_directories: Arc::new(Mutex::new(Vec::new())),
-            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims")])),
+            path_dirs: Arc::new(Mutex::new(vec![PathBuf::from("/data/shims"), PathBuf::from("/bin")])),
             #[cfg(target_os = "windows")]
             sys_env_variables: Arc::new(Mutex::new(HashMap::new())),
             env_variables: Arc::new(Mutex::new(env_variables)),

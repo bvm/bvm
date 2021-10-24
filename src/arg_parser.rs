@@ -74,6 +74,13 @@ pub struct AddCommand {
     pub url_or_name: UrlOrName,
 }
 
+#[cfg(target_os = "windows")]
+pub struct SliceArgsCommand {
+    pub count: usize,
+    pub delayed_expansion: bool,
+    pub args: Vec<String>
+}
+
 pub enum HiddenSubCommand {
     ResolveCommand(HiddenResolveCommand),
     GetExecEnvChanges(HiddenExecEnvChangesCommand),
@@ -89,6 +96,8 @@ pub enum HiddenSubCommand {
     WindowsInstall,
     #[cfg(target_os = "windows")]
     WindowsUninstall,
+    #[cfg(target_os = "windows")]
+    SliceArgs(SliceArgsCommand),
 }
 
 pub struct HiddenResolveCommand {
@@ -113,27 +122,43 @@ pub struct HiddenHasCommandCommand {
 }
 
 pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
-    // need to do this to bypass
-    if args.get(1).map(|s| s.as_str()) == Some("hidden") && args.get(2).map(|s| s.as_str()) == Some("has-command") {
-        return Ok(CliArgs {
-            sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
-                name_selector: parse_name_selector(
-                    args.get(3)
+    // need to do this to bypass clap
+    if args.get(1).map(|s| s.as_str()) == Some("hidden") {
+        match args.get(2).map(|s| s.as_str()) {
+            Some("has-command") => return Ok(CliArgs {
+                sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
+                    name_selector: parse_name_selector(
+                        args.get(3)
+                            .map(String::from)
+                            .expect("Expected to have a name selector argument."),
+                    ),
+                    version_selector: PathOrVersionSelector::parse(
+                        &args
+                            .get(4)
+                            .map(String::from)
+                            .expect("Expected to have a version selector argument."),
+                    )?,
+                    command_name: args
+                        .get(5)
                         .map(String::from)
-                        .expect("Expected to have a name selector argument."),
-                ),
-                version_selector: PathOrVersionSelector::parse(
-                    &args
-                        .get(4)
-                        .map(String::from)
-                        .expect("Expected to have a version selector argument."),
-                )?,
-                command_name: args
-                    .get(5)
-                    .map(String::from)
-                    .map(|value| CommandName::from_string(value)),
-            })),
-        });
+                        .map(|value| CommandName::from_string(value)),
+                })),
+            }),
+            #[cfg(windows)]
+            Some("slice-args") => return Ok(CliArgs {
+                sub_command: {
+                    let count = args.get(3).map(|v| v.parse::<usize>().unwrap()).unwrap();
+                    let delayed_expansion = args.get(4).map(|v| v.parse::<bool>().unwrap()).unwrap();
+                    let args = args[5..].iter().map(ToOwned::to_owned).collect();
+                    SubCommand::Hidden(HiddenSubCommand::SliceArgs(SliceArgsCommand {
+                        count,
+                        delayed_expansion,
+                        args,
+                    }))
+                }
+            }),
+            _ => {},
+        }
     }
 
     let mut cli_parser = create_cli_parser();

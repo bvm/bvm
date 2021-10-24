@@ -8,6 +8,13 @@ function bvm_handle_env_messages {
     $exec_args
   )
 
+  # escape double quotes in an argument
+  for ($i=0; $i -lt $exec_args.Length; $i++) {
+    if ((!$exec_args[$i].startsWith("`"")) -and ($exec_args[$i].contains("`""))) {
+        $exec_args[$i] = "`"" + $exec_args[$i].Replace("`"", "`\`"") + "`""
+    }
+  }
+
   $items = $messages_text -split [Environment]::NewLine
   foreach ($item in $items) {
     if ([string]::IsNullOrWhitespace($item)) {

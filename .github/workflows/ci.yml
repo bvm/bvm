@@ -13,9 +13,9 @@ jobs:
             kind: test_release
           - os: windows-2019
             kind: test_release
-          - os: ubuntu-16.04
+          - os: ubuntu-latest
             kind: test_release
-          - os: ubuntu-16.04
+          - os: ubuntu-latest
             kind: test_debug
 
     env:
@@ -34,25 +34,18 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: 1.47.0
+        toolchain: 1.56.0
         override: true
 
     # CACHE SETUP
-    - name: Cache cargo
-      uses: actions/cache@v2
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ matrix.config.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    - uses: Swatinem/rust-cache@v1
 
     - name: Build debug
       if: matrix.config.kind == 'test_debug'
-      run: cargo build --verbose
+      run: cargo build
     - name: Build release
       if: matrix.config.kind == 'test_release'
-      run: cargo build --release --locked --all-targets --verbose
+      run: cargo build --release --locked --all-targets
 
     # TEST
     - name: Test debug
@@ -61,6 +54,15 @@ jobs:
     - name: Test release
       if: matrix.config.kind == 'test_release'
       run: cargo test --release --locked --all-targets --verbose
+
+    # Script test
+    - name: Test Scripts
+      if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_debug'
+      shell: cmd
+      run: |
+        ./test/setup-windows.cmd
+        bvm install https://bvm.land/deno/1.15.2.json@affc933ab2513eb554f3188dee15bee19b0c97d171138384d31b611dafe679a2
+        ./test/tests.cmd
 
     # INSTALLER
     - name: Create installer (Windows)

@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use super::{get_plugin_dir, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
+use super::{BinaryManifestItem, GlobalBinaryLocation, PluginsManifest, get_plugin_dir};
 use crate::configuration::ConfigFileBinary;
 use crate::environment::{Environment, SYS_PATH_DELIMITER};
 use crate::types::{CommandName, NameSelector, PathOrVersionSelector, VersionSelector};
@@ -288,4 +288,35 @@ pub fn get_env_path_from_pending_env_changes<TEnvironment: Environment>(
         .filter(|p| !p.is_empty())
         .collect::<Vec<_>>()
         .join(SYS_PATH_DELIMITER)
+}
+
+pub fn recreate_shim(
+    environment: &impl Environment,
+    plugin_manifest: &PluginsManifest,
+    command_name: &CommandName,
+) -> Result<(), ErrBox> {
+    if let Some(location) = get_command_exe_path(environment, &plugin_manifest, &command_name) {
+        crate::plugins::create_shim(environment, &command_name, &location)?;
+    } else {
+        environment.log_error(&format!("Error creating shim for {}. Could not find binary path.", command_name));
+    }
+
+    return Ok(());
+
+    fn get_command_exe_path(
+        environment: &impl Environment,
+        plugin_manifest: &PluginsManifest,
+        command_name: &CommandName,
+    ) -> Option<PathBuf> {
+        let path = match plugin_manifest.get_global_binary_location(command_name) {
+            Some(GlobalBinaryLocation::Bvm(identifier)) => {
+                plugin_manifest.get_binary(&identifier)
+                    .map(|binary| get_exec_binary_command_exe_path(environment, &binary, command_name))
+                    .flatten()
+            }
+            _ => None
+        };
+
+        path.or_else(|| utils::get_path_executable_path(environment, command_name))
+    }
 }

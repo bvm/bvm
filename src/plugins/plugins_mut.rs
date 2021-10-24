@@ -135,10 +135,10 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
     ) -> Result<bool, ErrBox> {
         Ok(if self.manifest.get_global_binary_location(&command_name).is_none() {
             if utils::get_path_executable_path(&self.environment, &command_name).is_some() {
-                self.use_global_version(command_name.clone(), GlobalBinaryLocation::Path)?;
+                self.use_global_version(command_name, GlobalBinaryLocation::Path)?;
                 false
             } else {
-                self.use_global_version(command_name.clone(), GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                self.use_global_version(command_name, GlobalBinaryLocation::Bvm(identifier.clone()))?;
                 true
             }
         } else {
@@ -220,10 +220,10 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
     pub fn use_global_version(
         &mut self,
-        command_name: CommandName,
+        command_name: &CommandName,
         location: GlobalBinaryLocation,
     ) -> Result<(), ErrBox> {
-        self.remove_global_binary(&command_name)?;
+        self.remove_global_binary(command_name)?;
 
         let new_identifier = location.to_identifier_option();
         if let Some(new_identifier) = &new_identifier {
@@ -236,7 +236,11 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
             }
         }
 
-        self.manifest.global_versions.set(command_name, location);
+        self.manifest.global_versions.set(command_name.clone(), location);
+
+        // recreate the shim with the latest version
+        helpers::recreate_shim(&self.environment, &self.manifest, command_name)?;
+
         Ok(())
     }
 
@@ -257,7 +261,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
                     .or_else(|| self.manifest.get_latest_binary_with_command(removed_command_name));
                 if let Some(latest_binary) = latest_binary {
                     let latest_identifier = latest_binary.get_identifier();
-                    self.use_global_version(removed_command_name.clone(), latest_identifier.into())?;
+                    self.use_global_version(removed_command_name, latest_identifier.into())?;
                 } else {
                     self.remove_global_binary(removed_command_name)?;
                 }

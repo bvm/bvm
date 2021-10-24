@@ -24,7 +24,7 @@ use arg_parser::*;
 use dprint_cli_core::checksums::{get_sha256_checksum, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
-use plugins::{helpers as plugin_helpers, PluginsManifest, PluginsMut, UrlInstallAction};
+use plugins::{PluginsManifest, PluginsMut, UrlInstallAction, helpers as plugin_helpers};
 use types::{BinaryName, CommandName, PathOrVersionSelector, VersionSelector};
 
 fn main() {
@@ -88,7 +88,7 @@ fn handle_install_command<TEnvironment: Environment>(
             if let Some(binary) = plugins.get_installed_binary_for_config_binary(&entry)? {
                 let identifier = binary.get_identifier();
                 for command_name in binary.get_command_names() {
-                    plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                    plugins.use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
                 }
             }
         }
@@ -145,7 +145,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
 
         for command_name in command_names.iter() {
             plugins.use_global_version(
-                command_name.clone(),
+                &command_name,
                 plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
             )?;
         }
@@ -186,7 +186,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
                 for command_name in previous_global_command_names {
                     if command_names.contains(&command_name) {
                         plugins
-                            .use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                            .use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
                     }
                 }
 
@@ -375,7 +375,7 @@ fn handle_use_command<TEnvironment: Environment>(environment: &TEnvironment) -> 
         if let Some(binary) = plugins.get_installed_binary_for_config_binary(&entry)? {
             let identifier = binary.get_identifier();
             for command_name in binary.get_command_names() {
-                plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                plugins.use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
             }
         } else {
             found_not_installed = true;
@@ -421,7 +421,7 @@ fn handle_use_binary_command<TEnvironment: Environment>(
             _ => {}
         }
 
-        plugins.use_global_version(command_name.clone(), location.clone())?;
+        plugins.use_global_version(command_name, location.clone())?;
     }
 
     display_commands_in_config_file_warning_if_necessary(environment, &plugins.manifest, &command_names);
@@ -688,6 +688,8 @@ fn handle_hidden_command<TEnvironment: Environment>(
         HiddenSubCommand::WindowsInstall => handle_hidden_windows_install_command(environment),
         #[cfg(target_os = "windows")]
         HiddenSubCommand::WindowsUninstall => handle_hidden_windows_uninstall_command(environment),
+        #[cfg(target_os = "windows")]
+        HiddenSubCommand::SliceArgs(command) => handle_hidden_slice_args_command(environment, command),
     }
 }
 
@@ -698,7 +700,7 @@ fn handle_hidden_resolve_command_command<TEnvironment: Environment>(
     let plugin_manifest = PluginsManifest::load(environment);
     let command_name = command.command_name;
     let info = get_executable_path_from_config_file(environment, &plugin_manifest, &command_name)?;
-    let binary_info = if let Some(info) = info {
+    let config_file_binary_info = if let Some(info) = info {
         if let Some(binary_info) = info.binary_info {
             Some(binary_info)
         } else {
@@ -714,14 +716,14 @@ fn handle_hidden_resolve_command_command<TEnvironment: Environment>(
         None
     };
 
-    if let Some(binary_info) = binary_info {
+    if let Some(binary_info) = config_file_binary_info {
         let identifier = binary_info.binary.get_identifier();
         let executable_path = binary_info.executable_path;
-        let command_names = binary_info.binary.get_command_names();
+        let command_names = &binary_info.binary.get_command_names();
 
         let mut plugins = PluginsMut::from_manifest_disallow_write(environment, plugin_manifest);
         for command_name in command_names {
-            plugins.use_global_version(command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+            plugins.use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
         }
 
         output_pending_env_changes(environment, &plugins.manifest);
@@ -880,7 +882,7 @@ fn get_manifest_for_exec_env_changes<TEnvironment: Environment>(
     )?;
 
     for command_name in command_names {
-        plugins.use_global_version(command_name.clone(), location.clone())?;
+        plugins.use_global_version(&command_name, location.clone())?;
     }
 
     // do not save the plugins, we just want to return a manifest that has the changes above
@@ -980,14 +982,35 @@ fn handle_hidden_windows_uninstall_command<TEnvironment: Environment>(
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn handle_hidden_slice_args_command<TEnvironment: Environment>(
+    environment: &TEnvironment,
+    command: SliceArgsCommand,
+) -> Result<(), ErrBox> {
+    environment.log(&command.args.iter().skip(command.count).map(|s| {
+        let text = s.replace("\"", "\\\"");
+        let text = if command.delayed_expansion {
+            // escape ! for SETLOCAL EnableDelayedExpansion in batch scripts
+            text.replace("!", "^!")
+        } else {
+            text
+        };
+        if text.contains(" ") {
+            format!("\"{}\"", text)
+        } else {
+            text
+        }
+    }).collect::<Vec<_>>().join(" "));
+    Ok(())
+}
+
 fn recreate_shims(environment: &impl Environment) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
     environment.remove_dir_all(&shim_dir)?;
     environment.create_dir_all(&shim_dir)?;
     let plugin_manifest = PluginsManifest::load(environment);
-    let command_names = plugin_manifest.get_all_command_names();
-    for command_name in command_names.iter() {
-        plugins::create_shim(environment, command_name)?;
+    for command_name in plugin_manifest.get_all_command_names() {
+        plugin_helpers::recreate_shim(environment, &plugin_manifest, &command_name)?;
     }
     Ok(())
 }
@@ -2508,6 +2531,7 @@ mod test {
                 environment.get_system_path_dirs(),
                 [
                     PathBuf::from("/data/shims"),
+                    PathBuf::from("/bin"),
                     PathBuf::from("/path-dir"),
                     PathBuf::from(&first_path_str)
                 ]
@@ -2568,6 +2592,7 @@ mod test {
                 environment.get_system_path_dirs(),
                 [
                     PathBuf::from("/data/shims"),
+                    PathBuf::from("/bin"),
                     PathBuf::from("/path-dir"),
                     PathBuf::from(&second_path_str1),
                     PathBuf::from(&second_path_str2)
@@ -2595,7 +2620,7 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/data/shims"), PathBuf::from("/path-dir")]
+                [PathBuf::from("/data/shims"), PathBuf::from("/bin"), PathBuf::from("/path-dir")]
             );
             assert_eq!(environment.get_sys_env_variables(), []);
         }
@@ -2641,6 +2666,7 @@ mod test {
                 environment.get_system_path_dirs(),
                 [
                     PathBuf::from("/data/shims"),
+                    PathBuf::from("/bin"),
                     PathBuf::from(&first_path),
                     PathBuf::from(&second_path),
                     PathBuf::from(&third_path),
@@ -3087,7 +3113,7 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/data/shims"), PathBuf::from("/path-dir"),]
+                [PathBuf::from("/data/shims"), PathBuf::from("/bin"), PathBuf::from("/path-dir"),]
             );
             assert_eq!(environment.get_sys_env_variables().is_empty(), true);
         }
@@ -3227,7 +3253,7 @@ mod test {
         let mut expected_logs = get_env_change_logs(
             &[("test", "1")],
             &["other"],
-            &format!("/data/shims{}{}", SYS_PATH_DELIMITER, &first_path_str),
+            &format!("/data/shims{0}/bin{0}{1}", SYS_PATH_DELIMITER, &first_path_str),
         );
         expected_logs.push("EXEC".to_string());
         expected_logs.push(first_binary_path);
@@ -3280,6 +3306,7 @@ mod test {
     #[test]
     fn windows_install_command_installs() {
         let environment = TestEnvironment::new();
+        environment.remove_system_path("/bin").unwrap();
         environment.remove_system_path("/data/shims").unwrap();
         run_cli(vec!["hidden", "windows-install"], &environment).unwrap();
         assert_eq!(
@@ -3294,6 +3321,7 @@ mod test {
         let builder = EnvironmentBuilder::new();
         builder.create_remote_zip_package("http://localhost/package1.json", "owner", "name", "1.0.0");
         let environment = builder.build();
+        environment.remove_system_path("/bin").unwrap();
 
         install_url!(environment, "http://localhost/package1.json");
         environment.clear_logs();
@@ -3327,7 +3355,7 @@ mod test {
         environment.ensure_system_path_pre("/data\\shims").unwrap();
         environment.ensure_system_path_pre("/.bvm\\bin").unwrap();
         run_cli(vec!["hidden", "windows-uninstall"], &environment).unwrap();
-        assert_eq!(environment.get_system_path_dirs(), [PathBuf::from("/other-dir")]);
+        assert_eq!(environment.get_system_path_dirs(), [PathBuf::from("/other-dir"), PathBuf::from("/bin")]);
     }
 
     fn get_env_change_logs(added: &[(&str, &str)], removed: &[&str], new_path: &str) -> Vec<String> {
