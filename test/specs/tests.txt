@@ -1,7 +1,9 @@
+# these don't currently work... I've just been manually testing these
 deno eval "console.log(""hello"")"
 deno eval "console.log(2 != 3)"
-# ignore: ps
+# doesn't work on ps
 deno eval -p JSON.stringify({})
-# only: ps
+# ps requires quotes
 deno eval -p "JSON.stringify({})"
 deno eval "console.log(Deno.args[0])" lib=""
+deno eval "console.log(Deno.args[0])" -- lib=test,other

@@ -60,13 +60,16 @@ bvm_handle_env_messages()
 bvm()
 {
   local bvm_bin
-  bvm_bin="$BVM_INSTALL_DIR/bin/bvm-bin"
+  local bvm_script_path
+  bvm_script_path=$SCRIPT=$(readlink -f "$0")
+  bvm_bin="$(dirname "$bvm_script_path")/bvm-bin"
 
   if [ "$1" = "exec-command" ]
   then
     local bvm_exec_command
     bvm_exec_command=$2
-    shift 2
+    # todo: implement the third fallback argument somehow
+    shift 3
 
     # use a sub shell to prevent exporting variables
     (

@@ -74,6 +74,21 @@ function restore_env {
     }
 }
 
+function process_args {
+  $newArgs = @()
+  foreach ($arg in $args) {
+    if ($arg -is [array]) {
+      # collapse back any comma separated arguments to a string
+      $newArgs = $newArgs + ($arg -join ",")
+    } else {
+      $newArgs = $newArgs + $arg
+    }
+  }
+  return $newArgs
+}
+
+$args = process_args @args
+
 if ($args[0] -eq "exec-command") {
   # Format: bvm exec-command [command-name] [...args]
   $command_name = $args[1]

@@ -992,6 +992,9 @@ fn handle_hidden_slice_args_command<TEnvironment: Environment>(
         return err!("Expected only 1 argument. Args: {:?}", command.args);
     }
 
+    // This is the absolute worst, but basically the batch script calls
+    // into here providing a single string and then this strips out the
+    // specified number of arguments
     let arg = command.args[0].clone();
 
     let mut count = 0;

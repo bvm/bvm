@@ -6,3 +6,5 @@ true
 0
 lib=
 0
+lib=test,other
+0
