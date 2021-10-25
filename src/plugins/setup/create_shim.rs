@@ -21,7 +21,6 @@ pub fn create_shim(environment: &impl Environment, command_name: &CommandName, c
             bvm_path.display(),
             command_name.as_str(),
             command_path.display(),
-            exe_dir.display(),
         ),
     )?;
     std::process::Command::new("chmod")

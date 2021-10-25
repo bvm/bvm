@@ -151,7 +151,9 @@ impl Environment for RealEnvironment {
 
     fn try_get_local_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting local user data directory.");
-        if cfg!(target_os = "windows") {
+        if let Some(dir_path) = self.get_env_var("BVM_LOCAL_USER_DATA_DIR") {
+            Ok(PathBuf::from(dir_path))
+        } else if cfg!(target_os = "windows") {
             // %LOCALAPPDATA% is used because we don't want to sync this data across a domain.
             let dir = dirs::data_local_dir().ok_or_else(|| err_obj!("Could not get user's local dir."))?;
             Ok(dir.join("bvm"))
@@ -162,7 +164,9 @@ impl Environment for RealEnvironment {
 
     fn try_get_user_data_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user data directory.");
-        if cfg!(target_os = "windows") {
+        if let Some(dir_path) = self.get_env_var("BVM_USER_DATA_DIR") {
+            Ok(PathBuf::from(dir_path))
+        } else if cfg!(target_os = "windows") {
             let dir = dirs::data_dir().ok_or_else(|| err_obj!("Could not get user's data dir."))?;
             Ok(dir.join("bvm"))
         } else {
@@ -172,7 +176,11 @@ impl Environment for RealEnvironment {
 
     fn try_get_user_home_dir(&self) -> Result<PathBuf, ErrBox> {
         log_verbose!(self, "Getting user home directory.");
-        get_home_dir()
+        if let Some(dir_path) = self.get_env_var("BVM_HOME_DIR") {
+            Ok(PathBuf::from(dir_path))
+        } else {
+            get_home_dir()
+        }
     }
 
     fn get_env_var(&self, key: &str) -> Option<String> {

@@ -37,6 +37,7 @@ REM Get the args after the first three by escaping the quotes,
 REM surrounding them in quotes, removing the args from the string,
 REM then removing the surrounding quotes and unescaping the quotes
 SET bvm_exec_args=%*
+SET bvm_exec_args=%bvm_exec_args:\"=\\"%
 SET bvm_exec_args=%bvm_exec_args:"=""%
 FOR /F "tokens=* USEBACKQ" %%F IN (`%bvm_bin% hidden slice-args 3 true "%bvm_exec_args%"`) DO (
   SET bvm_exec_args=%%F
@@ -124,6 +125,7 @@ IF "%bvm_exec_has_command%" == "true" (
 )
 
 SET bvm_exec_args=%*
+SET bvm_exec_args=%bvm_exec_args:\"=\\"%
 SET bvm_exec_args=%bvm_exec_args:"=""%
 FOR /F "tokens=* USEBACKQ" %%F IN (`%bvm_bin% hidden slice-args %bvm_exec_has_command% false "%bvm_exec_args%"`) DO (
   SET bvm_exec_args=%%F
@@ -144,5 +146,7 @@ SET bvm_bin=
 SET bvm_exec_args=
 
 REM How to clear this before exit?
-IF %bvm_exit_code% GTR 0 EXIT /B %bvm_exit_code%
+IF %bvm_exit_code% GTR 0 (
+  EXIT /B %bvm_exit_code%
+)
 SET bvm_exit_code=
