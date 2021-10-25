@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::environment::Environment;
 
 pub fn find_config_file(environment: &impl Environment) -> Result<Option<PathBuf>, ErrBox> {
-    let cwd = environment.cwd()?;
+    let cwd = environment.cwd();
 
     if let Some(config_file_path) = get_config_file_in_dir(environment, &cwd) {
         return Ok(Some(config_file_path));

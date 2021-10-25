@@ -1,9 +1,12 @@
-use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
-use serde::{self, Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
+use url::Url;
 
 use crate::environment::Environment;
-use crate::types::{BinaryName, Version};
+use crate::types::BinaryName;
+use crate::types::Version;
+use crate::utils::ChecksumUrl;
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -45,11 +48,12 @@ pub struct RegistryVersionInfo {
 }
 
 impl RegistryVersionInfo {
-    pub fn get_url(&self) -> ChecksumPathOrUrl {
-        ChecksumPathOrUrl {
-            path_or_url: self.path.clone(),
+    pub fn get_url(&self) -> Result<ChecksumUrl, ErrBox> {
+        Ok(ChecksumUrl {
+            url: Url::parse(&self.path)?,
+            unresolved_path: self.path.clone(),
             checksum: Some(self.checksum.clone()),
-        }
+        })
     }
 }
 

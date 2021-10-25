@@ -1,5 +1,5 @@
-hello
-true
-{}
-lib=
-lib=test,other
+["console.log(\"hello\")"]
+["console.log(2 != 3)"]
+["JSON.stringify({})"]
+["lib="]
+["lib=test,other"]

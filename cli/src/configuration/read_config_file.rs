@@ -1,7 +1,11 @@
-use crate::types::VersionSelector;
-use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
-use jsonc_parser::{parse_to_value, JsonValue};
+use jsonc_parser::parse_to_value;
+use jsonc_parser::JsonValue;
+use url::Url;
+
+use crate::types::VersionSelector;
+use crate::utils::parse_checksum_url;
+use crate::utils::ChecksumUrl;
 
 pub struct ConfigFile {
     pub on_pre_install: Option<String>,
@@ -10,11 +14,11 @@ pub struct ConfigFile {
 }
 
 pub struct ConfigFileBinary {
-    pub path: ChecksumPathOrUrl,
+    pub url: ChecksumUrl,
     pub version: Option<VersionSelector>,
 }
 
-pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
+pub fn read_config_file(file_text: &str, base: &Url) -> Result<ConfigFile, ErrBox> {
     let value = parse_to_value(file_text)?;
     let mut root_object = match value {
         Some(JsonValue::Object(obj)) => obj,
@@ -29,7 +33,7 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
     for value in json_binaries.into_iter() {
         binaries.push(match value {
             JsonValue::String(text) => ConfigFileBinary {
-                path: parse_checksum_path_or_url(&text),
+                url: parse_checksum_url(&text, base)?,
                 version: None,
             },
             JsonValue::Object(mut obj) => {
@@ -40,13 +44,10 @@ pub fn read_config_file(file_text: &str) -> Result<ConfigFile, ErrBox> {
                 let checksum = obj.take_string("checksum");
 
                 ConfigFileBinary {
-                    path: if let Some(checksum) = checksum {
-                        ChecksumPathOrUrl {
-                            path_or_url: path,
-                            checksum: Some(checksum),
-                        }
+                    url: if let Some(checksum) = checksum {
+                        ChecksumUrl::from_path_and_checksum(&path, checksum, base)?
                     } else {
-                        parse_checksum_path_or_url(&path)
+                        parse_checksum_url(&path, base)?
                     },
                     version: if let Some(version) = version {
                         Some(VersionSelector::parse_for_config(&version)?)

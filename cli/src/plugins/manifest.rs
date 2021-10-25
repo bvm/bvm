@@ -1,4 +1,3 @@
-use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::collections::hash_map::Values;
@@ -8,6 +7,7 @@ use std::path::PathBuf;
 use crate::environment::Environment;
 use crate::plugins::{get_plugin_dir, BinaryEnvironment};
 use crate::types::{BinaryName, CommandName, NameSelector, Version, VersionSelector};
+use crate::utils::ChecksumUrl;
 
 const PATH_GLOBAL_VERSION_VALUE: &'static str = "path";
 const IDENTIFIER_GLOBAL_PREFIX: &'static str = "identifier:";
@@ -259,8 +259,8 @@ impl PluginsManifest {
 
     // url to identifier
 
-    pub fn get_identifier_from_url(&self, url: &ChecksumPathOrUrl) -> Option<&BinaryIdentifier> {
-        self.urls_to_identifier.get(&url.path_or_url)
+    pub fn get_identifier_from_url(&self, url: &ChecksumUrl) -> Option<&BinaryIdentifier> {
+        self.urls_to_identifier.get(url.url.as_str())
     }
 
     // pending environment changes

@@ -291,9 +291,9 @@ impl Environment for TestEnvironment {
         Ok(())
     }
 
-    fn cwd(&self) -> Result<PathBuf, ErrBox> {
+    fn cwd(&self) -> PathBuf {
         let cwd = self.cwd.lock().unwrap();
-        Ok(PathBuf::from(cwd.to_owned()))
+        PathBuf::from(cwd.to_owned())
     }
 
     fn log(&self, text: &str) {

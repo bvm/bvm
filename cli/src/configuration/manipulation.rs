@@ -105,10 +105,10 @@ pub fn add_binary_to_config_file(
     insert_text.push_str(&newline_char);
     insert_text.push_str(&indentation.repeat(3));
     insert_text.push_str("\"path\": \"");
-    insert_text.push_str(&escape_quotes(&binary.path.path_or_url));
+    insert_text.push_str(&escape_quotes(&binary.url.unresolved_path));
     insert_text.push_str("\"");
 
-    if let Some(checksum) = &binary.path.checksum {
+    if let Some(checksum) = &binary.url.checksum {
         insert_text.push_str(",");
         insert_text.push_str(&newline_char);
         insert_text.push_str(&indentation.repeat(3));

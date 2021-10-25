@@ -21,11 +21,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use arg_parser::*;
-use dprint_cli_core::checksums::{get_sha256_checksum, ChecksumPathOrUrl};
+use dprint_cli_core::checksums::get_sha256_checksum;
 use dprint_cli_core::types::ErrBox;
 use environment::{Environment, SYS_PATH_DELIMITER};
-use plugins::{PluginsManifest, PluginsMut, UrlInstallAction, helpers as plugin_helpers};
+use plugins::{helpers as plugin_helpers, PluginsManifest, PluginsMut, UrlInstallAction};
 use types::{BinaryName, CommandName, PathOrVersionSelector, VersionSelector};
+use url::Url;
+use utils::ChecksumUrl;
+
+use crate::utils::get_url_from_directory;
 
 fn main() {
     match inner_main() {
@@ -44,7 +48,7 @@ fn main() {
 }
 
 fn run<TEnvironment: Environment>(environment: &TEnvironment, args: Vec<String>) -> Result<(), ErrBox> {
-    let args = parse_args(args)?;
+    let args = parse_args(environment, args)?;
 
     match args.sub_command {
         SubCommand::Help(text) => environment.log(&text),
@@ -74,12 +78,12 @@ fn handle_install_command<TEnvironment: Environment>(
     let mut plugins = PluginsMut::load(environment);
 
     if let Some(pre_install) = &config_file.on_pre_install {
-        environment.run_shell_command(&environment.cwd()?, pre_install)?;
+        environment.run_shell_command(&environment.cwd(), pre_install)?;
     }
 
     for binary in config_file.binaries.iter() {
-        match install_binary(&mut plugins, &binary.path, binary.version.as_ref(), command.force) {
-            Err(err) => return err!("Error installing {}: {}", &binary.path.path_or_url, err.to_string()),
+        match install_binary(&mut plugins, &binary.url, binary.version.as_ref(), command.force) {
+            Err(err) => return err!("Error installing {}: {}", binary.url.url, err.to_string()),
             _ => {}
         }
     }
@@ -89,7 +93,8 @@ fn handle_install_command<TEnvironment: Environment>(
             if let Some(binary) = plugins.get_installed_binary_for_config_binary(&entry)? {
                 let identifier = binary.get_identifier();
                 for command_name in binary.get_command_names() {
-                    plugins.use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                    plugins
+                        .use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
                 }
             }
         }
@@ -97,7 +102,7 @@ fn handle_install_command<TEnvironment: Environment>(
     }
 
     if let Some(post_install) = &config_file.on_post_install {
-        environment.run_shell_command(&environment.cwd()?, post_install)?;
+        environment.run_shell_command(&environment.cwd(), post_install)?;
     }
 
     Ok(())
@@ -105,7 +110,7 @@ fn handle_install_command<TEnvironment: Environment>(
 
 fn install_binary<TEnvironment: Environment>(
     plugins: &mut PluginsMut<TEnvironment>,
-    checksum_url: &ChecksumPathOrUrl,
+    checksum_url: &ChecksumUrl,
     version_selector: Option<&VersionSelector>,
     force: bool,
 ) -> Result<(), ErrBox> {
@@ -133,7 +138,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
     let result = install_url(environment, &mut plugins, &url, &command);
     match result {
         Ok(()) => {}
-        Err(err) => return err!("Error installing {}. {}", url.path_or_url, err.to_string()),
+        Err(err) => return err!("Error installing {}. {}", url.url, err.to_string()),
     }
 
     if command.use_command {
@@ -145,10 +150,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
         let command_names = plugins.manifest.get_binary(&identifier).unwrap().get_command_names();
 
         for command_name in command_names.iter() {
-            plugins.use_global_version(
-                &command_name,
-                plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
-            )?;
+            plugins.use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
         }
 
         display_commands_in_config_file_warning_if_necessary(environment, &plugins.manifest, &command_names);
@@ -161,7 +163,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
     fn install_url<TEnvironment: Environment>(
         environment: &TEnvironment,
         plugins: &mut PluginsMut<TEnvironment>,
-        url: &ChecksumPathOrUrl,
+        url: &ChecksumUrl,
         command: &InstallUrlCommand,
     ) -> Result<(), ErrBox> {
         let install_action = plugins.get_url_install_action(url, None, command.force)?;
@@ -186,8 +188,10 @@ fn handle_install_url_command<TEnvironment: Environment>(
                 // set this back as being the global version if setup is successful
                 for command_name in previous_global_command_names {
                     if command_names.contains(&command_name) {
-                        plugins
-                            .use_global_version(&command_name, plugins::GlobalBinaryLocation::Bvm(identifier.clone()))?;
+                        plugins.use_global_version(
+                            &command_name,
+                            plugins::GlobalBinaryLocation::Bvm(identifier.clone()),
+                        )?;
                     }
                 }
 
@@ -222,7 +226,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
 fn resolve_url_or_name<TEnvironment: Environment>(
     environment: &TEnvironment,
     url_or_name: &UrlOrName,
-) -> Result<ChecksumPathOrUrl, ErrBox> {
+) -> Result<ChecksumUrl, ErrBox> {
     return match url_or_name {
         UrlOrName::Url(url) => Ok(url.to_owned()),
         UrlOrName::Name(name) => {
@@ -279,7 +283,7 @@ fn resolve_url_or_name<TEnvironment: Environment>(
         urls: &Vec<String>,
         name: &BinaryName,
         is_match: impl Fn(&registry::RegistryVersionInfo) -> bool,
-    ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
+    ) -> Result<Option<ChecksumUrl>, ErrBox> {
         let mut best_match: Option<registry::RegistryVersionInfo> = None;
         for url in urls.iter() {
             let registry_file = registry::download_registry_file(environment, &url)?;
@@ -298,14 +302,17 @@ fn resolve_url_or_name<TEnvironment: Environment>(
             }
         }
 
-        Ok(best_match.map(|version_info| version_info.get_url()))
+        Ok(match best_match {
+            Some(version_info) => Some(version_info.get_url()?),
+            None => None,
+        })
     }
 
     fn find_latest_url<TEnvironment: Environment>(
         environment: &TEnvironment,
         urls: &Vec<String>,
         name: &BinaryName,
-    ) -> Result<Option<ChecksumPathOrUrl>, ErrBox> {
+    ) -> Result<Option<ChecksumUrl>, ErrBox> {
         let mut latest_pre_release: Option<registry::RegistryVersionInfo> = None;
         let mut latest_release: Option<registry::RegistryVersionInfo> = None;
         for url in urls.iter() {
@@ -328,7 +335,10 @@ fn resolve_url_or_name<TEnvironment: Environment>(
             }
         }
 
-        Ok(latest_release.or(latest_pre_release).map(|item| item.get_url()))
+        Ok(match latest_release.or(latest_pre_release) {
+            Some(item) => Some(item.get_url()?),
+            None => None,
+        })
     }
 }
 
@@ -546,16 +556,16 @@ fn handle_add_command<TEnvironment: Environment>(
     let mut replace_index = None;
     for (i, config_binary) in config_file.binaries.iter().enumerate() {
         // ignore errors when associating
-        if let Err(err) = plugins.ensure_url_associated(&config_binary.path) {
+        if let Err(err) = plugins.ensure_url_associated(&config_binary.url) {
             environment.log_error(&format!(
                 "Error associating {}. {}",
-                &config_binary.path.path_or_url,
+                &config_binary.url.unresolved_path,
                 err.to_string()
             ));
         } else {
             let config_binary_name = plugins
                 .manifest
-                .get_identifier_from_url(&config_binary.path)
+                .get_identifier_from_url(&config_binary.url)
                 .unwrap()
                 .get_binary_name();
             if binary_name == config_binary_name {
@@ -567,10 +577,10 @@ fn handle_add_command<TEnvironment: Environment>(
 
     // now add it to the configuration file
     let binary = plugins.manifest.get_binary(&binary_identifier).unwrap();
-    let checksum = match url.checksum {
-        Some(checksum) => checksum,
+    let checksum = match &url.checksum {
+        Some(checksum) => checksum.to_string(),
         None => {
-            let url_file_bytes = environment.download_file(&url.path_or_url)?;
+            let url_file_bytes = environment.fetch_url(&url.url)?;
             get_sha256_checksum(&url_file_bytes)
         }
     };
@@ -579,10 +589,7 @@ fn handle_add_command<TEnvironment: Environment>(
         environment,
         &config_file_path,
         &configuration::ConfigFileBinary {
-            path: ChecksumPathOrUrl {
-                path_or_url: url.path_or_url,
-                checksum: Some(checksum),
-            },
+            url: url.with_checksum(checksum),
             version: Some(
                 match command.url_or_name {
                     UrlOrName::Url(_) => None,
@@ -1039,7 +1046,8 @@ fn handle_hidden_slice_args_command<TEnvironment: Environment>(
         text.replace("!", "^^!")
     } else {
         text.to_string()
-    }.replace("\"", "\"\"");
+    }
+    .replace("\"", "\"\"");
     environment.log(&format!("\"{}\"", text));
     Ok(())
 }
@@ -1117,7 +1125,8 @@ fn get_config_file_or_error(environment: &impl Environment) -> Result<(PathBuf, 
 fn get_config_file(environment: &impl Environment) -> Result<Option<(PathBuf, configuration::ConfigFile)>, ErrBox> {
     if let Some(config_file_path) = configuration::find_config_file(environment)? {
         let config_file_text = environment.read_file_text(&config_file_path)?;
-        match configuration::read_config_file(&config_file_text) {
+        let base = get_url_from_directory(config_file_path.parent().unwrap());
+        match configuration::read_config_file(&config_file_text, &base) {
             Ok(file) => Ok(Some((config_file_path, file))),
             Err(err) => err!("Error reading {}: {}", config_file_path.display(), err.to_string()),
         }
@@ -2660,7 +2669,11 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/data/shims"), PathBuf::from("/bin"), PathBuf::from("/path-dir")]
+                [
+                    PathBuf::from("/data/shims"),
+                    PathBuf::from("/bin"),
+                    PathBuf::from("/path-dir")
+                ]
             );
             assert_eq!(environment.get_sys_env_variables(), []);
         }
@@ -3153,7 +3166,11 @@ mod test {
         if cfg!(target_os = "windows") {
             assert_eq!(
                 environment.get_system_path_dirs(),
-                [PathBuf::from("/data/shims"), PathBuf::from("/bin"), PathBuf::from("/path-dir"),]
+                [
+                    PathBuf::from("/data/shims"),
+                    PathBuf::from("/bin"),
+                    PathBuf::from("/path-dir"),
+                ]
             );
             assert_eq!(environment.get_sys_env_variables().is_empty(), true);
         }
@@ -3395,7 +3412,10 @@ mod test {
         environment.ensure_system_path_pre("/data\\shims").unwrap();
         environment.ensure_system_path_pre("/.bvm\\bin").unwrap();
         run_cli(vec!["hidden", "windows-uninstall"], &environment).unwrap();
-        assert_eq!(environment.get_system_path_dirs(), [PathBuf::from("/other-dir"), PathBuf::from("/bin")]);
+        assert_eq!(
+            environment.get_system_path_dirs(),
+            [PathBuf::from("/other-dir"), PathBuf::from("/bin")]
+        );
     }
 
     fn get_env_change_logs(added: &[(&str, &str)], removed: &[&str], new_path: &str) -> Vec<String> {

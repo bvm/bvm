@@ -15,10 +15,10 @@ $file_text=@'
     "type": "zip",
     "checksum": "{0}",
     "commands": [{{
-      "name": "dprint",
-      "path": "dprint.exe"
+      "name": "args_test_util",
+      "path": "args_test_util.exe"
     }}]
   }}
 }}
-'@ -f $file_hash
+'@ -f $file_hash.ToLower()
 echo $file_text | Out-File -FilePath target/debug/args_test_util.json

@@ -1,6 +1,7 @@
 use dprint_cli_core::checksums::verify_sha256_checksum;
 use dprint_cli_core::types::ErrBox;
 use std::path::PathBuf;
+use url::Url;
 
 use super::create_shim;
 use crate::environment::Environment;
@@ -9,11 +10,11 @@ use crate::plugins::{
     BinaryManifestItemSource, PlatformInfo, PlatformInfoCommand, SerializedPluginFile,
 };
 use crate::types::{BinaryName, Version};
-use crate::utils;
+use crate::utils::{self, parse_path_or_url_to_url};
 
 pub struct PluginFile {
     // todo: move these two properties down into PluginFile
-    pub url: String,
+    pub url: Url,
     pub checksum: String,
 
     pub(super) file: SerializedPluginFile,
@@ -108,8 +109,9 @@ pub fn setup_plugin<'a, TEnvironment: Environment>(
 ) -> Result<BinaryManifestItem, ErrBox> {
     // download the url's bytes
     let url = plugin_file.get_url()?;
+    let url = parse_path_or_url_to_url(&url, &plugin_file.url)?;
     let download_type = plugin_file.get_download_type()?;
-    let url_file_bytes = environment.download_file(url)?;
+    let url_file_bytes = environment.fetch_url(&url)?;
     verify_sha256_checksum(&url_file_bytes, plugin_file.get_url_checksum()?)?;
 
     // create folder
@@ -162,11 +164,15 @@ pub fn setup_plugin<'a, TEnvironment: Environment>(
     // create the shims after in case the post install fails
     environment.create_dir_all(&utils::get_shim_dir(environment))?;
     for command in commands {
-        create_shim(environment, &command.name, &output_dir.join(if cfg!(windows) {
-            command.path.replace("/", "\\")
-        } else {
-            command.path.clone()
-        }))?;
+        create_shim(
+            environment,
+            &command.name,
+            &output_dir.join(if cfg!(windows) {
+                command.path.replace("/", "\\")
+            } else {
+                command.path.clone()
+            }),
+        )?;
     }
 
     // add the plugin information to the manifest
@@ -182,7 +188,7 @@ pub fn setup_plugin<'a, TEnvironment: Environment>(
             })
             .collect(),
         source: BinaryManifestItemSource {
-            path: plugin_file.url.clone(),
+            path: plugin_file.url.to_string(),
             checksum: plugin_file.checksum.clone(),
         },
         environment: plugin_file.get_environment()?.clone(),

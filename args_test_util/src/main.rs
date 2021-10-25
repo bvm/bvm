@@ -1,3 +1,3 @@
 fn main() {
-    println!("{:?}", std::env::args().collect::<Vec<_>>());
+    println!("{:?}", std::env::args().skip(1).collect::<Vec<_>>());
 }

@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use super::{BinaryManifestItem, GlobalBinaryLocation, PluginsManifest, get_plugin_dir};
+use super::{get_plugin_dir, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
 use crate::configuration::ConfigFileBinary;
 use crate::environment::{Environment, SYS_PATH_DELIMITER};
 use crate::types::{CommandName, NameSelector, PathOrVersionSelector, VersionSelector};
@@ -14,7 +14,7 @@ pub fn get_installed_binary_if_associated_config_file_binary<'a>(
     config_binary: &ConfigFileBinary,
 ) -> Option<&'a BinaryManifestItem> {
     // the url needs to be associated to an identifier for this to return anything
-    if let Some(identifier) = manifest.get_identifier_from_url(&config_binary.path) {
+    if let Some(identifier) = manifest.get_identifier_from_url(&config_binary.url) {
         // return the url version if installed
         if let Some(binary) = manifest.get_binary(&identifier) {
             return Some(binary);
@@ -172,11 +172,13 @@ pub fn get_exec_binary_command_exe_path<TEnvironment: Environment>(
     let command = binary.commands.iter().filter(|c| &c.name == command_name).next();
 
     if let Some(command) = command {
-        Some(get_plugin_dir(environment, &binary.name, &binary.version).join(if cfg!(windows) {
-            command.path.replace("/", "\\")
-        } else {
-            command.path.clone()
-        }))
+        Some(
+            get_plugin_dir(environment, &binary.name, &binary.version).join(if cfg!(windows) {
+                command.path.replace("/", "\\")
+            } else {
+                command.path.clone()
+            }),
+        )
     } else {
         utils::get_command_executable_path_in_dirs(
             environment,
@@ -302,7 +304,10 @@ pub fn recreate_shim(
     if let Some(location) = get_command_exe_path(environment, &plugin_manifest, &command_name) {
         crate::plugins::create_shim(environment, &command_name, &location)?;
     } else {
-        environment.log_error(&format!("Error creating shim for {}. Could not find binary path.", command_name));
+        environment.log_error(&format!(
+            "Error creating shim for {}. Could not find binary path.",
+            command_name
+        ));
     }
 
     return Ok(());
@@ -313,12 +318,11 @@ pub fn recreate_shim(
         command_name: &CommandName,
     ) -> Option<PathBuf> {
         let path = match plugin_manifest.get_global_binary_location(command_name) {
-            Some(GlobalBinaryLocation::Bvm(identifier)) => {
-                plugin_manifest.get_binary(&identifier)
-                    .map(|binary| get_exec_binary_command_exe_path(environment, &binary, command_name))
-                    .flatten()
-            }
-            _ => None
+            Some(GlobalBinaryLocation::Bvm(identifier)) => plugin_manifest
+                .get_binary(&identifier)
+                .map(|binary| get_exec_binary_command_exe_path(environment, &binary, command_name))
+                .flatten(),
+            _ => None,
         };
 
         path.or_else(|| utils::get_path_executable_path(environment, command_name))

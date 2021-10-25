@@ -122,11 +122,8 @@ impl Environment for RealEnvironment {
         }
     }
 
-    fn cwd(&self) -> Result<PathBuf, ErrBox> {
-        match env::current_dir() {
-            Ok(cwd) => Ok(cwd),
-            Err(err) => err!("Error getting current working: {}", err.to_string()),
-        }
+    fn cwd(&self) -> PathBuf {
+        env::current_dir().unwrap_or_else(|err| panic!("Error getting current working directory: {}", err.to_string()))
     }
 
     fn log(&self, text: &str) {

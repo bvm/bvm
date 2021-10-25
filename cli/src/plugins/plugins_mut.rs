@@ -1,14 +1,22 @@
-use dprint_cli_core::checksums::ChecksumPathOrUrl;
 use dprint_cli_core::types::ErrBox;
 
 use super::helpers;
 use super::manifest::get_manifest_file_path;
-use super::setup::{get_plugin_file, get_shim_paths, setup_plugin, PluginFile};
-use super::{BinaryIdentifier, BinaryManifestItem, GlobalBinaryLocation, PluginsManifest};
+use super::setup::get_plugin_file;
+use super::setup::get_shim_paths;
+use super::setup::setup_plugin;
+use super::setup::PluginFile;
+use super::BinaryIdentifier;
+use super::BinaryManifestItem;
+use super::GlobalBinaryLocation;
+use super::PluginsManifest;
 use crate::configuration::ConfigFileBinary;
 use crate::environment::Environment;
-use crate::types::{BinaryName, CommandName, VersionSelector};
+use crate::types::BinaryName;
+use crate::types::CommandName;
+use crate::types::VersionSelector;
 use crate::utils;
+use crate::utils::ChecksumUrl;
 
 pub enum UrlInstallAction {
     None,
@@ -59,7 +67,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
     pub fn get_url_install_action(
         &mut self,
-        checksum_url: &ChecksumPathOrUrl,
+        checksum_url: &ChecksumUrl,
         version_selector: Option<&VersionSelector>,
         force_install: bool,
     ) -> Result<UrlInstallAction, ErrBox> {
@@ -119,11 +127,11 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         Ok(())
     }
 
-    fn get_and_associate_plugin_file(&mut self, checksum_url: &ChecksumPathOrUrl) -> Result<PluginFile, ErrBox> {
+    fn get_and_associate_plugin_file(&mut self, checksum_url: &ChecksumUrl) -> Result<PluginFile, ErrBox> {
         let plugin_file = get_plugin_file(&self.environment, checksum_url)?;
         // associate the url to the binary identifier
         let identifier = plugin_file.get_identifier();
-        self.set_identifier_for_url(&checksum_url, identifier);
+        self.set_identifier_for_url(checksum_url, identifier);
         self.save()?; // todo: remove?
         Ok(plugin_file)
     }
@@ -151,7 +159,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         config_binary: &ConfigFileBinary,
     ) -> Result<Option<&BinaryManifestItem>, ErrBox> {
         // associate the url to an identifier in order to be able to tell the name
-        self.ensure_url_associated(&config_binary.path)?;
+        self.ensure_url_associated(&config_binary.url)?;
 
         // now get the binary item based on the config file
         Ok(helpers::get_installed_binary_if_associated_config_file_binary(
@@ -160,7 +168,7 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
         ))
     }
 
-    pub fn ensure_url_associated(&mut self, url: &ChecksumPathOrUrl) -> Result<(), ErrBox> {
+    pub fn ensure_url_associated(&mut self, url: &ChecksumUrl) -> Result<(), ErrBox> {
         // associate the url to an identifier in order to be able to tell the name
         if self.manifest.get_identifier_from_url(&url).is_none() {
             self.get_and_associate_plugin_file(&url)?;
@@ -170,10 +178,8 @@ impl<TEnvironment: Environment> PluginsMut<TEnvironment> {
 
     // pending environment changes
 
-    pub fn set_identifier_for_url(&mut self, url: &ChecksumPathOrUrl, identifier: BinaryIdentifier) {
-        self.manifest
-            .urls_to_identifier
-            .insert(url.path_or_url.clone(), identifier);
+    pub fn set_identifier_for_url(&mut self, url: &ChecksumUrl, identifier: BinaryIdentifier) {
+        self.manifest.urls_to_identifier.insert(url.url.to_string(), identifier);
     }
 
     pub fn clear_cached_urls(&mut self) {

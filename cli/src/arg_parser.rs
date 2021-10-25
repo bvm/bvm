@@ -1,7 +1,9 @@
 use url::Url;
 
-use dprint_cli_core::checksums::{parse_checksum_path_or_url, ChecksumPathOrUrl};
 use dprint_cli_core::types::ErrBox;
+
+use crate::environment::Environment;
+use crate::utils::{get_url_from_directory, parse_checksum_url, ChecksumUrl};
 
 use super::types::{CommandName, NameSelector, PathOrVersionSelector, Version, VersionSelector};
 
@@ -43,7 +45,7 @@ pub struct InstallUrlCommand {
 }
 
 pub enum UrlOrName {
-    Url(ChecksumPathOrUrl),
+    Url(ChecksumUrl),
     Name(InstallName),
 }
 
@@ -79,7 +81,7 @@ pub struct AddCommand {
 pub struct SliceArgsCommand {
     pub count: usize,
     pub delayed_expansion: bool,
-    pub args: Vec<String>
+    pub args: Vec<String>,
 }
 
 pub enum HiddenSubCommand {
@@ -122,43 +124,48 @@ pub struct HiddenHasCommandCommand {
     pub command_name: Option<CommandName>,
 }
 
-pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
+pub fn parse_args(environment: &impl Environment, args: Vec<String>) -> Result<CliArgs, ErrBox> {
+    let base_url = get_url_from_directory(environment.cwd());
     // need to do this to bypass clap
     if args.get(1).map(|s| s.as_str()) == Some("hidden") {
         match args.get(2).map(|s| s.as_str()) {
-            Some("has-command") => return Ok(CliArgs {
-                sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
-                    name_selector: parse_name_selector(
-                        args.get(3)
+            Some("has-command") => {
+                return Ok(CliArgs {
+                    sub_command: SubCommand::Hidden(HiddenSubCommand::HasCommand(HiddenHasCommandCommand {
+                        name_selector: parse_name_selector(
+                            args.get(3)
+                                .map(String::from)
+                                .expect("Expected to have a name selector argument."),
+                        ),
+                        version_selector: PathOrVersionSelector::parse(
+                            &args
+                                .get(4)
+                                .map(String::from)
+                                .expect("Expected to have a version selector argument."),
+                        )?,
+                        command_name: args
+                            .get(5)
                             .map(String::from)
-                            .expect("Expected to have a name selector argument."),
-                    ),
-                    version_selector: PathOrVersionSelector::parse(
-                        &args
-                            .get(4)
-                            .map(String::from)
-                            .expect("Expected to have a version selector argument."),
-                    )?,
-                    command_name: args
-                        .get(5)
-                        .map(String::from)
-                        .map(|value| CommandName::from_string(value)),
-                })),
-            }),
+                            .map(|value| CommandName::from_string(value)),
+                    })),
+                })
+            }
             #[cfg(windows)]
-            Some("slice-args") => return Ok(CliArgs {
-                sub_command: {
-                    let count = args.get(3).map(|v| v.parse::<usize>().unwrap()).unwrap();
-                    let delayed_expansion = args.get(4).map(|v| v.parse::<bool>().unwrap()).unwrap();
-                    let args = args[5..].iter().map(ToOwned::to_owned).collect();
-                    SubCommand::Hidden(HiddenSubCommand::SliceArgs(SliceArgsCommand {
-                        count,
-                        delayed_expansion,
-                        args,
-                    }))
-                }
-            }),
-            _ => {},
+            Some("slice-args") => {
+                return Ok(CliArgs {
+                    sub_command: {
+                        let count = args.get(3).map(|v| v.parse::<usize>().unwrap()).unwrap();
+                        let delayed_expansion = args.get(4).map(|v| v.parse::<bool>().unwrap()).unwrap();
+                        let args = args[5..].iter().map(ToOwned::to_owned).collect();
+                        SubCommand::Hidden(HiddenSubCommand::SliceArgs(SliceArgsCommand {
+                            count,
+                            delayed_expansion,
+                            args,
+                        }))
+                    },
+                })
+            }
+            _ => {}
         }
     }
 
@@ -225,7 +232,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
         let force = install_matches.is_present("force");
         if let Some(url_or_name) = install_matches.value_of("url_or_name").map(String::from) {
             let version = install_matches.value_of("version").map(String::from);
-            if version.is_some() || Url::parse(&url_or_name).is_err() {
+            if version.is_some() || !url_or_name.to_lowercase().ends_with(".json") {
                 let name_selector = parse_name_selector(url_or_name);
                 SubCommand::InstallUrl(InstallUrlCommand {
                     url_or_name: UrlOrName::Name(InstallName {
@@ -241,7 +248,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
                 })
             } else {
                 SubCommand::InstallUrl(InstallUrlCommand {
-                    url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url_or_name)),
+                    url_or_name: UrlOrName::Url(parse_checksum_url(&url_or_name, &base_url)?),
                     use_command,
                     force,
                 })
@@ -310,7 +317,7 @@ pub fn parse_args(args: Vec<String>) -> Result<CliArgs, ErrBox> {
             })
         } else {
             SubCommand::Add(AddCommand {
-                url_or_name: UrlOrName::Url(parse_checksum_path_or_url(&url_or_name)),
+                url_or_name: UrlOrName::Url(parse_checksum_url(&url_or_name, &base_url)?),
             })
         }
     } else {

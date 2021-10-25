@@ -1,5 +1,6 @@
 use dprint_cli_core::types::ErrBox;
 use std::path::{Path, PathBuf};
+use url::Url;
 
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn is_real(&self) -> bool;
@@ -12,9 +13,19 @@ pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn path_exists(&self, file_path: &Path) -> bool;
     fn is_dir_empty(&self, dir_path: &Path) -> Result<bool, ErrBox>;
     fn create_dir_all(&self, path: &Path) -> Result<(), ErrBox>;
-    fn cwd(&self) -> Result<PathBuf, ErrBox>;
+    fn cwd(&self) -> PathBuf;
     fn log(&self, text: &str);
     fn log_error(&self, text: &str);
+    fn fetch_url(&self, url: &Url) -> Result<Vec<u8>, ErrBox> {
+        if url.scheme() == "file" {
+            self.read_file(
+                &url.to_file_path()
+                    .map_err(|_| err_obj!("Error converting {} to a file path.", url.as_str()))?,
+            )
+        } else {
+            self.download_file(url.as_str())
+        }
+    }
     fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox>;
     fn log_action_with_progress<
         TResult: std::marker::Send + std::marker::Sync,
