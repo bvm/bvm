@@ -67,8 +67,8 @@ jobs:
       id: linux_pre_release
       if: startsWith(matrix.config.os, 'ubuntu') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
-        cp bvm.sh target/release/bvm
-        cp bvm-init.sh target/release/bvm-init
+        cp cli/bvm.sh target/release/bvm
+        cp cli/bvm-init.sh target/release/bvm-init
         cd target/release
         zip -r bvm-x86_64-unknown-linux-gnu.zip bvm bvm-bin bvm-init
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-unknown-linux-gnu.zip | awk '{print $1}')"
@@ -76,8 +76,8 @@ jobs:
       id: mac_pre_release
       if: startsWith(matrix.config.os, 'macOS') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
-        cp bvm.sh target/release/bvm
-        cp bvm-init.sh target/release/bvm-init
+        cp cli/bvm.sh target/release/bvm
+        cp cli/bvm-init.sh target/release/bvm-init
         cd target/release
         zip -r bvm-x86_64-apple-darwin.zip bvm bvm-bin bvm-init
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-apple-darwin.zip | awk '{print $1}')"
@@ -85,8 +85,8 @@ jobs:
       id: windows_pre_release
       if: startsWith(matrix.config.os, 'windows') && matrix.config.kind == 'test_release' && startsWith(github.ref, 'refs/tags/')
       run: |
-        cp bvm.cmd target/release/bvm.cmd
-        cp bvm.ps1 target/release/bvm.ps1
+        cp cli/bvm.cmd target/release/bvm.cmd
+        cp cli/bvm.ps1 target/release/bvm.ps1
         Compress-Archive -CompressionLevel Optimal -Force -Path target/release/bvm-bin.exe, target/release/bvm.cmd, target/release/bvm.ps1 -DestinationPath target/release/bvm-x86_64-pc-windows-msvc.zip
         cp scripts/bvm-x86_64-pc-windows-msvc-installer.exe target/release/bvm-x86_64-pc-windows-msvc-installer.exe
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 target/release/bvm-x86_64-pc-windows-msvc.zip | awk '{print $1}')"
