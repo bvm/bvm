@@ -156,6 +156,8 @@ fn get_env_vars() -> HashMap<&'static str, String> {
         path_value.push_str("/bin");
         path_value.push_str(SYS_PATH_DELIMITER);
         path_value.push_str("/usr/bin");
+        path_value.push_str(SYS_PATH_DELIMITER);
+        path_value.push_str("/usr/local/bin");
     }
 
     HashMap::from([
