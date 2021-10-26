@@ -43,8 +43,8 @@ pub fn parse_checksum_url(text: &str, base: &Url) -> Result<ChecksumUrl, ErrBox>
 }
 
 pub fn get_url_from_directory(dir: impl AsRef<Path>) -> Url {
-    if cfg!(debug_assertions) && cfg!(windows) && dir.as_ref().to_string_lossy().starts_with("/") {
-        // should only happen in testing
+    if cfg!(windows) && dir.as_ref().to_string_lossy().starts_with("/") {
+        // should only happen in testing...
         Url::parse(&format!("file://{}", dir.as_ref().to_string_lossy().replace("\\", "/"))).unwrap()
     } else {
         Url::from_directory_path(dir).unwrap()
