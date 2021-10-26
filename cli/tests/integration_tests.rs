@@ -113,7 +113,9 @@ fn sh_integration() {
 fn ensure_setup() {
     INIT.call_once(|| {
         let paths = get_test_paths();
-        fs::remove_dir_all(paths.temp_folder).unwrap();
+        if paths.temp_folder.exists() {
+            fs::remove_dir_all(paths.temp_folder).unwrap();
+        }
         if paths.home_dir.exists() {
             fs::remove_dir_all(&paths.home_dir).unwrap();
         }
