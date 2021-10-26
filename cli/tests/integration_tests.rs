@@ -85,9 +85,11 @@ fn sh_integration() {
     ensure_setup();
     let cli_folder = get_cli_folder();
     let envs = get_env_vars();
+    let cwd = cli_folder.join("tests/specs");
+    println!("CWD: {}", cwd.display());
 
     let result = Command::new(cli_folder.join("tests/specs/tests.sh"))
-        .current_dir(cli_folder.join("tests/specs"))
+        .current_dir(cwd)
         .envs(envs)
         .output()
         .unwrap();
