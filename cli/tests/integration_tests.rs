@@ -25,7 +25,7 @@ fn cmd_integration() {
                 .to_string()
                 .as_str(),
         ])
-        .current_dir(cli_folder.join("tests\\specs"))
+        .current_dir(get_root_folder())
         .envs(envs)
         .output()
         .unwrap();
@@ -58,7 +58,7 @@ fn powershell_integration() {
             "-NoProfile",
             &format!("& \"{}\"", cli_folder.join("tests\\specs\\tests.ps1").display()),
         ])
-        .current_dir(cli_folder.join("tests\\specs"))
+        .current_dir(get_root_folder())
         .envs(envs)
         .output()
         .unwrap();
@@ -85,11 +85,12 @@ fn sh_integration() {
     ensure_setup();
     let cli_folder = get_cli_folder();
     let envs = get_env_vars();
-    let cwd = cli_folder.join("tests/specs");
-    println!("CWD: {}", cwd.display());
+    let root_folder = get_root_folder();
+
+    println!("CWD: {}", root_folder.display());
 
     let result = Command::new(cli_folder.join("tests/specs/tests.sh"))
-        .current_dir(cwd)
+        .current_dir(root_folder)
         .envs(envs)
         .output()
         .unwrap();
@@ -183,9 +184,7 @@ struct TestPaths {
 }
 
 fn get_test_paths() -> TestPaths {
-    let build_folder = get_cli_folder()
-        .parent()
-        .unwrap()
+    let build_folder = get_root_folder()
         .join("target")
         .join(if cfg!(debug_assertions) { "debug" } else { "release" });
     let local_user_data_dir = build_folder.join("local_user_data");
@@ -206,8 +205,7 @@ fn get_test_paths() -> TestPaths {
 
 #[cfg(windows)]
 fn build_args_test_util() {
-    let cli_folder = get_cli_folder();
-    let root_folder = cli_folder.parent().unwrap();
+    let root_folder = get_root_folder();
     let status = Command::new("pwsh.exe")
         .args([
             "-NoProfile",
@@ -225,10 +223,8 @@ fn build_args_test_util() {
 
 #[cfg(not(windows))]
 fn build_args_test_util() {
-    let cli_folder = get_cli_folder();
-    let root_folder = cli_folder.parent().unwrap();
     let status = Command::new("scripts/setup_args_test_util.sh")
-        .current_dir(root_folder)
+        .current_dir(get_root_folder())
         .status()
         .unwrap();
     assert!(status.success());
@@ -236,4 +232,8 @@ fn build_args_test_util() {
 
 fn get_cli_folder() -> PathBuf {
     std::env::current_dir().unwrap()
+}
+
+fn get_root_folder() -> PathBuf {
+    get_cli_folder().parent().unwrap().to_path_buf()
 }
