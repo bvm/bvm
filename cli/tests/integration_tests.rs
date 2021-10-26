@@ -113,6 +113,7 @@ fn sh_integration() {
 fn ensure_setup() {
     INIT.call_once(|| {
         let paths = get_test_paths();
+        fs::remove_dir_all(paths.temp_folder).unwrap();
         if paths.home_dir.exists() {
             fs::remove_dir_all(&paths.home_dir).unwrap();
         }
@@ -134,10 +135,12 @@ fn ensure_setup() {
         let windows_bin = paths.build_folder.join("bvm-bin.exe");
         let unix_bin = paths.build_folder.join("bvm-bin");
         if windows_bin.exists() {
-            fs::copy(windows_bin, paths.bin_dir.join("bvm-bin.exe")).unwrap();
-        } else if unix_bin.exists() {
-            fs::copy(unix_bin, paths.bin_dir.join("bvm-bin")).unwrap();
-        } else {
+            fs::copy(&windows_bin, paths.bin_dir.join("bvm-bin.exe")).unwrap();
+        }
+        if unix_bin.exists() {
+            fs::copy(&unix_bin, paths.bin_dir.join("bvm-bin")).unwrap();
+        }
+        if !windows_bin.exists() && !unix_bin.exists() {
             panic!("Please build the project before running the tests.");
         }
 
@@ -175,6 +178,7 @@ fn get_env_vars() -> HashMap<&'static str, String> {
 
 struct TestPaths {
     build_folder: PathBuf,
+    temp_folder: PathBuf,
     local_user_data_dir: PathBuf,
     user_data_dir: PathBuf,
     home_dir: PathBuf,
@@ -195,6 +199,7 @@ fn get_test_paths() -> TestPaths {
 
     TestPaths {
         build_folder,
+        temp_folder,
         local_user_data_dir,
         user_data_dir,
         home_dir,
