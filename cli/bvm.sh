@@ -1,5 +1,12 @@
 #!/bin/sh
 
+if [[ -z "$BVM_BIN_PATH" ]]; then
+  # checking $0 is not reliable if this script is being called from another
+  # script, as $0 will be the initial script, so try to define this
+  # environment variable when initially sourced (perhaps this is unnecessary?)
+  export $BVM_BIN_PATH="$(dirname "$(readlink -f "$0")")/bvm-bin"
+fi
+
 bvm_handle_env_messages()
 {
   # * ADD\n<key>\n<value>
@@ -59,11 +66,6 @@ bvm_handle_env_messages()
 
 bvm()
 {
-  local bvm_bin
-  local bvm_script_path
-  bvm_script_path=$SCRIPT=$(readlink -f "$0")
-  bvm_bin="$(dirname "$bvm_script_path")/bvm-bin"
-
   if [ "$1" = "exec-command" ]
   then
     local bvm_exec_command
@@ -73,7 +75,7 @@ bvm()
 
     # use a sub shell to prevent exporting variables
     (
-      bvm_handle_env_messages "$($bvm_bin hidden resolve-command "$bvm_exec_command")" "$@" || { return $?; }
+      bvm_handle_env_messages "$($BVM_BIN_PATH hidden resolve-command "$bvm_exec_command")" "$@" || { return $?; }
     )
 
     return $?;
@@ -88,7 +90,7 @@ bvm()
     bvm_exec_name=$2
     bvm_exec_version=$3
     bvm_exec_command=$4
-    bvm_has_command=$($bvm_bin hidden has-command "$bvm_exec_name" "$bvm_exec_version" "$bvm_exec_command") || { return $?; }
+    bvm_has_command=$($BVM_BIN_PATH hidden has-command "$bvm_exec_name" "$bvm_exec_version" "$bvm_exec_command") || { return $?; }
 
     if [ "$bvm_has_command" = "false" ]
     then
@@ -96,7 +98,7 @@ bvm()
     fi
 
     local bvm_executable_path
-    bvm_executable_path=$($bvm_bin hidden get-exec-command-path "$bvm_exec_name" "$bvm_exec_version" "$bvm_exec_command") || { return $?; }
+    bvm_executable_path=$($BVM_BIN_PATH hidden get-exec-command-path "$bvm_exec_name" "$bvm_exec_version" "$bvm_exec_command") || { return $?; }
 
     if [ "$bvm_has_command" = "false" ]
     then
@@ -107,23 +109,23 @@ bvm()
 
     # use a sub shell to prevent exporting variables
     (
-      bvm_handle_env_messages "$($bvm_bin hidden get-exec-env-changes "$bvm_exec_name" "$bvm_exec_version")" || { return $?; }
+      bvm_handle_env_messages "$($BVM_BIN_PATH hidden get-exec-env-changes "$bvm_exec_name" "$bvm_exec_version")" || { return $?; }
 
       $bvm_executable_path "$@"
     )
     return $?
   fi
 
-  $bvm_bin "$@"
+  $BVM_BIN_PATH "$@"
 
   if [ "$1" = "install" ] || [ "$1" = "uninstall" ] || [ "$1" = "use" ]
   then
     local pending_changes
-    pending_changes=$($bvm_bin hidden get-pending-env-changes)
+    pending_changes=$($BVM_BIN_PATH hidden get-pending-env-changes)
     if [ ! -z "$pending_changes" ]
     then
       bvm_handle_env_messages "$pending_changes" || { return $?; }
-      $bvm_bin hidden clear-pending-env-changes || { return $?; }
+      $BVM_BIN_PATH hidden clear-pending-env-changes || { return $?; }
     fi
   fi
 }

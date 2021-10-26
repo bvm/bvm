@@ -17,16 +17,23 @@ mod registry;
 mod utils;
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use arg_parser::*;
 use dprint_cli_core::checksums::get_sha256_checksum;
 use dprint_cli_core::types::ErrBox;
-use environment::{Environment, SYS_PATH_DELIMITER};
-use plugins::{helpers as plugin_helpers, PluginsManifest, PluginsMut, UrlInstallAction};
-use types::{BinaryName, CommandName, PathOrVersionSelector, VersionSelector};
-use url::Url;
+use environment::Environment;
+use environment::SYS_PATH_DELIMITER;
+use plugins::helpers as plugin_helpers;
+use plugins::PluginsManifest;
+use plugins::PluginsMut;
+use plugins::UrlInstallAction;
+use types::BinaryName;
+use types::CommandName;
+use types::PathOrVersionSelector;
+use types::VersionSelector;
 use utils::ChecksumUrl;
 
 use crate::utils::get_url_from_directory;

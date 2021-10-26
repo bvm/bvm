@@ -7,16 +7,21 @@ use crate::types::CommandName;
 use crate::utils;
 
 #[cfg(unix)]
-pub fn create_shim(environment: &impl Environment, command_name: &CommandName, command_path: &Path) -> Result<(), ErrBox> {
+pub fn create_shim(
+    environment: &impl Environment,
+    command_name: &CommandName,
+    command_path: &Path,
+) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
     let file_path = shim_dir.join(command_name.as_str());
     let exe_path = std::env::current_exe()?;
-    let bvm_path = exe_path.with_file_name("bvm");
+    let bvm_path = exe_path.with_file_name("bvm.sh");
     environment.write_file_text(
         &file_path,
         &format!(
             r#"#!/bin/sh
-"{}" exec-command {} "{}" "$@"
+. {}
+bvm exec-command {} "{}" "$@"
 "#,
             bvm_path.display(),
             command_name.as_str(),
@@ -30,7 +35,11 @@ pub fn create_shim(environment: &impl Environment, command_name: &CommandName, c
 }
 
 #[cfg(target_os = "windows")]
-pub fn create_shim(environment: &impl Environment, command_name: &CommandName, command_path: &Path) -> Result<(), ErrBox> {
+pub fn create_shim(
+    environment: &impl Environment,
+    command_name: &CommandName,
+    command_path: &Path,
+) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
     let exe_path = std::env::current_exe()?;
     let bvm_path = exe_path.with_file_name("bvm");

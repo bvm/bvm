@@ -13,19 +13,19 @@ pub const SYS_PATH_DELIMITER: &'static str = if cfg!(target_os = "windows") { ";
 #[test]
 fn cmd_integration() {
     ensure_setup();
-    let root_folder = get_cli_folder();
+    let cli_folder = get_cli_folder();
     let envs = get_env_vars();
 
     let result = Command::new("C:\\Windows\\System32\\cmd")
         .args([
             "/C",
-            root_folder
+            cli_folder
                 .join("tests\\specs\\tests.cmd")
                 .to_string_lossy()
                 .to_string()
                 .as_str(),
         ])
-        .current_dir(root_folder.join("target"))
+        .current_dir(cli_folder.join("tests\\specs"))
         .envs(envs)
         .output()
         .unwrap();
@@ -39,7 +39,7 @@ fn cmd_integration() {
 
     assert_eq!(
         output.trim().replace("\r\n", "\n"),
-        fs::read_to_string(root_folder.join("tests/specs/tests.cmd.out"))
+        fs::read_to_string(cli_folder.join("tests/specs/tests.cmd.out"))
             .unwrap()
             .trim()
             .replace("\r\n", "\n")
@@ -50,15 +50,15 @@ fn cmd_integration() {
 #[test]
 fn powershell_integration() {
     ensure_setup();
-    let root_folder = get_cli_folder();
+    let cli_folder = get_cli_folder();
     let envs = get_env_vars();
 
     let result = Command::new("C:\\Windows\\System32\\WINDOWSPOWERSHELL\\v1.0\\powershell.exe")
         .args([
             "-NoProfile",
-            &format!("& \"{}\"", root_folder.join("tests\\specs\\tests.ps1").display()),
+            &format!("& \"{}\"", cli_folder.join("tests\\specs\\tests.ps1").display()),
         ])
-        .current_dir(root_folder.join("target"))
+        .current_dir(cli_folder.join("tests\\specs"))
         .envs(envs)
         .output()
         .unwrap();
@@ -72,7 +72,7 @@ fn powershell_integration() {
 
     assert_eq!(
         output.trim().replace("\r\n", "\n"),
-        fs::read_to_string(root_folder.join("tests/specs/tests.ps1.out"))
+        fs::read_to_string(cli_folder.join("tests/specs/tests.ps1.out"))
             .unwrap()
             .trim()
             .replace("\r\n", "\n")
@@ -83,11 +83,11 @@ fn powershell_integration() {
 #[test]
 fn sh_integration() {
     ensure_setup();
-    let root_folder = get_root_folder();
+    let cli_folder = get_cli_folder();
     let envs = get_env_vars();
 
-    let result = Command::new(root_folder.join("tests/specs/tests.sh"))
-        .current_dir(root_folder.join("target"))
+    let result = Command::new(cli_folder.join("tests/specs/tests.sh"))
+        .current_dir(cli_folder.join("tests/specs"))
         .envs(envs)
         .output()
         .unwrap();
@@ -101,7 +101,7 @@ fn sh_integration() {
 
     assert_eq!(
         output.trim().replace("\r\n", "\n"),
-        fs::read_to_string(root_folder.join("tests/specs/tests.sh.out"))
+        fs::read_to_string(cli_folder.join("tests/specs/tests.sh.out"))
             .unwrap()
             .trim()
             .replace("\r\n", "\n")
@@ -123,9 +123,12 @@ fn ensure_setup() {
         std::fs::create_dir_all(&paths.bin_dir).unwrap();
         std::fs::create_dir_all(&paths.user_data_dir).unwrap();
         std::fs::create_dir_all(&paths.local_user_data_dir).unwrap();
-        fs::copy("bvm.cmd", paths.bin_dir.join("bvm.cmd")).unwrap();
-        fs::copy("bvm.ps1", paths.bin_dir.join("bvm.ps1")).unwrap();
-        fs::copy("bvm.sh", paths.bin_dir.join("bvm.sh")).unwrap();
+        if cfg!(windows) {
+            fs::copy("bvm.cmd", paths.bin_dir.join("bvm.cmd")).unwrap();
+            fs::copy("bvm.ps1", paths.bin_dir.join("bvm.ps1")).unwrap();
+        } else {
+            fs::copy("bvm.sh", paths.bin_dir.join("bvm.sh")).unwrap();
+        }
         let windows_bin = paths.build_folder.join("bvm-bin.exe");
         let unix_bin = paths.build_folder.join("bvm-bin");
         if windows_bin.exists() {
@@ -142,16 +145,21 @@ fn ensure_setup() {
 
 fn get_env_vars() -> HashMap<&'static str, String> {
     let paths = get_test_paths();
+    let mut path_value = format!(
+        "{}{}{}",
+        paths.bin_dir.display(),
+        SYS_PATH_DELIMITER,
+        paths.shims_dir.display()
+    );
+    if cfg!(unix) {
+        path_value.push_str(SYS_PATH_DELIMITER);
+        path_value.push_str("/bin");
+        path_value.push_str(SYS_PATH_DELIMITER);
+        path_value.push_str("/usr/bin");
+    }
+
     HashMap::from([
-        (
-            "PATH",
-            format!(
-                "{}{}{}",
-                paths.bin_dir.display(),
-                SYS_PATH_DELIMITER,
-                paths.shims_dir.display()
-            ),
-        ),
+        ("PATH", path_value),
         (
             "BVM_LOCAL_USER_DATA_DIR",
             paths.local_user_data_dir.display().to_string(),
@@ -176,9 +184,9 @@ fn get_test_paths() -> TestPaths {
         .unwrap()
         .join("target")
         .join(if cfg!(debug_assertions) { "debug" } else { "release" });
-    let local_user_data_dir = build_folder.join("cmd").join("local_user_data");
-    let user_data_dir = build_folder.join("cmd").join("user_data_dir");
-    let home_dir = build_folder.join("cmd").join("home_dir");
+    let local_user_data_dir = build_folder.join("local_user_data");
+    let user_data_dir = build_folder.join("user_data_dir");
+    let home_dir = build_folder.join("home_dir");
     let bin_dir = home_dir.join("bin");
     let shims_dir = user_data_dir.join("shims");
 
@@ -205,6 +213,17 @@ fn build_args_test_util() {
                 root_folder.join("scripts/setup_args_test_util.ps1").display()
             ),
         ])
+        .current_dir(root_folder)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+#[cfg(not(windows))]
+fn build_args_test_util() {
+    let cli_folder = get_cli_folder();
+    let root_folder = cli_folder.parent().unwrap();
+    let status = Command::new("scripts/setup_args_test_util.sh")
         .current_dir(root_folder)
         .status()
         .unwrap();
