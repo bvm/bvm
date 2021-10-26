@@ -1,7 +1,9 @@
 #!/bin/bash
 
 cargo build --package args_test_util
-cd target/debug
+mkdir -p temp
+copy target/debug/args_test_util temp/args_test_util
+cd temp
 zip -r args_test_util.zip args_test_util
 checksum=$(shasum -a 256 args_test_util.zip | awk '{print $1}')
 file_text=$(cat << EOF

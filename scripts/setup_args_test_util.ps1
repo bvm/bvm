@@ -1,8 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 cargo build --package args_test_util
-Compress-Archive -CompressionLevel Optimal -Force -Path target/debug/args_test_util.exe -DestinationPath target/debug/args_test_util.zip
-$file_hash=(Get-FileHash target/debug/args_test_util.zip).Hash
+mkdir temp -ErrorAction SilentlyContinue
+Compress-Archive -CompressionLevel Optimal -Force -Path target/debug/args_test_util.exe -DestinationPath temp/args_test_util.zip
+$file_hash=(Get-FileHash temp/args_test_util.zip).Hash
 $file_text=@'
 {{
   "schemaVersion": 1,
@@ -21,4 +22,4 @@ $file_text=@'
   }}
 }}
 '@ -f $file_hash.ToLower()
-echo $file_text | Out-File -FilePath target/debug/args_test_util.json
+echo $file_text | Out-File -FilePath temp/args_test_util.json

@@ -183,14 +183,13 @@ struct TestPaths {
 }
 
 fn get_test_paths() -> TestPaths {
-    let build_folder = get_cli_folder()
-        .parent()
-        .unwrap()
+    let build_folder = get_root_folder()
         .join("target")
         .join(if cfg!(debug_assertions) { "debug" } else { "release" });
-    let local_user_data_dir = build_folder.join("local_user_data");
-    let user_data_dir = build_folder.join("user_data_dir");
-    let home_dir = build_folder.join("home_dir");
+    let temp_folder = get_root_folder().join("temp");
+    let local_user_data_dir = temp_folder.join("local_user_data");
+    let user_data_dir = temp_folder.join("user_data_dir");
+    let home_dir = temp_folder.join("home_dir");
     let bin_dir = home_dir.join("bin");
     let shims_dir = user_data_dir.join("shims");
 
@@ -206,8 +205,7 @@ fn get_test_paths() -> TestPaths {
 
 #[cfg(windows)]
 fn build_args_test_util() {
-    let cli_folder = get_cli_folder();
-    let root_folder = cli_folder.parent().unwrap();
+    let root_folder = get_root_folder();
     let status = Command::new("pwsh.exe")
         .args([
             "-NoProfile",
@@ -225,13 +223,16 @@ fn build_args_test_util() {
 
 #[cfg(not(windows))]
 fn build_args_test_util() {
-    let cli_folder = get_cli_folder();
-    let root_folder = cli_folder.parent().unwrap();
+    let root_folder = get_root_folder();
     let status = Command::new("scripts/setup_args_test_util.sh")
         .current_dir(root_folder)
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+fn get_root_folder() -> PathBuf {
+    get_cli_folder().parent().unwrap().to_path_buf()
 }
 
 fn get_cli_folder() -> PathBuf {
