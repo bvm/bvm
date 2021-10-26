@@ -3,7 +3,7 @@ set -e
 
 # setup and source the bvm function
 chmod +x ../../../temp/home_dir/bin/bvm.sh
-export BVM_BIN_PATH=$(realpath ../../../temp/home_dir/bin/bvm-bin)
+export BVM_BIN_PATH=$(../../../temp/home_dir/bin/bvm-bin)
 . ../../../temp/home_dir/bin/bvm.sh
 
 bvm install --use ../../../temp/args_test_util.json
