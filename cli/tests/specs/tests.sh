@@ -2,11 +2,12 @@
 set -e
 
 # setup and source the bvm function
-chmod +x ../../../temp/home_dir/bin/bvm.sh
-export BVM_BIN_PATH=$(../../../temp/home_dir/bin/bvm-bin)
-. ../../../temp/home_dir/bin/bvm.sh
+root_dir=$1
+chmod +x $root_dir/temp/home_dir/bin/bvm.sh
+export BVM_BIN_PATH=$($root_dir/temp/home_dir/bin/bvm-bin)
+. $root_dir/temp/home_dir/bin/bvm.sh
 
-bvm install --use ../../../temp/args_test_util.json
+bvm install --use $root_dir/temp/args_test_util.json
 args_test_util "console.log(\"hello\")"
 args_test_util "console.log(2 != 3)"
 args_test_util "JSON.stringify({})"

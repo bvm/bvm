@@ -86,11 +86,11 @@ fn sh_integration() {
     let cli_folder = get_cli_folder();
     let envs = get_env_vars();
     let cwd = cli_folder.join("tests/specs");
-    println!("CWD: {}", cwd.display());
 
     let result = Command::new(cli_folder.join("tests/specs/tests.sh"))
         .current_dir(cwd)
         .envs(envs)
+        .arg(get_root_folder())
         .output()
         .unwrap();
     let stdout = strip_ansi_escapes::strip(&result.stdout).unwrap();
