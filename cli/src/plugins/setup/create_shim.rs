@@ -14,16 +14,21 @@ pub fn create_shim(
 ) -> Result<(), ErrBox> {
     let shim_dir = utils::get_shim_dir(environment);
     let file_path = shim_dir.join(command_name.as_str());
-    let exe_path = std::env::current_exe()?;
-    let bvm_path = exe_path.with_file_name("bvm.sh");
+    let bvm_install_dir = environment
+        .get_env_var("BVM_INSTALL_DIR")
+        .ok_or_else(|| err_obj!("Could not get the BVM_INSTALL_DIR environment variable."))?;
     environment.write_file_text(
         &file_path,
         &format!(
             r#"#!/bin/sh
-. {}
+if [ -z "$BVM_INSTALL_DIR" ]; then
+  BVM_INSTALL_DIR="{}"
+fi
+
+. $BVM_INSTALL_DIR/bin/bvm
 bvm exec-command {} "{}" "$@"
 "#,
-            bvm_path.display(),
+            bvm_install_dir,
             command_name.as_str(),
             command_path.display(),
         ),
