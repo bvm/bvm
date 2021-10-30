@@ -29,6 +29,7 @@ impl TestEnvironment {
     pub fn new() -> TestEnvironment {
         let mut env_variables = HashMap::new();
         env_variables.insert("PATH".to_string(), format!("/data/shims{}/bin", SYS_PATH_DELIMITER));
+        env_variables.insert("BVM_INSTALL_DIR".to_string(), "/".to_string());
         let mut files = HashMap::new();
         files.insert(PathBuf::from("/bin/bvm.cmd"), Vec::new());
         files.insert(PathBuf::from("/bin/bvm.ps1"), Vec::new());

@@ -3463,7 +3463,7 @@ mod test {
         if cfg!(target_os = "windows") {
             format!("/data/shims/{}.bat", name)
         } else {
-            format!("/data/shims/{}", name)
+            format!("/shims/{}", name)
         }
     }
 

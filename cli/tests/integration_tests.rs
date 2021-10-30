@@ -132,7 +132,7 @@ fn ensure_setup() {
             fs::copy("bvm.cmd", paths.bin_dir.join("bvm.cmd")).unwrap();
             fs::copy("bvm.ps1", paths.bin_dir.join("bvm.ps1")).unwrap();
         } else {
-            fs::copy("bvm.sh", paths.bin_dir.join("bvm.sh")).unwrap();
+            fs::copy("bvm.sh", paths.bin_dir.join("bvm")).unwrap();
         }
         let windows_bin = paths.build_folder.join("bvm-bin.exe");
         let unix_bin = paths.build_folder.join("bvm-bin");
@@ -195,9 +195,13 @@ fn get_test_paths() -> TestPaths {
     let temp_folder = get_root_folder().join("temp");
     let local_user_data_dir = temp_folder.join("local_user_data");
     let user_data_dir = temp_folder.join("user_data_dir");
-    let home_dir = temp_folder.join("home_dir");
+    let home_dir = temp_folder.join("home_dir").join("bvm");
     let bin_dir = home_dir.join("bin");
-    let shims_dir = user_data_dir.join("shims");
+    let shims_dir = if cfg!(windows) {
+        user_data_dir.join("shims")
+    } else {
+        home_dir.join("shims")
+    };
 
     TestPaths {
         build_folder,
