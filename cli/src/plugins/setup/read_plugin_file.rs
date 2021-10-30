@@ -12,13 +12,30 @@ pub fn read_plugin_file(file_bytes: &[u8]) -> Result<SerializedPluginFile, ErrBo
                     file.schema_version
                 );
             }
-
-            if file.name.contains("/") || file.owner.contains("/") {
-                return err!("The binary owner and name may not contain a forward slash.");
+            // Validate the binary owner and name
+            if file.name.starts_with(".") || file.name.starts_with("_") {
+                return err!("The binary owner and name should not start with '.' or '_'");
+            } else if file.name == "bvm" {
+                return err!("'bvm' is not allowed to be used as a binary name");
+            } else if file.name.contains("||")
+                || file.name.contains("~")
+                || file.name.contains("(")
+                || file.name.contains(")")
+                || file.name.contains("'")
+                || file.name.contains("!")
+                || file.name.contains("*")
+                || file.name.contains("/")
+            {
+                return err!("The binary owner and name may not contain any of these characters(||,~,(,),',!,*,/)");
+            } else if file.name.len() > 224 {
+                return err!("The binary owner and name should not execced 224 characters");
             }
 
             Ok(file)
         }
-        Err(err) => err!("Error deserializing binary manifest file. {}", err.to_string()),
+        Err(err) => err!(
+            "Error deserializing binary manifest file. {}",
+            err.to_string()
+        ),
     }
 }
