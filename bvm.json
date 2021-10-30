@@ -1,9 +1,0 @@
-{
-  "binaries": [
-    {
-      "path": "https://github.com/dprint/dprint/releases/download/0.15.0/bvm.json",
-      "checksum": "57adf9279df26810ce21b8446f5a8ae73a265ad5182226f71381a41d30f962cd",
-      "version": "0.15.0"
-    }
-  ]
-}
