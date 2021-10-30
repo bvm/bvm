@@ -12,6 +12,12 @@ bvm_handle_env_messages()
   local lines
   lines=$1
   shift
+
+  # enable splitting a variable by IFS in zsh
+  if [ $ZSH_VERSION ]; then
+    setopt sh_word_split
+  fi
+
   IFS='
 '
   for line in $lines
