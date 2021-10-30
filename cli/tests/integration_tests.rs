@@ -216,17 +216,16 @@ fn get_test_paths() -> TestPaths {
 
 #[cfg(windows)]
 fn build_args_test_util() {
-    let root_folder = get_root_folder();
     let status = Command::new("pwsh.exe")
         .args([
             "-NoProfile",
             "-Command",
             &format!(
                 "& \"{}\"",
-                root_folder.join("scripts/setup_args_test_util.ps1").display()
+                get_cli_folder().join("tests/setup_args_test_util.ps1").display()
             ),
         ])
-        .current_dir(root_folder)
+        .current_dir(get_root_folder())
         .status()
         .unwrap();
     assert!(status.success());
@@ -234,9 +233,8 @@ fn build_args_test_util() {
 
 #[cfg(not(windows))]
 fn build_args_test_util() {
-    let root_folder = get_root_folder();
-    let status = Command::new("scripts/setup_args_test_util.sh")
-        .current_dir(root_folder)
+    let status = Command::new(get_cli_folder().join("tests/setup_args_test_util.sh"))
+        .current_dir(get_root_folder())
         .status()
         .unwrap();
     assert!(status.success());
