@@ -14,7 +14,7 @@ if ($PSVersionTable.PSEdition -ne 'Core') {
 
 $BinDir = if ($env:BVM_INSTALL_DIR) {
   "$env:BVM_INSTALL_DIR\bin"
-} elseif ($IsWindows) {
+} else {
   "$Home\.bvm\bin"
 }
 
