@@ -45,7 +45,7 @@ pub fn read_config_file(file_text: &str, base: &Url) -> Result<ConfigFile, ErrBo
 
                 ConfigFileBinary {
                     url: if let Some(checksum) = checksum {
-                        ChecksumUrl::from_path_and_checksum(&path, checksum, base)?
+                        ChecksumUrl::from_path_and_checksum(&path, checksum.to_string(), base)?
                     } else {
                         parse_checksum_url(&path, base)?
                     },
@@ -60,8 +60,8 @@ pub fn read_config_file(file_text: &str, base: &Url) -> Result<ConfigFile, ErrBo
         });
     }
 
-    let on_pre_install = root_object.take_string("onPreInstall");
-    let on_post_install = root_object.take_string("onPostInstall");
+    let on_pre_install = root_object.take_string("onPreInstall").map(|t| t.to_string());
+    let on_post_install = root_object.take_string("onPostInstall").map(|t| t.to_string());
 
     for (key, _) in root_object.into_iter() {
         return err!("Unknown key '{}'", key);

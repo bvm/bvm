@@ -24,26 +24,32 @@ pub fn extract_zip(
             for i in 0..zip.len() {
                 update_size(i);
                 let mut file = zip.by_index(i).unwrap();
-                let file_name = file.sanitized_name();
-                let file_path = dir_path.join(&file_name);
+                if let Some(file_name) = file.enclosed_name() {
+                    let file_path = dir_path.join(&file_name);
 
-                if !file.is_dir() {
-                    let mut file_bytes = Vec::with_capacity(file.size() as usize);
-                    file.read_to_end(&mut file_bytes)?;
-                    environment.write_file(&file_path, &file_bytes)?;
-                } else {
-                    environment.create_dir_all(&file_path)?
-                }
-
-                // Get and Set permissions
-                #[cfg(unix)]
-                if environment.is_real() {
-                    use std::fs;
-                    use std::os::unix::fs::PermissionsExt;
-
-                    if let Some(mode) = file.unix_mode() {
-                        fs::set_permissions(&file_path, fs::Permissions::from_mode(mode))?;
+                    if !file.is_dir() {
+                        let mut file_bytes = Vec::with_capacity(file.size() as usize);
+                        file.read_to_end(&mut file_bytes)?;
+                        environment.write_file(&file_path, &file_bytes)?;
+                    } else {
+                        environment.create_dir_all(&file_path)?
                     }
+
+                    // Get and Set permissions
+                    #[cfg(unix)]
+                    if environment.is_real() {
+                        use std::fs;
+                        use std::os::unix::fs::PermissionsExt;
+
+                        if let Some(mode) = file.unix_mode() {
+                            fs::set_permissions(&file_path, fs::Permissions::from_mode(mode))?;
+                        }
+                    }
+                } else {
+                    environment.log_error(&format!(
+                        "Ignoring path in zip because it was not enclosed: {}",
+                        file.name()
+                    ));
                 }
             }
             Ok(())

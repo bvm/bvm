@@ -92,7 +92,7 @@ impl Environment for RealEnvironment {
 
     fn download_file(&self, url: &str) -> Result<Vec<u8>, ErrBox> {
         log_verbose!(self, "Downloading url: {}", url);
-        download_url(url, &self.progress_bars)
+        download_url(url, &self.progress_bars, |key| self.get_env_var(key))
     }
 
     fn path_exists(&self, path: &Path) -> bool {

@@ -75,7 +75,7 @@ impl Version {
     }
 
     pub fn is_prerelease(&self) -> bool {
-        self.sem_ver.is_prerelease()
+        !self.sem_ver.pre.is_empty()
     }
 
     pub fn to_selector(&self) -> VersionSelector {

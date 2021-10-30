@@ -32,7 +32,7 @@ pub fn add_binary_to_config_file(
     let binaries_prop = root_obj
         .properties
         .iter()
-        .filter(|p| p.name.clone().to_string().as_str() == "binaries")
+        .filter(|p| p.name.as_str() == "binaries")
         .next()
         .ok_or_else(|| err_obj!("Expected to find a 'binaries' array."))?;
 
