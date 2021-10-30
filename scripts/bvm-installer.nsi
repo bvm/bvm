@@ -23,8 +23,8 @@ Section
     CreateDirectory $INSTDIR\bin
     SetOutPath $INSTDIR\bin
     File ..\target\release\bvm-bin.exe
-    File ..\bvm.cmd
-    File ..\bvm.ps1
+    File ..\cli\bvm.cmd
+    File ..\cli\bvm.ps1
     SetOutPath $INSTDIR
 
     nsExec::Exec '$INSTDIR\bin\bvm-bin.exe hidden windows-install'
