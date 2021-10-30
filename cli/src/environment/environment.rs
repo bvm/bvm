@@ -4,18 +4,18 @@ use url::Url;
 
 pub trait Environment: Clone + std::marker::Send + std::marker::Sync + 'static {
     fn is_real(&self) -> bool;
-    fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox>;
-    fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox>;
-    fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox>;
-    fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox>;
-    fn remove_file(&self, file_path: &Path) -> Result<(), ErrBox>;
-    fn remove_dir_all(&self, dir_path: &Path) -> Result<(), ErrBox>;
-    fn path_exists(&self, file_path: &Path) -> bool;
-    fn is_dir_empty(&self, dir_path: &Path) -> Result<bool, ErrBox>;
-    fn create_dir_all(&self, path: &Path) -> Result<(), ErrBox>;
+    fn read_file(&self, file_path: impl AsRef<Path>) -> Result<Vec<u8>, ErrBox>;
+    fn read_file_text(&self, file_path: impl AsRef<Path>) -> Result<String, ErrBox>;
+    fn write_file(&self, file_path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), ErrBox>;
+    fn write_file_text(&self, file_path: impl AsRef<Path>, file_text: &str) -> Result<(), ErrBox>;
+    fn remove_file(&self, file_path: impl AsRef<Path>) -> Result<(), ErrBox>;
+    fn remove_dir_all(&self, dir_path: impl AsRef<Path>) -> Result<(), ErrBox>;
+    fn path_exists(&self, file_path: impl AsRef<Path>) -> bool;
+    fn is_dir_empty(&self, dir_path: impl AsRef<Path>) -> Result<bool, ErrBox>;
+    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), ErrBox>;
     fn cwd(&self) -> PathBuf;
     fn log(&self, text: &str);
-    fn log_error(&self, text: &str);
+    fn log_stderr(&self, text: &str);
     fn fetch_url(&self, url: &Url) -> Result<Vec<u8>, ErrBox> {
         if url.scheme() == "file" {
             self.read_file(

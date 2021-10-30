@@ -304,7 +304,7 @@ pub fn recreate_shim(
     if let Some(location) = get_command_exe_path(environment, &plugin_manifest, &command_name) {
         crate::plugins::create_shim(environment, &command_name, &location)?;
     } else {
-        environment.log_error(&format!(
+        environment.log_stderr(&format!(
             "Error creating shim for {}. Could not find binary path.",
             command_name
         ));

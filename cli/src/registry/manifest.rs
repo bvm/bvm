@@ -50,7 +50,7 @@ impl Registry {
             Ok(text) => match serde_json::from_str(&text) {
                 Ok(manifest) => manifest,
                 Err(err) => {
-                    environment.log_error(&format!("Error deserializing registry: {}", err));
+                    environment.log_stderr(&format!("Error deserializing registry: {}", err));
                     Registry::new()
                 }
             },

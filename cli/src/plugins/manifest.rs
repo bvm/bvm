@@ -249,7 +249,7 @@ impl PluginsManifest {
             Ok(text) => match serde_json::from_str(&text) {
                 Ok(manifest) => manifest,
                 Err(err) => {
-                    environment.log_error(&format!("Error deserializing plugins manifest: {}", err));
+                    environment.log_stderr(&format!("Error deserializing plugins manifest: {}", err));
                     PluginsManifest::new()
                 }
             },

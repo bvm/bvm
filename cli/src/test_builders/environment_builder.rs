@@ -19,7 +19,13 @@ impl EnvironmentBuilder {
         self.environment.clone()
     }
 
-    pub fn create_remote_zip_package(&self, url: &str, owner: &str, name: &str, version: &str) -> String {
+    pub fn create_remote_zip_package(
+        &self,
+        url: impl AsRef<str>,
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> String {
         let mut builder = self.create_plugin_builder(url, owner, name, version);
         builder.download_type(PluginDownloadType::Zip);
         builder.build()
@@ -27,30 +33,42 @@ impl EnvironmentBuilder {
 
     pub fn create_remote_zip_multiple_commands_package(
         &self,
-        url: &str,
-        owner: &str,
-        name: &str,
-        version: &str,
+        url: impl AsRef<str>,
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
+        version: impl AsRef<str>,
     ) -> String {
-        let mut builder = self.create_plugin_builder(url, owner, name, version);
-        builder.add_command(&format!("{}-second", name));
+        let mut builder = self.create_plugin_builder(url, owner, &name, version);
+        builder.add_command(format!("{}-second", name.as_ref()));
         builder.download_type(PluginDownloadType::Zip);
         builder.build()
     }
 
-    pub fn create_remote_tar_gz_package(&self, url: &str, owner: &str, name: &str, version: &str) -> String {
+    pub fn create_remote_tar_gz_package(
+        &self,
+        url: impl AsRef<str>,
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> String {
         let mut builder = self.create_plugin_builder(url, owner, name, version);
         builder.download_type(PluginDownloadType::TarGz);
         builder.build()
     }
 
-    pub fn create_plugin_builder(&self, url: &str, owner: &str, name: &str, version: &str) -> PluginBuilder {
+    pub fn create_plugin_builder(
+        &self,
+        url: impl AsRef<str>,
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
+        version: impl AsRef<str>,
+    ) -> PluginBuilder {
         let mut builder = PluginBuilder::new(self.environment.clone());
 
         builder
             .url(url)
             .owner(owner)
-            .name(name)
+            .name(&name)
             .version(version)
             .description("Some description")
             .add_command(name);
@@ -58,7 +76,7 @@ impl EnvironmentBuilder {
         builder
     }
 
-    pub fn add_binary_to_path(&self, name: &str) -> String {
+    pub fn add_binary_to_path(&self, name: impl AsRef<str>) -> String {
         let path_dir = PathBuf::from("/path-dir");
         if !std::env::split_paths(&self.environment.get_env_path()).any(|p| p == path_dir) {
             let env_path = self.environment.get_env_path();
@@ -73,12 +91,12 @@ impl EnvironmentBuilder {
             self.environment.add_path_dir(path_dir);
         }
         let path_exe_path = if cfg!(target_os = "windows") {
-            format!("/path-dir\\{}.bat", name)
+            format!("/path-dir\\{}.bat", name.as_ref())
         } else {
-            format!("/path-dir/{}", name)
+            format!("/path-dir/{}", name.as_ref())
         };
         self.environment
-            .write_file_text(&PathBuf::from(&path_exe_path), "")
+            .write_file_text(PathBuf::from(&path_exe_path), "")
             .unwrap();
         path_exe_path
     }
@@ -97,9 +115,9 @@ impl EnvironmentBuilder {
 
     pub fn create_remote_registry_file(
         &self,
-        url: &str,
-        owner: &str,
-        name: &str,
+        url: impl AsRef<str>,
+        owner: impl AsRef<str>,
+        name: impl AsRef<str>,
         items: Vec<crate::registry::RegistryVersionInfo>,
     ) {
         let file_text = format!(
@@ -112,8 +130,8 @@ impl EnvironmentBuilder {
         "versions": [{}]
     }}]
 }}"#,
-            owner,
-            name,
+            owner.as_ref(),
+            name.as_ref(),
             items
                 .into_iter()
                 .map(|item| format!(
@@ -163,73 +181,73 @@ impl PluginBuilder {
         checksum
     }
 
-    pub fn url<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.url = Some(value.to_string());
+    pub fn url<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.url = Some(value.as_ref().to_string());
         self
     }
 
-    pub fn name<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+    pub fn name<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
         self.file.name(value);
         self
     }
 
-    pub fn owner<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+    pub fn owner<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
         self.file.owner(value);
         self
     }
 
-    pub fn version<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+    pub fn version<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
         self.file.version(value);
         self
     }
 
-    pub fn description<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
+    pub fn description<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
         self.file.description(value);
         self
     }
 
-    pub fn output_dir<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().output_dir(value);
-        self.file.linux().output_dir(value);
+    pub fn output_dir<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.file.windows().output_dir(&value);
+        self.file.linux().output_dir(&value);
         self.file.mac().output_dir(value);
         self
     }
 
-    pub fn add_env_path<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().add_env_path(value);
-        self.file.linux().add_env_path(value);
+    pub fn add_env_path<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.file.windows().add_env_path(&value);
+        self.file.linux().add_env_path(&value);
         self.file.mac().add_env_path(value);
         self
     }
 
-    pub fn add_env_var<'a>(&'a mut self, key: &str, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().add_env_var(key, value);
-        self.file.linux().add_env_var(key, value);
+    pub fn add_env_var<'a>(&'a mut self, key: impl AsRef<str>, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.file.windows().add_env_var(&key, &value);
+        self.file.linux().add_env_var(&key, &value);
         self.file.mac().add_env_var(key, value);
         self
     }
 
-    pub fn on_pre_install<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().on_pre_install(value);
-        self.file.linux().on_pre_install(value);
+    pub fn on_pre_install<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.file.windows().on_pre_install(&value);
+        self.file.linux().on_pre_install(&value);
         self.file.mac().on_pre_install(value);
         self
     }
 
-    pub fn on_post_install<'a>(&'a mut self, value: &str) -> &'a mut PluginBuilder {
-        self.file.windows().on_post_install(value);
-        self.file.linux().on_post_install(value);
+    pub fn on_post_install<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginBuilder {
+        self.file.windows().on_post_install(&value);
+        self.file.linux().on_post_install(&value);
         self.file.mac().on_post_install(value);
         self
     }
 
-    pub fn add_command<'a>(&'a mut self, name: &str) -> &'a mut PluginBuilder {
+    pub fn add_command<'a>(&'a mut self, name: impl AsRef<str>) -> &'a mut PluginBuilder {
         assert_eq!(
             self.download_type.is_some(),
             false,
             "cannot add a command after setting the download type"
         );
-        self.file.windows().add_command(&name, &format!("{}.exe", name));
+        self.file.windows().add_command(&name, format!("{}.exe", name.as_ref()));
         self.file.linux().add_command(&name, &name);
         self.file.mac().add_command(&name, &name);
         self
@@ -316,7 +334,12 @@ impl PluginBuilder {
     }
 }
 
-fn create_remote_zip(environment: &TestEnvironment, url: &str, is_windows: bool, commands: &Vec<String>) -> String {
+fn create_remote_zip(
+    environment: &TestEnvironment,
+    url: impl AsRef<str>,
+    is_windows: bool,
+    commands: &Vec<String>,
+) -> String {
     let buf: Vec<u8> = Vec::new();
     let w = std::io::Cursor::new(buf);
     let mut zip = zip::ZipWriter::new(w);
@@ -328,7 +351,8 @@ fn create_remote_zip(environment: &TestEnvironment, url: &str, is_windows: bool,
             command.to_string()
         };
         zip.start_file(&file_name, options).unwrap();
-        zip.write(format!("test-{}-{}", command, url).as_bytes()).unwrap();
+        zip.write(format!("test-{}-{}", command, url.as_ref()).as_bytes())
+            .unwrap();
     }
     let result = zip.finish().unwrap().into_inner();
     let zip_file_checksum = dprint_cli_core::checksums::get_sha256_checksum(&result);
@@ -336,7 +360,12 @@ fn create_remote_zip(environment: &TestEnvironment, url: &str, is_windows: bool,
     zip_file_checksum
 }
 
-fn create_remote_tar_gz(environment: &TestEnvironment, url: &str, is_windows: bool, commands: &Vec<String>) -> String {
+fn create_remote_tar_gz(
+    environment: &TestEnvironment,
+    url: impl AsRef<str>,
+    is_windows: bool,
+    commands: &Vec<String>,
+) -> String {
     use flate2::write::GzEncoder;
     use flate2::Compression;
 
@@ -350,7 +379,7 @@ fn create_remote_tar_gz(environment: &TestEnvironment, url: &str, is_windows: bo
         } else {
             command.to_string()
         };
-        let data = format!("test-{}-{}", command, url);
+        let data = format!("test-{}-{}", command, url.as_ref());
 
         let mut header = tar::Header::new_gnu();
         header.set_path(file_name).unwrap();

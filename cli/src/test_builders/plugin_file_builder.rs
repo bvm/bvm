@@ -58,23 +58,23 @@ impl PluginFileBuilder {
         serde_json::to_string(&self.build()).unwrap()
     }
 
-    pub fn name<'a>(&'a mut self, value: &str) -> &'a mut PluginFileBuilder {
-        self.file.name = value.to_string();
+    pub fn name<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginFileBuilder {
+        self.file.name = value.as_ref().to_string();
         self
     }
 
-    pub fn owner<'a>(&'a mut self, value: &str) -> &'a mut PluginFileBuilder {
-        self.file.owner = value.to_string();
+    pub fn owner<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginFileBuilder {
+        self.file.owner = value.as_ref().to_string();
         self
     }
 
-    pub fn version<'a>(&'a mut self, value: &str) -> &'a mut PluginFileBuilder {
-        self.file.version = value.into();
+    pub fn version<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginFileBuilder {
+        self.file.version = value.as_ref().into();
         self
     }
 
-    pub fn description<'a>(&'a mut self, value: &str) -> &'a mut PluginFileBuilder {
-        self.file.description = value.to_string();
+    pub fn description<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PluginFileBuilder {
+        self.file.description = value.as_ref().to_string();
         self
     }
 
@@ -143,30 +143,30 @@ impl PlatformInfoBuilder {
         self
     }
 
-    pub fn add_command<'a>(&'a mut self, name: &str, path: &str) -> &'a mut PlatformInfoBuilder {
+    pub fn add_command<'a>(&'a mut self, name: impl AsRef<str>, path: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
         self.info.commands.push(PlatformInfoCommand {
-            name: CommandName::from_string(name.to_string()),
-            path: path.to_string(),
+            name: CommandName::from_string(name.as_ref().to_string()),
+            path: path.as_ref().to_string(),
         });
         self
     }
 
-    pub fn output_dir<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        self.info.output_dir = Some(value.to_string());
+    pub fn output_dir<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
+        self.info.output_dir = Some(value.as_ref().to_string());
         self
     }
 
-    pub fn on_pre_install<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        self.info.on_pre_install = Some(value.to_string());
+    pub fn on_pre_install<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
+        self.info.on_pre_install = Some(value.as_ref().to_string());
         self
     }
 
-    pub fn on_post_install<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
-        self.info.on_post_install = Some(value.to_string());
+    pub fn on_post_install<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
+        self.info.on_post_install = Some(value.as_ref().to_string());
         self
     }
 
-    pub fn add_env_path<'a>(&'a mut self, value: &str) -> &'a mut PlatformInfoBuilder {
+    pub fn add_env_path<'a>(&'a mut self, value: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
         self.ensure_environment();
         self.info
             .environment
@@ -175,11 +175,11 @@ impl PlatformInfoBuilder {
             .paths
             .as_mut()
             .unwrap()
-            .push(value.to_string());
+            .push(value.as_ref().to_string());
         self
     }
 
-    pub fn add_env_var<'a>(&'a mut self, key: &str, value: &str) -> &'a mut PlatformInfoBuilder {
+    pub fn add_env_var<'a>(&'a mut self, key: impl AsRef<str>, value: impl AsRef<str>) -> &'a mut PlatformInfoBuilder {
         self.ensure_environment();
         self.info
             .environment
@@ -188,7 +188,7 @@ impl PlatformInfoBuilder {
             .variables
             .as_mut()
             .unwrap()
-            .insert(key.to_string(), value.to_string());
+            .insert(key.as_ref().to_string(), value.as_ref().to_string());
         self
     }
 

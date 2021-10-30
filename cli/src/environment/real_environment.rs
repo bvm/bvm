@@ -43,48 +43,64 @@ impl Environment for RealEnvironment {
         true
     }
 
-    fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
+    fn read_file_text(&self, file_path: impl AsRef<Path>) -> Result<String, ErrBox> {
         let file_bytes = self.read_file(file_path)?;
         Ok(String::from_utf8(file_bytes)?)
     }
 
-    fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox> {
-        log_verbose!(self, "Reading file: {}", file_path.display());
-        match fs::read(file_path) {
+    fn read_file(&self, file_path: impl AsRef<Path>) -> Result<Vec<u8>, ErrBox> {
+        log_verbose!(self, "Reading file: {}", file_path.as_ref().display());
+        match fs::read(&file_path) {
             Ok(bytes) => Ok(bytes),
-            Err(err) => err!("Error reading file {}: {}", file_path.display(), err.to_string()),
+            Err(err) => err!(
+                "Error reading file {}: {}",
+                file_path.as_ref().display(),
+                err.to_string()
+            ),
         }
     }
 
-    fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox> {
+    fn write_file_text(&self, file_path: impl AsRef<Path>, file_text: &str) -> Result<(), ErrBox> {
         self.write_file(file_path, file_text.as_bytes())
     }
 
-    fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox> {
-        log_verbose!(self, "Writing file: {}", file_path.display());
-        match fs::write(file_path, bytes) {
+    fn write_file(&self, file_path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), ErrBox> {
+        log_verbose!(self, "Writing file: {}", file_path.as_ref().display());
+        match fs::write(&file_path, bytes) {
             Ok(_) => Ok(()),
-            Err(err) => err!("Error writing file {}: {}", file_path.display(), err.to_string()),
+            Err(err) => err!(
+                "Error writing file {}: {}",
+                file_path.as_ref().display(),
+                err.to_string()
+            ),
         }
     }
 
-    fn remove_file(&self, file_path: &Path) -> Result<(), ErrBox> {
-        log_verbose!(self, "Deleting file: {}", file_path.display());
-        match fs::remove_file(file_path) {
+    fn remove_file(&self, file_path: impl AsRef<Path>) -> Result<(), ErrBox> {
+        log_verbose!(self, "Deleting file: {}", file_path.as_ref().display());
+        match fs::remove_file(&file_path) {
             Ok(_) => Ok(()),
-            Err(err) => err!("Error deleting file {}: {}", file_path.display(), err.to_string()),
+            Err(err) => err!(
+                "Error deleting file {}: {}",
+                file_path.as_ref().display(),
+                err.to_string()
+            ),
         }
     }
 
-    fn remove_dir_all(&self, dir_path: &Path) -> Result<(), ErrBox> {
-        log_verbose!(self, "Deleting directory: {}", dir_path.display());
-        match fs::remove_dir_all(dir_path) {
+    fn remove_dir_all(&self, dir_path: impl AsRef<Path>) -> Result<(), ErrBox> {
+        log_verbose!(self, "Deleting directory: {}", dir_path.as_ref().display());
+        match fs::remove_dir_all(&dir_path) {
             Ok(_) => Ok(()),
             Err(err) => {
                 if err.kind() == ErrorKind::NotFound {
                     Ok(())
                 } else {
-                    err!("Error removing directory {}: {}", dir_path.display(), err.to_string())
+                    err!(
+                        "Error removing directory {}: {}",
+                        dir_path.as_ref().display(),
+                        err.to_string()
+                    )
                 }
             }
         }
@@ -95,18 +111,18 @@ impl Environment for RealEnvironment {
         download_url(url, &self.progress_bars, |key| self.get_env_var(key))
     }
 
-    fn path_exists(&self, path: &Path) -> bool {
-        log_verbose!(self, "Checking path exists: {}", path.display());
-        path.exists()
+    fn path_exists(&self, path: impl AsRef<Path>) -> bool {
+        log_verbose!(self, "Checking path exists: {}", path.as_ref().display());
+        path.as_ref().exists()
     }
 
-    fn is_dir_empty(&self, dir_path: &Path) -> Result<bool, ErrBox> {
-        let mut result = match std::fs::read_dir(dir_path) {
+    fn is_dir_empty(&self, dir_path: impl AsRef<Path>) -> Result<bool, ErrBox> {
+        let mut result = match std::fs::read_dir(&dir_path) {
             Ok(result) => result,
             Err(err) => {
                 return err!(
                     "Error checking directory empty {}: {}",
-                    dir_path.display(),
+                    dir_path.as_ref().display(),
                     err.to_string()
                 )
             }
@@ -114,11 +130,15 @@ impl Environment for RealEnvironment {
         Ok(result.next().is_none())
     }
 
-    fn create_dir_all(&self, path: &Path) -> Result<(), ErrBox> {
-        log_verbose!(self, "Creating directory: {}", path.display());
-        match fs::create_dir_all(path) {
+    fn create_dir_all(&self, path: impl AsRef<Path>) -> Result<(), ErrBox> {
+        log_verbose!(self, "Creating directory: {}", path.as_ref().display());
+        match fs::create_dir_all(&path) {
             Ok(_) => Ok(()),
-            Err(err) => err!("Error creating directory {}: {}", path.display(), err.to_string()),
+            Err(err) => err!(
+                "Error creating directory {}: {}",
+                path.as_ref().display(),
+                err.to_string()
+            ),
         }
     }
 
@@ -130,7 +150,7 @@ impl Environment for RealEnvironment {
         self.logger.log(text, "bvm");
     }
 
-    fn log_error(&self, text: &str) {
+    fn log_stderr(&self, text: &str) {
         self.logger.log_err(text, "bvm");
     }
 

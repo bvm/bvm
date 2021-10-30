@@ -46,7 +46,7 @@ pub fn extract_zip(
                         }
                     }
                 } else {
-                    environment.log_error(&format!(
+                    environment.log_stderr(&format!(
                         "Ignoring path in zip because it was not enclosed: {}",
                         file.name()
                     ));

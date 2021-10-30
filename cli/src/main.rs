@@ -177,7 +177,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
 
         match install_action {
             UrlInstallAction::None => {
-                environment.log_error("Already installed. Provide the `--force` flag to reinstall.")
+                environment.log_stderr("Already installed. Provide the `--force` flag to reinstall.")
             }
             UrlInstallAction::Install(plugin_file) => {
                 let identifier = plugin_file.get_identifier();
@@ -210,7 +210,7 @@ fn handle_install_url_command<TEnvironment: Environment>(
                         }
                     }
                     if not_set_command_name {
-                        environment.log_error(&format!(
+                        environment.log_stderr(&format!(
                             "Installed. Run `bvm use {} {}` to use it on the path as {}.",
                             binary_name
                                 .display_toggled_owner(!plugins.manifest.binary_name_has_same_owner(&binary_name)),
@@ -491,7 +491,7 @@ fn display_commands_in_config_file_warning_if_necessary(
         if command_names.len() == 1 { "remains" } else { "remain" },
         utils::sentence_join(&command_names.iter().map(|n| format!("'{}'", n)).collect::<Vec<_>>()),
     );
-    environment.log_error(&message);
+    environment.log_stderr(&message);
 }
 
 fn handle_list_command<TEnvironment: Environment>(environment: &TEnvironment) -> Result<(), ErrBox> {
@@ -564,7 +564,7 @@ fn handle_add_command<TEnvironment: Environment>(
     for (i, config_binary) in config_file.binaries.iter().enumerate() {
         // ignore errors when associating
         if let Err(err) = plugins.ensure_url_associated(&config_binary.url) {
-            environment.log_error(&format!(
+            environment.log_stderr(&format!(
                 "Error associating {}. {}",
                 &config_binary.url.unresolved_path,
                 err.to_string()
@@ -625,7 +625,7 @@ fn handle_registry_add_command<TEnvironment: Environment>(
 
     // add the current ones
     if registry_file.binaries.is_empty() {
-        environment.log_error("For some reason the registry was empty. Did not associate any binaries with this url.");
+        environment.log_stderr("For some reason the registry was empty. Did not associate any binaries with this url.");
     } else {
         environment.log("Associated binaries:");
         let mut previous_matches: Vec<(BinaryName, Vec<String>)> = Vec::new();
@@ -720,7 +720,7 @@ fn handle_hidden_resolve_command_command<TEnvironment: Environment>(
             Some(binary_info)
         } else {
             if info.had_uninstalled_binary {
-                environment.log_error(&format!(
+                environment.log_stderr(&format!(
                     "[bvm warning]: There were some not installed binaries in the current directory (run `bvm install`). Resolving global '{}'.",
                     command_name
                 ));
@@ -1778,7 +1778,7 @@ mod test {
         let checksum = builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/package.json@incorrect-checksum"), None, None)
+            .add_binary_object(format!("http://localhost/package.json@incorrect-checksum"), None, None)
             .build();
         let environment = builder.build();
         environment.set_cwd("/project");
@@ -1794,7 +1794,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.1.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/package.json"), None, Some("^1.0"))
+            .add_binary_object(format!("http://localhost/package.json"), None, Some("^1.0"))
             .build();
         let environment = builder.build();
         environment.set_cwd("/project");
@@ -1813,7 +1813,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.3.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/package.json"), None, Some("1.1"))
+            .add_binary_object(format!("http://localhost/package.json"), None, Some("1.1"))
             .build();
         let environment = builder.build();
         environment.set_cwd("/project");
@@ -1834,7 +1834,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/package2.json", "owner", "name", "1.1.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/package.json"), None, Some("~1.0"))
+            .add_binary_object(format!("http://localhost/package.json"), None, Some("~1.0"))
             .build();
         let environment = builder.build();
         environment.set_cwd("/project");
@@ -1852,7 +1852,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/package.json", "owner", "name", "1.0.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/package.json"), None, Some("1.1"))
+            .add_binary_object(format!("http://localhost/package.json"), None, Some("1.1"))
             .build();
         let environment = builder.build();
         environment.set_cwd("/project");
@@ -2542,7 +2542,7 @@ mod test {
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
         plugin_builder.add_env_path("dir2");
-        plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
+        plugin_builder.add_env_path(format!("other{}path", PATH_SEPARATOR));
         plugin_builder.add_env_var("test", "2");
         plugin_builder.download_type(PluginDownloadType::TarGz);
         plugin_builder.build();
@@ -2604,7 +2604,7 @@ mod test {
         }
 
         // should output correctly when the path ends with delimiter
-        environment.set_env_path(&format!("{}{}", original_path, SYS_PATH_DELIMITER));
+        environment.set_env_path(format!("{}{}", original_path, SYS_PATH_DELIMITER));
         assert_get_pending_env_changes!(
             environment,
             [("other", first_path_str), ("test", "1")],
@@ -2781,7 +2781,7 @@ mod test {
         builder.create_remote_zip_package("http://localhost/other.json", "owner", "other", "2.0.0");
         builder
             .create_bvmrc_builder()
-            .add_binary_object(&format!("http://localhost/other.json"), None, Some("~1.1"))
+            .add_binary_object(format!("http://localhost/other.json"), None, Some("~1.1"))
             .build();
         let environment = builder.build();
 
@@ -3137,7 +3137,7 @@ mod test {
         let mut plugin_builder =
             builder.create_plugin_builder("http://localhost/package2.json", "owner", "name", "2.0.0");
         plugin_builder.add_env_path("dir2");
-        plugin_builder.add_env_path(&format!("other{}path", PATH_SEPARATOR));
+        plugin_builder.add_env_path(format!("other{}path", PATH_SEPARATOR));
         plugin_builder.add_env_var("test", "2");
         plugin_builder.download_type(PluginDownloadType::TarGz);
         plugin_builder.build();

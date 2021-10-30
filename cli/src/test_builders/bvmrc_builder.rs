@@ -32,34 +32,34 @@ impl BvmrcBuilder {
         }
     }
 
-    pub fn path<'a>(&'a mut self, path: &str) -> &'a mut BvmrcBuilder {
-        self.path = Some(path.to_string());
+    pub fn path<'a>(&'a mut self, path: impl AsRef<str>) -> &'a mut BvmrcBuilder {
+        self.path = Some(path.as_ref().to_string());
         self
     }
 
-    pub fn on_pre_install<'a>(&'a mut self, script: &str) -> &'a mut BvmrcBuilder {
-        self.on_pre_install = Some(script.to_string());
+    pub fn on_pre_install<'a>(&'a mut self, script: impl AsRef<str>) -> &'a mut BvmrcBuilder {
+        self.on_pre_install = Some(script.as_ref().to_string());
         self
     }
 
-    pub fn on_post_install<'a>(&'a mut self, script: &str) -> &'a mut BvmrcBuilder {
-        self.on_post_install = Some(script.to_string());
+    pub fn on_post_install<'a>(&'a mut self, script: impl AsRef<str>) -> &'a mut BvmrcBuilder {
+        self.on_post_install = Some(script.as_ref().to_string());
         self
     }
 
-    pub fn add_binary_path<'a>(&'a mut self, path: &str) -> &'a mut BvmrcBuilder {
-        self.binaries.push(BinaryItem::String(path.to_string()));
+    pub fn add_binary_path<'a>(&'a mut self, path: impl AsRef<str>) -> &'a mut BvmrcBuilder {
+        self.binaries.push(BinaryItem::String(path.as_ref().to_string()));
         self
     }
 
     pub fn add_binary_object<'a>(
         &'a mut self,
-        path: &str,
+        path: impl AsRef<str>,
         checksum: Option<&str>,
         version: Option<&str>,
     ) -> &'a mut BvmrcBuilder {
         self.binaries.push(BinaryItem::Object(BinaryItemObject {
-            path: path.to_string(),
+            path: path.as_ref().to_string(),
             checksum: checksum.map(|p| p.to_string()),
             version: version.map(|v| v.to_string()),
         }));

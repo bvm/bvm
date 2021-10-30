@@ -82,9 +82,9 @@ impl TestEnvironment {
         items
     }
 
-    pub fn add_remote_file(&self, path: &str, bytes: Vec<u8>) {
+    pub fn add_remote_file(&self, path: impl AsRef<str>, bytes: Vec<u8>) {
         let mut remote_files = self.remote_files.lock().unwrap();
-        remote_files.insert(String::from(path), bytes);
+        remote_files.insert(path.as_ref().to_string(), bytes);
     }
 
     pub fn is_dir_deleted(&self, path: &Path) -> bool {
@@ -92,9 +92,9 @@ impl TestEnvironment {
         deleted_directories.contains(&path.to_path_buf())
     }
 
-    pub fn set_cwd(&self, new_path: &str) {
+    pub fn set_cwd(&self, new_path: impl AsRef<str>) {
         let mut cwd = self.cwd.lock().unwrap();
-        *cwd = String::from(new_path);
+        *cwd = new_path.as_ref().to_string();
     }
 
     pub fn set_verbose(&self, value: bool) {
@@ -102,29 +102,29 @@ impl TestEnvironment {
         *is_verbose = value;
     }
 
-    pub fn add_path_dir(&self, dir: PathBuf) {
+    pub fn add_path_dir(&self, dir: impl AsRef<Path>) {
         let mut path_dirs = self.path_dirs.lock().unwrap();
-        path_dirs.push(dir);
+        path_dirs.push(dir.as_ref().to_path_buf());
     }
 
     pub fn get_system_path_dirs(&self) -> Vec<PathBuf> {
         self.path_dirs.lock().unwrap().clone()
     }
 
-    pub fn set_env_path(&self, new_path: &str) {
+    pub fn set_env_path(&self, new_path: impl AsRef<str>) {
         let mut env_variables = self.env_variables.lock().unwrap();
         let env_path = env_variables.get_mut("PATH").unwrap();
-        *env_path = new_path.to_string();
+        *env_path = new_path.as_ref().to_string();
     }
 
-    pub fn set_env_var(&self, key: &str, value: &str) {
+    pub fn set_env_var(&self, key: impl AsRef<str>, value: impl AsRef<str>) {
         let mut env_variables = self.env_variables.lock().unwrap();
-        env_variables.insert(key.to_string(), value.to_string());
+        env_variables.insert(key.as_ref().to_string(), value.as_ref().to_string());
     }
 
-    pub fn remove_env_var(&self, key: &str) {
+    pub fn remove_env_var(&self, key: impl AsRef<str>) {
         let mut env_variables = self.env_variables.lock().unwrap();
-        env_variables.remove(&key.to_string());
+        env_variables.remove(&key.as_ref().to_string());
     }
 }
 
@@ -157,43 +157,43 @@ impl Environment for TestEnvironment {
         false
     }
 
-    fn read_file_text(&self, file_path: &Path) -> Result<String, ErrBox> {
+    fn read_file_text(&self, file_path: impl AsRef<Path>) -> Result<String, ErrBox> {
         let file_bytes = self.read_file(file_path)?;
         Ok(String::from_utf8(file_bytes.to_vec()).unwrap())
     }
 
-    fn read_file(&self, file_path: &Path) -> Result<Vec<u8>, ErrBox> {
+    fn read_file(&self, file_path: impl AsRef<Path>) -> Result<Vec<u8>, ErrBox> {
         let files = self.files.lock().unwrap();
         // temporary until https://github.com/danreeves/path-clean/issues/4 is fixed in path-clean
-        let file_path = PathBuf::from(file_path.to_string_lossy().replace("\\", "/"));
+        let file_path = PathBuf::from(file_path.as_ref().to_string_lossy().replace("\\", "/"));
         match files.get(&file_path.clean()) {
             Some(text) => Ok(text.clone()),
             None => err!("Could not find file at path {}", file_path.display()),
         }
     }
 
-    fn write_file_text(&self, file_path: &Path, file_text: &str) -> Result<(), ErrBox> {
+    fn write_file_text(&self, file_path: impl AsRef<Path>, file_text: &str) -> Result<(), ErrBox> {
         self.write_file(file_path, file_text.as_bytes())
     }
 
-    fn write_file(&self, file_path: &Path, bytes: &[u8]) -> Result<(), ErrBox> {
+    fn write_file(&self, file_path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), ErrBox> {
         let mut files = self.files.lock().unwrap();
-        files.insert(file_path.to_path_buf().clean(), Vec::from(bytes));
+        files.insert(file_path.as_ref().to_path_buf().clean(), Vec::from(bytes));
         Ok(())
     }
 
-    fn remove_file(&self, file_path: &Path) -> Result<(), ErrBox> {
+    fn remove_file(&self, file_path: impl AsRef<Path>) -> Result<(), ErrBox> {
         let mut files = self.files.lock().unwrap();
-        files.remove(&file_path.to_path_buf().clean());
+        files.remove(&file_path.as_ref().to_path_buf().clean());
         Ok(())
     }
 
-    fn remove_dir_all(&self, dir_path: &Path) -> Result<(), ErrBox> {
+    fn remove_dir_all(&self, dir_path: impl AsRef<Path>) -> Result<(), ErrBox> {
         {
             let mut deleted_directories = self.deleted_directories.lock().unwrap();
-            deleted_directories.push(dir_path.to_owned());
+            deleted_directories.push(dir_path.as_ref().to_owned());
         }
-        let dir_path = dir_path.to_path_buf().clean();
+        let dir_path = dir_path.as_ref().to_path_buf().clean();
         let mut files = self.files.lock().unwrap();
         let mut delete_paths = Vec::new();
         for (file_path, _) in files.iter() {
@@ -215,17 +215,17 @@ impl Environment for TestEnvironment {
         }
     }
 
-    fn path_exists(&self, file_path: &Path) -> bool {
+    fn path_exists(&self, file_path: impl AsRef<Path>) -> bool {
         let files = self.files.lock().unwrap();
-        files.contains_key(&file_path.to_path_buf().clean())
+        files.contains_key(&file_path.as_ref().to_path_buf().clean())
     }
 
-    fn create_dir_all(&self, _: &Path) -> Result<(), ErrBox> {
+    fn create_dir_all(&self, _: impl AsRef<Path>) -> Result<(), ErrBox> {
         Ok(())
     }
 
-    fn is_dir_empty(&self, dir_path: &Path) -> Result<bool, ErrBox> {
-        let dir_path = dir_path.to_path_buf().clean();
+    fn is_dir_empty(&self, dir_path: impl AsRef<Path>) -> Result<bool, ErrBox> {
+        let dir_path = dir_path.as_ref().to_path_buf().clean();
         let files = self.files.lock().unwrap();
         for file_path in files.keys() {
             if file_path.starts_with(&dir_path) {
@@ -301,7 +301,7 @@ impl Environment for TestEnvironment {
         self.logged_messages.lock().unwrap().push(String::from(text));
     }
 
-    fn log_error(&self, text: &str) {
+    fn log_stderr(&self, text: &str) {
         self.logged_errors.lock().unwrap().push(String::from(text));
     }
 
@@ -314,7 +314,7 @@ impl Environment for TestEnvironment {
         action: TCreate,
         _: usize,
     ) -> TResult {
-        self.log_error(message);
+        self.log_stderr(message);
         action(Box::new(|_| {}))
     }
 
