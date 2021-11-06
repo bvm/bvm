@@ -132,7 +132,7 @@ fn ensure_setup() {
       fs::copy("bvm.cmd", paths.bin_dir.join("bvm.cmd")).unwrap();
       fs::copy("bvm.ps1", paths.bin_dir.join("bvm.ps1")).unwrap();
     } else {
-      fs::copy("bvm.sh", paths.bin_dir.join("bvm")).unwrap();
+      fs::copy("bvm-functions.sh", paths.bin_dir.join("bvm-functions")).unwrap();
     }
     let windows_bin = paths.build_folder.join("bvm-bin.exe");
     let unix_bin = paths.build_folder.join("bvm-bin");
