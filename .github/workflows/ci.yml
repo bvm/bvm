@@ -76,10 +76,10 @@ jobs:
       id: mac_pre_release
       if: startsWith(matrix.config.os, 'macOS') && matrix.config.kind == 'test_release'
       run: |
-        cp cli/bvm.sh target/release/bvm
+        cp cli/bvm-functions.sh target/release/bvm-functions
         cp cli/bvm-init.sh target/release/bvm-init
         cd target/release
-        zip -r bvm-x86_64-apple-darwin.zip bvm bvm-bin bvm-init
+        zip -r bvm-x86_64-apple-darwin.zip bvm-functions bvm-bin bvm-init
         echo "::set-output name=ZIP_CHECKSUM::$(shasum -a 256 bvm-x86_64-apple-darwin.zip | awk '{print $1}')"
     - name: Pre-release (Windows)
       id: windows_pre_release
