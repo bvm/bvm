@@ -25,7 +25,7 @@ if [ -z "$BVM_INSTALL_DIR" ]; then
   BVM_INSTALL_DIR="{}"
 fi
 
-. $BVM_INSTALL_DIR/bin/bvm
+. $BVM_INSTALL_DIR/bin/bvm-functions
 bvm exec-command {} "{}" "$@"
 "#,
       bvm_install_dir,

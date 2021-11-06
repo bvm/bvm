@@ -36,11 +36,13 @@ if [ ! -d "$bin_dir" ]; then
   mkdir -p "$bin_dir"
 fi
 
+# download
+curl --fail --location --progress-bar --output "$exe.zip" "$bvm_uri"
+
 # stop any running bvm processes
 pkill -9 "bvm" || true
 
-# download and install
-curl --fail --location --progress-bar --output "$exe.zip" "$bvm_uri"
+# install
 cd "$bin_dir"
 unzip -o "$exe.zip"
 rm "$exe.zip"
@@ -52,20 +54,22 @@ then
   PATH="$APPDATA/bvm/shims:$bin_dir:$PATH"
   export PATH
 
-  echo "bvm was installed successfully to $exe"
+  echo "bvm was installed successfully to $bin_dir"
   echo "Run 'bvm --help' to get started"
 else
-  chmod +x "$exe"
+  chmod +x "$exe-functions"
   chmod +x "$exe-bin"
   chmod +x "$exe-init"
 
   "$exe-bin" hidden unix-install
-  . $exe-init
 
-  echo "bvm was installed successfully to $exe"
   if command -v bvm >/dev/null; then
+    . $exe-init
+    echo "bvm was installed successfully to $bin_dir"
     echo "Run 'bvm --help' to get started"
   else
+    . $exe-init
+    echo "bvm was installed successfully to $bin_dir"
     case $SHELL in
     /bin/zsh) shell_profile=".zshrc" ;;
     *) shell_profile=".bash_profile" ;;
@@ -75,6 +79,6 @@ else
     echo "export BVM_INSTALL_DIR=\"$bvm_install\""
     echo ". \"\$BVM_INSTALL_DIR/bin/bvm-init\""
     echo ""
-    echo "Run '$exe --help' to get started"
+    echo "Run 'bvm --help' to get started"
   fi
 fi
