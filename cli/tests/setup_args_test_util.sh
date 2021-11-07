@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e
 cargo build --package args_test_util
 mkdir -p temp
 cp target/debug/args_test_util temp/args_test_util
