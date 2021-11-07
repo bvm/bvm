@@ -5,7 +5,7 @@ then
   BVM_INSTALL_DIR="$HOME/.bvm"
 fi
 
-. $BVM_INSTALL_DIR/bin/bvm
+. $BVM_INSTALL_DIR/bin/bvm-functions
 
 # use the bin directly since we haven't set the path yet
 bvm_binary_paths=$($BVM_INSTALL_DIR/bin/bvm-bin hidden get-paths)

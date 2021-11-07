@@ -3,9 +3,9 @@ set -e
 
 # setup and source the bvm function
 root_dir=$1
-chmod +x $root_dir/temp/home_dir/bvm/bin/bvm
+chmod +x $root_dir/temp/home_dir/bvm/bin/bvm-functions
 export BVM_INSTALL_DIR=$root_dir/temp/home_dir/bvm
-. $BVM_INSTALL_DIR/bin/bvm
+. $BVM_INSTALL_DIR/bin/bvm-functions
 
 bvm install --use $root_dir/temp/args_test_util.json
 args_test_util "console.log(\"hello\")"
