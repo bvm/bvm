@@ -63,22 +63,16 @@ else
 
   "$exe-bin" hidden unix-install
 
-  if command -v bvm >/dev/null; then
-    . $exe-init
-    echo "bvm was installed successfully to $bin_dir"
-    echo "Run 'bvm --help' to get started"
-  else
-    . $exe-init
-    echo "bvm was installed successfully to $bin_dir"
-    case $SHELL in
-    /bin/zsh) shell_profile=".zshrc" ;;
-    *) shell_profile=".bash_profile" ;;
-    esac
-    echo "Manually add the following to your \$HOME/$shell_profile (or similar)"
-    echo ""
-    echo "export BVM_INSTALL_DIR=\"$bvm_install\""
-    echo ". \"\$BVM_INSTALL_DIR/bin/bvm-init\""
-    echo ""
-    echo "Run 'bvm --help' to get started"
-  fi
+  . $exe-init
+  echo "bvm was installed successfully to $bin_dir"
+  case $SHELL in
+  /bin/zsh) shell_profile=".zshrc" ;;
+  *) shell_profile=".bash_profile" ;;
+  esac
+  echo "Manually add the following to your \$HOME/$shell_profile (or similar) if it's not already there:"
+  echo ""
+  echo "export BVM_INSTALL_DIR=\"$bvm_install\""
+  echo ". \"\$BVM_INSTALL_DIR/bin/bvm-init\""
+  echo ""
+  echo "After, restart your shell and run 'bvm --help' to get started"
 fi
