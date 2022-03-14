@@ -27,6 +27,7 @@ Install by running a script based on your environment:
 - Cmd, Powershell (Windows):
   - [Installer](https://github.com/dsherret/bvm/releases/latest/download/bvm-x86_64-pc-windows-msvc-installer.exe)
   - Or via powershell: `iwr https://bvm.land/install.ps1 -useb | iex`
+- Install via [Homebrew](http://brew.sh/): `brew install bvm`
 
 ## CI
 
