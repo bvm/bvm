@@ -59,8 +59,10 @@ if "%USERNAME%" == "" (
   GOTO bvmexeccommandfinish
 )
 
+SET bvm_was_last_exec=
 FOR /F "delims=" %%F in ('%bvm_bin% hidden resolve-command %bvm_exec_command%') do (
   IF !bvm_was_last_exec! == "1" (
+    SET bvm_was_last_exec=
     SET bvm_exec_exe_path="%%F"
     GOTO bvmexeccommandfinish
   )
