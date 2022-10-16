@@ -1,10 +1,8 @@
-# bvm - Binary Version Manager
+# NOT MAINTAINED - bvm - Binary Version Manager
 
 A version manager for all binaries.
 
-NOTICE: This is in its early stages. There will likely be many breaking changes.
-
-Want to help out on this project? I am working on too many projects and could use some help. See the issues [here](https://github.com/bvm/bvm/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22).
+NOTICE: This is no longer maintained. Although I think it's a good idea, I ran into too much trouble with tools making too many assumptions and not handling things properly for this to be workable. Additionally, there are some major limitations with batch scripting on Windows that I couldn't figure out that leads to some edge cases in cmd. I would highly recommend to NOT USE THIS.
 
 ## Goals
 
